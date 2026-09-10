@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-surface-muted text-slate-800 antialiased;
+}
+
+@layer components {
+  .card {
+    @apply rounded-lg border border-surface-border bg-white shadow-sm;
+  }
+  .card-header {
+    @apply flex items-center justify-between gap-3 border-b border-surface-border px-4 py-3;
+  }
+  .card-title {
+    @apply text-sm font-semibold text-slate-900;
+  }
+  .card-body {
+    @apply p-4;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply border-brand-600 bg-brand-600 text-white hover:bg-brand-700;
+  }
+  .btn-secondary {
+    @apply border-surface-border bg-white text-slate-700 hover:bg-slate-50;
+  }
+  .btn-danger {
+    @apply border-red-200 bg-red-50 text-red-700 hover:bg-red-100;
+  }
+  .btn-sm {
+    @apply px-2 py-1 text-xs;
+  }
+
+  .input,
+  .select,
+  .textarea {
+    @apply w-full rounded-md border border-surface-border bg-white px-3 py-2 text-sm text-slate-800
+      outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500;
+  }
+  .field {
+    @apply mb-3;
+  }
+  .hint {
+    @apply mt-1 text-xs text-slate-500;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide;
+  }
+
+  .table {
+    @apply w-full border-collapse text-sm;
+  }
+  .table thead th {
+    @apply border-b border-surface-border bg-slate-50 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .table tbody td {
+    @apply border-b border-surface-border px-3 py-2 align-middle;
+  }
+  .table tbody tr:hover {
+    @apply bg-slate-50/70;
+  }
+
+  .stat {
+    @apply rounded-lg border border-surface-border bg-white px-4 py-3;
+  }
+  .stat-value {
+    @apply text-2xl font-semibold text-slate-900;
+  }
+  .stat-label {
+    @apply text-xs uppercase tracking-wide text-slate-500;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold text-slate-900;
+  }
+  .muted {
+    @apply text-sm text-slate-500;
+  }
+}

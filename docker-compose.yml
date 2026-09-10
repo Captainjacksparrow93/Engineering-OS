@@ -1,0 +1,59 @@
+# ---------------------------------------------------------------------------
+# Engineering OS - single-node deployment.
+#
+# Suitable as-is for a factory server: one Postgres, one app container, a
+# migration job that runs before the app accepts traffic. Scaling out means
+# running more `app` replicas behind a load balancer - the app holds no local
+# state, so nothing else changes.
+# ---------------------------------------------------------------------------
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-engos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-engos}
+      POSTGRES_DB: ${POSTGRES_DB:-engineering_os}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Nightly dumps land here; point your offsite backup at this directory.
+      - ./backups:/backups
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-engos} -d ${POSTGRES_DB:-engineering_os}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Runs once per deploy, before the app starts serving.
+  migrate:
+    build: .
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-engos}:${POSTGRES_PASSWORD:-engos}@db:5432/${POSTGRES_DB:-engineering_os}?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-engos}:${POSTGRES_PASSWORD:-engos}@db:5432/${POSTGRES_DB:-engineering_os}?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-43200}
+      NODE_ENV: production
+    ports:
+      - '${APP_PORT:-3000}:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  db-data:

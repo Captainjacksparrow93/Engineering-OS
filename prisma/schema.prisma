@@ -1,0 +1,688 @@
+// =====================================================================================
+// Engineering OS - Prisma schema
+//
+// The schema is a MODULAR MONOLITH: one PostgreSQL database, several bounded contexts
+// that are kept apart by naming + explicit seams rather than by separate services.
+//
+//   core_*     Shared kernel. Identity, org structure, RBAC, audit, events.
+//              Every future module (HRMS / ERP / Gate Entry / Production) depends on it.
+//   pm_*       Project Management module (the module implemented in this release).
+//   Future     hrms_*, erp_*, gate_*, prod_* tables land beside these without touching
+//              existing ones. Cross-module reads go through service interfaces, never
+//              through foreign keys into another module's private tables.
+//
+// The only entity a module may reference directly from another context is `User`
+// (and `Department`), because identity is shared-kernel by definition. Everything else
+// crosses module boundaries as a DomainEvent (see `core_domain_events`).
+// =====================================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================================================
+// CORE :: Organisation & identity
+// =====================================================================================
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  gstin     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  departments Department[]
+  users       User[]
+  projects    Project[]
+
+  @@map("core_companies")
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  code      String
+  /// Departments are a tree: Engineering > Design > Electrical Design, etc.
+  parentId  String?
+  headId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parent   Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Department[] @relation("DepartmentTree")
+  head     User?        @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
+  members  User[]       @relation("DepartmentMembers")
+
+  @@unique([companyId, code])
+  @@index([parentId])
+  @@map("core_departments")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  EXITED
+}
+
+/// The shared identity record. HRMS will later attach `hrms_employee_profiles` to this
+/// row (payroll, attendance, documents) rather than duplicating people.
+model User {
+  id                 String     @id @default(cuid())
+  companyId          String
+  employeeCode       String     @unique
+  email              String     @unique
+  passwordHash       String
+  fullName           String
+  phone              String?
+  designation        String?
+  /// Engineering grade drives default task expectations and approval thresholds.
+  grade              Grade      @default(JUNIOR_ENGINEER)
+  departmentId       String?
+  /// Line manager. The reporting chain is walked for approvals and escalation.
+  managerId          String?
+  status             UserStatus @default(ACTIVE)
+  /// Hours this person is contractually available per working day. Capacity planning
+  /// uses this until HRMS takes over shift rosters.
+  dailyCapacityHours Float      @default(8)
+  skills             String[]   @default([])
+  avatarColor        String     @default("#2f5fd8")
+  lastLoginAt        DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  company    Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department Department?  @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: SetNull)
+  headOf     Department[] @relation("DepartmentHead")
+  manager    User?        @relation("ReportingLine", fields: [managerId], references: [id], onDelete: SetNull)
+  reports    User[]       @relation("ReportingLine")
+
+  roleAssignments RoleAssignment[]
+  sessions        Session[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  leaves          Leave[]
+
+  ownedProjects     Project[]         @relation("ProjectManager")
+  sponsoredProjects Project[]         @relation("ProjectSponsor")
+  projectMembers    ProjectMember[]
+  createdTasks      Task[]            @relation("TaskCreatedBy")
+  taskAssignments   TaskAssignment[]
+  progressLogs      TaskProgressLog[]
+  handoversFrom     TaskHandover[]    @relation("HandoverFrom")
+  handoversTo       TaskHandover[]    @relation("HandoverTo")
+  handoversDecided  TaskHandover[]    @relation("HandoverDecidedBy")
+  comments          TaskComment[]
+
+  @@index([companyId])
+  @@index([departmentId])
+  @@index([managerId])
+  @@map("core_users")
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenId   String    @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("core_sessions")
+}
+
+/// Grades are engineering-org specific and intentionally ordered, low to high.
+enum Grade {
+  TRAINEE
+  JUNIOR_ENGINEER
+  ENGINEER
+  SENIOR_ENGINEER
+  LEAD_ENGINEER
+  MANAGER
+  HEAD
+  DIRECTOR
+}
+
+// =====================================================================================
+// CORE :: RBAC
+//
+// Access control is permission-based, not role-name-based, and every grant is SCOPED.
+// A "Project Manager" role granted at scope PROJECT:abc gives nothing on project xyz.
+// This is what lets one platform serve directors, department heads and engineers
+// without branching on job titles anywhere in application code.
+// =====================================================================================
+
+model Role {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String?
+  /// System roles ship with the product and cannot be deleted from the admin UI.
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+  assignments RoleAssignment[]
+
+  @@map("core_roles")
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  /// Dotted key: `<module>.<resource>.<action>` e.g. `pm.task.assign`.
+  key         String  @unique
+  module      String
+  description String?
+
+  roles RolePermission[]
+
+  @@index([module])
+  @@map("core_permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("core_role_permissions")
+}
+
+enum ScopeType {
+  /// Applies across the whole company. Directors, platform admins.
+  GLOBAL
+  /// Applies to a department subtree. Department heads.
+  DEPARTMENT
+  /// Applies to a single project. Project managers, engineers on that project.
+  PROJECT
+}
+
+model RoleAssignment {
+  id        String    @id @default(cuid())
+  userId    String
+  roleId    String
+  scopeType ScopeType
+  /// Null for GLOBAL. Department id or project id otherwise.
+  scopeId   String?
+  grantedBy String?
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId, scopeType, scopeId])
+  @@index([userId])
+  @@index([scopeType, scopeId])
+  @@map("core_role_assignments")
+}
+
+// =====================================================================================
+// CORE :: Platform services (audit, events, notifications, module registry)
+// =====================================================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  module     String
+  action     String
+  entityType String
+  entityId   String
+  /// Before/after snapshot of the changed fields only.
+  diff       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([module, createdAt])
+  @@index([actorId])
+  @@map("core_audit_logs")
+}
+
+enum EventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+/// Transactional outbox. Modules publish here inside the same transaction as their
+/// write, and consumers (today in-process, tomorrow a worker or a queue) pick them up.
+/// This is the seam HRMS/ERP/Production will integrate through - e.g. PM publishes
+/// `pm.task.completed`, Production consumes it to release a panel to the shop floor.
+model DomainEvent {
+  id          String      @id @default(cuid())
+  /// `<module>.<entity>.<verb>` e.g. `pm.handover.accepted`.
+  name        String
+  module      String
+  entityType  String
+  entityId    String
+  payload     Json
+  actorId     String?
+  status      EventStatus @default(PENDING)
+  attempts    Int         @default(0)
+  lastError   String?
+  processedAt DateTime?
+  createdAt   DateTime    @default(now())
+
+  @@index([status, createdAt])
+  @@index([name])
+  @@index([entityType, entityId])
+  @@map("core_domain_events")
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  WHATSAPP
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  channel   NotificationChannel @default(IN_APP)
+  title     String
+  body      String
+  /// Deep link into the app, e.g. /pm/tasks/<id>.
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("core_notifications")
+}
+
+/// Drives the module launcher. Modules that are not `LIVE` render a "Coming soon"
+/// banner instead of their routes, so the shell never has to hardcode a module list.
+enum ModuleStatus {
+  LIVE
+  BETA
+  COMING_SOON
+}
+
+model ModuleRegistryEntry {
+  id          String       @id @default(cuid())
+  key         String       @unique
+  name        String
+  description String
+  icon        String
+  route       String
+  status      ModuleStatus @default(COMING_SOON)
+  /// Target release note shown on the coming-soon banner.
+  plannedFor  String?
+  sortOrder   Int          @default(100)
+  updatedAt   DateTime     @updatedAt
+
+  @@map("core_module_registry")
+}
+
+/// Placeholder owned by PM today, handed to HRMS when that module lands. Capacity
+/// planning subtracts approved leave from availability, so the contract exists now.
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model Leave {
+  id           String      @id @default(cuid())
+  userId       String
+  startDate    DateTime    @db.Date
+  endDate      DateTime    @db.Date
+  reason       String?
+  status       LeaveStatus @default(APPROVED)
+  /// Set once HRMS owns this record, so PM stops treating it as local data.
+  sourceModule String      @default("pm")
+  createdAt    DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startDate, endDate])
+  @@map("core_leaves")
+}
+
+// =====================================================================================
+// PM :: Projects
+// =====================================================================================
+
+enum ProjectStatus {
+  DRAFT
+  PLANNING
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum ProjectPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+/// A customer order for control panels. Higher management ("sponsor") defines it,
+/// a manager runs it, and the WBS below it is where engineers actually work.
+model Project {
+  id            String          @id @default(cuid())
+  companyId     String
+  code          String          @unique
+  name          String
+  description   String?
+  clientName    String
+  /// Panel-manufacturing specifics. ERP will later own the commercial fields and PM
+  /// will read them through the ERP service instead of storing them here.
+  poNumber      String?
+  orderValue    Decimal?        @db.Decimal(14, 2)
+  panelType     String?
+  panelCount    Int             @default(0)
+  status        ProjectStatus   @default(DRAFT)
+  priority      ProjectPriority @default(MEDIUM)
+  startDate     DateTime?       @db.Date
+  targetEndDate DateTime?       @db.Date
+  actualEndDate DateTime?       @db.Date
+  managerId     String
+  sponsorId     String?
+  departmentId  String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager User    @relation("ProjectManager", fields: [managerId], references: [id])
+  sponsor User?   @relation("ProjectSponsor", fields: [sponsorId], references: [id], onDelete: SetNull)
+
+  members    ProjectMember[]
+  tasks      Task[]
+  milestones Milestone[]
+
+  @@index([companyId, status])
+  @@index([managerId])
+  @@map("pm_projects")
+}
+
+/// Membership is what puts a project on someone's radar; the PROJECT-scoped role
+/// assignment is what gives them rights on it. Both are created together.
+enum ProjectRole {
+  MANAGER
+  LEAD
+  ENGINEER
+  REVIEWER
+  OBSERVER
+}
+
+model ProjectMember {
+  id                String      @id @default(cuid())
+  projectId         String
+  userId            String
+  role              ProjectRole @default(ENGINEER)
+  /// Share of this person's capacity nominally reserved for the project.
+  allocationPercent Int         @default(100)
+  addedAt           DateTime    @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("pm_project_members")
+}
+
+model Milestone {
+  id        String    @id @default(cuid())
+  projectId String
+  name      String
+  dueDate   DateTime  @db.Date
+  reachedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@index([projectId])
+  @@map("pm_milestones")
+}
+
+// =====================================================================================
+// PM :: Tasks, dependencies, assignment, handover, progress
+// =====================================================================================
+
+enum TaskType {
+  /// Planned work that belongs to the project WBS.
+  PROJECT
+  /// Unplanned work that arrives mid-flight and must be slotted into someone's day.
+  ADHOC
+  /// A container node in the WBS; its progress rolls up from children.
+  PHASE
+}
+
+enum TaskStatus {
+  DRAFT
+  /// Cannot start: at least one dependency is unmet.
+  BLOCKED
+  TODO
+  IN_PROGRESS
+  /// Work done, waiting on a reviewer.
+  IN_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  projectId   String
+  /// WBS parent. PHASE tasks are the branches, PROJECT/ADHOC tasks the leaves.
+  parentId    String?
+  milestoneId String?
+  code        String
+  title       String
+  description String?
+  type        TaskType     @default(PROJECT)
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+
+  estimatedHours  Float @default(8)
+  /// Sum of hours punched in on progress logs. Denormalised for capacity queries.
+  actualHours     Float @default(0)
+  /// 0-100. Leaf tasks take it from the latest progress log; PHASE tasks roll it up
+  /// from children weighted by estimated hours.
+  percentComplete Int   @default(0)
+
+  plannedStart DateTime? @db.Date
+  plannedEnd   DateTime? @db.Date
+  actualStart  DateTime?
+  actualEnd    DateTime?
+
+  /// Skills a candidate assignee should have. Drives the "who can take this" ranking.
+  requiredSkills String[] @default([])
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent    Task?      @relation("TaskTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Task[]     @relation("TaskTree")
+  milestone Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  createdBy User       @relation("TaskCreatedBy", fields: [createdById], references: [id])
+
+  assignments  TaskAssignment[]
+  progressLogs TaskProgressLog[]
+  handovers    TaskHandover[]
+  comments     TaskComment[]
+  /// Edges where this task is the one that must wait.
+  dependencies TaskDependency[]  @relation("SuccessorTask")
+  /// Edges where this task is what others are waiting on.
+  dependents   TaskDependency[]  @relation("PredecessorTask")
+
+  @@unique([projectId, code])
+  @@index([projectId, status])
+  @@index([parentId])
+  @@index([status, plannedEnd])
+  @@map("pm_tasks")
+}
+
+/// Standard precedence types, so the schedule engine can express real constraints
+/// ("wiring cannot finish before the busbar drawing is approved") rather than only
+/// naive finish-to-start chains.
+enum DependencyType {
+  FINISH_TO_START
+  START_TO_START
+  FINISH_TO_FINISH
+  START_TO_FINISH
+}
+
+model TaskDependency {
+  id            String         @id @default(cuid())
+  predecessorId String
+  successorId   String
+  type          DependencyType @default(FINISH_TO_START)
+  /// Working days of lag (positive) or lead (negative) applied to the constraint.
+  lagDays       Int            @default(0)
+  createdAt     DateTime       @default(now())
+
+  predecessor Task @relation("PredecessorTask", fields: [predecessorId], references: [id], onDelete: Cascade)
+  successor   Task @relation("SuccessorTask", fields: [successorId], references: [id], onDelete: Cascade)
+
+  @@unique([predecessorId, successorId])
+  @@index([successorId])
+  @@map("pm_task_dependencies")
+}
+
+enum AssignmentRole {
+  /// Accountable for delivery. Exactly one active owner per task.
+  OWNER
+  /// Helping out, typically after a partial handover.
+  COLLABORATOR
+  REVIEWER
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  /// Work was passed on; this row is kept for history and for effort accounting.
+  HANDED_OVER
+  COMPLETED
+  RELEASED
+}
+
+model TaskAssignment {
+  id             String           @id @default(cuid())
+  taskId         String
+  userId         String
+  role           AssignmentRole   @default(OWNER)
+  status         AssignmentStatus @default(ACTIVE)
+  /// Hours this person is expected to spend. On a partial handover the outgoing
+  /// assignment keeps the hours already burned and the incoming one takes the rest.
+  allocatedHours Float            @default(0)
+  assignedById   String?
+  assignedAt     DateTime         @default(now())
+  releasedAt     DateTime?
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, status])
+  @@index([userId, status])
+  @@map("pm_task_assignments")
+}
+
+enum HandoverStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+/// Peer-to-peer handover. An engineer who cannot finish passes the REMAINING work to
+/// a peer; the peer accepts (or rejects), and the manager is notified. Nothing is lost:
+/// the original assignment stays on record with the hours already spent.
+model TaskHandover {
+  id               String         @id @default(cuid())
+  taskId           String
+  fromUserId       String
+  toUserId         String
+  reason           String
+  /// Percent of the task still to do at the moment of handover.
+  remainingPercent Int
+  remainingHours   Float
+  status           HandoverStatus @default(PENDING)
+  /// Who accepted/rejected. Usually the receiver; a manager may force it through.
+  decidedById      String?
+  decidedAt        DateTime?
+  decisionNote     String?
+  createdAt        DateTime       @default(now())
+
+  task      Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromUser  User  @relation("HandoverFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser    User  @relation("HandoverTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  decidedBy User? @relation("HandoverDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
+  @@index([toUserId, status])
+  @@index([fromUserId, status])
+  @@map("pm_task_handovers")
+}
+
+/// Append-only progress ledger. Task.percentComplete/actualHours are projections of
+/// this table, which means an audit trail comes for free and disputes are resolvable.
+model TaskProgressLog {
+  id              String   @id @default(cuid())
+  taskId          String
+  userId          String
+  /// Cumulative completion claimed by this punch-in, 0-100.
+  percentComplete Int
+  /// Hours burned since the previous punch-in.
+  hoursSpent      Float    @default(0)
+  note            String
+  /// Free-text blocker; when set the task surfaces on the manager's risk board.
+  blocker         String?
+  loggedFor       DateTime @db.Date
+  createdAt       DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([userId, loggedFor])
+  @@map("pm_task_progress_logs")
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@map("pm_task_comments")
+}
