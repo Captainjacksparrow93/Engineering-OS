@@ -22,8 +22,8 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       <Sidebar principal={principal} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar principal={principal} unread={notifications} />
-        <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 md:px-6">{children}</main>
-        <footer className="border-t border-surface-border bg-white px-6 py-3 text-xs text-slate-400">
+        <main className="mx-auto w-full max-w-content flex-1 px-base py-xl md:px-xl">{children}</main>
+        <footer className="border-t border-hairline px-base py-md text-caption text-muted-soft md:px-xl">
           Engineering OS · Project Management module · Further modules are on the roadmap
         </footer>
       </div>

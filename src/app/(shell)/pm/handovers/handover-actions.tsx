@@ -11,7 +11,7 @@ export function HandoverDecision({ handoverId, asManager }: { handoverId: string
   return (
     <div>
       <input
-        className="input mb-2 text-sm"
+        className="input mb-2 text-body-sm"
         placeholder={asManager ? 'Note (recorded as a decision on their behalf)' : 'Optional note'}
         value={note}
         onChange={(event) => setNote(event.target.value)}
@@ -21,7 +21,7 @@ export function HandoverDecision({ handoverId, asManager }: { handoverId: string
           <input type="hidden" name="handoverId" value={handoverId} />
           <input type="hidden" name="decision" value="ACCEPTED" />
           <input type="hidden" name="note" value={note} />
-          <SubmitButton className="w-full" size="sm">
+          <SubmitButton variant="ink" className="w-full" size="sm">
             {asManager ? 'Force accept' : 'Accept the work'}
           </SubmitButton>
         </form>

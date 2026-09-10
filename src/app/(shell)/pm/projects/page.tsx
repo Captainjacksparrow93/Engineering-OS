@@ -56,7 +56,7 @@ export default async function ProjectsPage({
             ))}
           </select>
         </div>
-        <label className="flex items-center gap-2 pb-2 text-sm text-slate-600">
+        <label className="flex items-center gap-2 pb-2 text-body-sm text-body">
           <input type="checkbox" name="mine" value="1" defaultChecked={params.mine === '1'} />
           Only mine
         </label>
@@ -69,7 +69,7 @@ export default async function ProjectsPage({
         <EmptyState
           title="No projects match"
           hint="Projects appear here when you manage them, are a member, or hold a task on them."
-          action={canCreate ? <Link href="/pm/projects/new" className="btn btn-primary">Define new project</Link> : undefined}
+          action={canCreate ? <Link href="/pm/projects/new" className="btn btn-secondary">Define new project</Link> : undefined}
         />
       ) : (
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -77,22 +77,23 @@ export default async function ProjectsPage({
             const due = daysUntil(project.targetEndDate);
             const late = due !== null && due < 0 && project.status !== 'COMPLETED';
             return (
-              <Link key={project.id} href={`/pm/projects/${project.id}`} className="card p-4 transition hover:shadow-md">
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{project.name}</p>
-                    <p className="font-mono text-[11px] text-slate-400">{project.code}</p>
-                  </div>
+              <Link key={project.id} href={`/pm/projects/${project.id}`} className="card p-4 transition ">
+                <div className="mb-sm flex items-start justify-between gap-sm">
+                  <p className="text-title-sm text-ink">{project.name}</p>
                   <StatusBadge status={project.status} />
                 </div>
 
-                <p className="mb-3 truncate text-xs text-slate-500">{project.clientName}</p>
+                <p className="mb-base flex items-center gap-xs text-caption text-muted">
+                  <span className="code text-muted-soft">{project.code}</span>
+                  <span className="text-muted-soft">·</span>
+                  <span className="truncate">{project.clientName}</span>
+                </p>
 
                 <ProgressBar
                   value={project.stats.progressPercent}
                   tone={project.stats.blockedCount > 0 ? 'danger' : undefined}
                 />
-                <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-500">
+                <div className="mt-1.5 flex items-center justify-between text-caption text-muted">
                   <span>
                     {project.stats.completedCount}/{project.stats.taskCount} tasks
                   </span>
@@ -102,19 +103,19 @@ export default async function ProjectsPage({
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   <PriorityBadge priority={project.priority} />
                   {project.stats.blockedCount > 0 ? (
-                    <span className="badge bg-red-100 text-red-700">{project.stats.blockedCount} blocked</span>
+                    <span className="badge bg-error/10 text-error">{project.stats.blockedCount} blocked</span>
                   ) : null}
                   {project.panelCount > 0 ? (
-                    <span className="badge bg-slate-100 text-slate-600">{project.panelCount} panels</span>
+                    <span className="badge bg-surface-strong text-body">{project.panelCount} panels</span>
                   ) : null}
                 </div>
 
-                <div className="mt-3 flex items-center justify-between border-t border-surface-border pt-2.5 text-xs">
-                  <span className="flex items-center gap-1.5 text-slate-600">
+                <div className="mt-3 flex items-center justify-between border-t border-hairline pt-2.5 text-caption">
+                  <span className="flex items-center gap-1.5 text-body">
                     <Avatar name={project.manager.fullName} color={project.manager.avatarColor} size={20} />
                     {project.manager.fullName}
                   </span>
-                  <span className={late ? 'font-medium text-red-600' : 'text-slate-500'}>
+                  <span className={late ? 'font-medium text-error' : 'text-muted'}>
                     {formatDate(project.targetEndDate)}
                   </span>
                 </div>

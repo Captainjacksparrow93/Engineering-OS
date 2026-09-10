@@ -49,30 +49,30 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
               <tbody>
                 {entries.map((entry) => (
                   <tr key={entry.id}>
-                    <td className="whitespace-nowrap text-xs text-slate-500">
+                    <td className="whitespace-nowrap text-caption text-muted">
                       {entry.createdAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
                     </td>
                     <td>
                       {entry.actor ? (
-                        <span className="flex items-center gap-1.5 text-xs text-slate-700">
+                        <span className="flex items-center gap-1.5 text-caption text-ink">
                           <Avatar name={entry.actor.fullName} color={entry.actor.avatarColor} size={20} />
                           {entry.actor.fullName}
                         </span>
                       ) : (
-                        <span className="text-xs text-slate-400">system</span>
+                        <span className="text-caption text-muted-soft">system</span>
                       )}
                     </td>
                     <td className="whitespace-nowrap">
-                      <span className="badge bg-slate-100 font-mono text-slate-600">
+                      <span className="code-chip">
                         {entry.module}.{entry.action}
                       </span>
                     </td>
-                    <td className="text-xs text-slate-600">
+                    <td className="text-caption text-body">
                       {entry.entityType}
-                      <span className="block font-mono text-[10px] text-slate-400">{entry.entityId.slice(0, 10)}…</span>
+                      <span className="code block text-caption text-muted-soft">{entry.entityId.slice(0, 10)}…</span>
                     </td>
                     <td>
-                      <pre className="max-w-md overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-slate-500">
+                      <pre className="max-w-md overflow-x-auto whitespace-pre-wrap break-words text-caption text-muted">
                         {entry.diff ? JSON.stringify(entry.diff) : '—'}
                       </pre>
                     </td>

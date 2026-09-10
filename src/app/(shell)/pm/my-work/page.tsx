@@ -63,31 +63,31 @@ export default async function MyWorkPage({
                   return (
                     <tr key={assignment.id}>
                       <td>
-                        <Link href={`/pm/tasks/${task.id}`} className="font-medium text-slate-800 hover:text-brand-600">
+                        <Link href={`/pm/tasks/${task.id}`} className="font-medium text-ink hover:text-ink">
                           {task.title}
                         </Link>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                          <span className="font-mono text-[11px] text-slate-400">{task.code}</span>
+                          <span className="code text-caption text-muted-soft">{task.code}</span>
                           <PriorityBadge priority={task.priority} />
-                          {task.type === 'ADHOC' ? <span className="badge bg-fuchsia-100 text-fuchsia-700">ad-hoc</span> : null}
+                          {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
                           {assignment.role !== 'OWNER' ? (
-                            <span className="badge bg-slate-100 text-slate-600">{assignment.role.toLowerCase()}</span>
+                            <span className="badge bg-surface-strong text-body">{assignment.role.toLowerCase()}</span>
                           ) : null}
                         </div>
                       </td>
-                      <td className="text-xs text-slate-500">
-                        <Link href={`/pm/projects/${task.project.id}`} className="hover:text-brand-600">
+                      <td className="text-caption text-muted">
+                        <Link href={`/pm/projects/${task.project.id}`} className="hover:text-ink">
                           {task.project.code}
                         </Link>
-                        <span className="block text-[11px] text-slate-400">{task.project.clientName}</span>
+                        <span className="block text-caption text-muted-soft">{task.project.clientName}</span>
                       </td>
-                      <td className="whitespace-nowrap text-xs">
+                      <td className="whitespace-nowrap text-caption">
                         {task.plannedEnd ? (
                           <>
-                            <span className={due !== null && due < 0 ? 'font-medium text-red-600' : 'text-slate-600'}>
+                            <span className={due !== null && due < 0 ? 'font-medium text-error' : 'text-body'}>
                               {formatDate(task.plannedEnd)}
                             </span>
-                            <span className="block text-[11px] text-slate-400">
+                            <span className="block text-caption text-muted-soft">
                               {due !== null ? (due < 0 ? `${-due}d late` : `in ${due}d`) : ''}
                             </span>
                           </>
@@ -97,17 +97,17 @@ export default async function MyWorkPage({
                       </td>
                       <td className="w-28">
                         <ProgressBar value={task.percentComplete} tone={task.status === 'BLOCKED' ? 'danger' : undefined} />
-                        <span className="mt-1 block text-[11px] text-slate-500">{task.percentComplete}%</span>
+                        <span className="mt-1 block text-caption text-muted">{task.percentComplete}%</span>
                       </td>
                       <td>
                         <StatusBadge status={task.status} />
                       </td>
-                      <td className="text-xs">
+                      <td className="text-caption">
                         {unmetDependencies.length === 0 ? (
-                          <span className="text-emerald-600">clear</span>
+                          <span className="text-success">clear</span>
                         ) : (
                           unmetDependencies.map((dep) => (
-                            <Link key={dep.id} href={`/pm/tasks/${dep.id}`} className="block font-mono text-[11px] text-red-600 hover:underline">
+                            <Link key={dep.id} href={`/pm/tasks/${dep.id}`} className="code block text-caption text-error hover:underline">
                               {dep.code}
                             </Link>
                           ))

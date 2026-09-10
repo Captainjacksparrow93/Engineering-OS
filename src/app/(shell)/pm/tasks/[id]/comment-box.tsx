@@ -31,13 +31,13 @@ export function CommentBox({ taskId, comments }: { taskId: string; comments: Com
         </form>
 
         {comments.length > 0 ? (
-          <ul className="mt-4 space-y-3 border-t border-surface-border pt-3">
+          <ul className="mt-4 space-y-3 border-t border-hairline pt-3">
             {comments.map((comment) => (
               <li key={comment.id} className="flex gap-2">
                 <Avatar name={comment.user.fullName} color={comment.user.avatarColor} size={24} />
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-700">{comment.user.fullName}</p>
-                  <p className="whitespace-pre-wrap text-sm text-slate-600">{comment.body}</p>
+                  <p className="text-caption font-medium text-ink">{comment.user.fullName}</p>
+                  <p className="whitespace-pre-wrap text-body-sm text-body">{comment.body}</p>
                 </div>
               </li>
             ))}

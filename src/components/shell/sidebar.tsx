@@ -9,7 +9,6 @@ interface NavItem {
   label: string;
   href: string;
   requires?: PermissionKey;
-  badge?: string;
 }
 
 /**
@@ -37,48 +36,47 @@ export function Sidebar({ principal }: { principal: Principal }) {
   const upcoming = MODULES.filter((m) => m.status === 'COMING_SOON');
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-surface-border bg-white md:flex">
-      <div className="flex items-center gap-2 border-b border-surface-border px-4 py-4">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">⚡</span>
-        <div>
-          <p className="text-sm font-semibold leading-tight text-slate-900">Engineering OS</p>
-          <p className="text-[11px] leading-tight text-slate-400">Vidyut Switchgear</p>
-        </div>
+    <aside className="hidden w-64 shrink-0 flex-col border-r border-hairline bg-canvas md:flex">
+      {/* The wordmark is one of only two places Cursor Orange is allowed. */}
+      <div className="flex h-16 items-center border-b border-hairline px-lg">
+        <Link href="/dashboard" className="flex items-baseline gap-xxs">
+          <span className="text-display-sm text-primary">Engineering</span>
+          <span className="text-display-sm text-ink">OS</span>
+        </Link>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2 py-3">
-        <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Project management</p>
+      <nav className="flex-1 overflow-y-auto px-sm py-md">
+        <p className="px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Project management</p>
         {PM_NAV.filter(visible).map((item) => (
           <NavLink key={item.href} href={item.href} label={item.label} />
         ))}
 
         {adminItems.length ? (
           <>
-            <p className="mt-4 px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Administration</p>
+            <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Administration</p>
             {adminItems.map((item) => (
               <NavLink key={item.href} href={item.href} label={item.label} />
             ))}
           </>
         ) : null}
 
-        <p className="mt-4 px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Other modules</p>
+        <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Other modules</p>
         <NavLink href="/modules" label="All modules" />
         {upcoming.map((module) => (
           <Link
             key={module.key}
             href={module.route}
-            className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm text-slate-400 hover:bg-slate-50"
+            className="flex items-center justify-between gap-xs rounded-sm px-sm py-1.5 text-nav-link text-muted-soft hover:bg-canvas-soft hover:text-body"
           >
-            <span className="flex items-center gap-2">
-              <span aria-hidden>{module.icon}</span>
-              {module.name}
-            </span>
-            <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-500">
-              soon
-            </span>
+            <span className="truncate">{module.name}</span>
+            <span className="shrink-0 text-caption-uppercase uppercase text-muted-soft">soon</span>
           </Link>
         ))}
       </nav>
+
+      <div className="border-t border-hairline px-lg py-base">
+        <p className="text-caption text-muted-soft">Vidyut Switchgear</p>
+      </div>
     </aside>
   );
 }

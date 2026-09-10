@@ -47,8 +47,8 @@ export function TeamPanel({
             <li key={member.id} className="flex items-center gap-2">
               <Avatar name={member.user.fullName} color={member.user.avatarColor} size={26} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-800">{member.user.fullName}</p>
-                <p className="truncate text-[11px] text-slate-500">
+                <p className="truncate text-body-sm font-medium text-ink">{member.user.fullName}</p>
+                <p className="truncate text-caption text-muted">
                   {member.role.toLowerCase()}
                   {member.user.designation ? ` · ${member.user.designation}` : ''}
                 </p>
@@ -69,7 +69,7 @@ export function TeamPanel({
         <FormMessage state={removeState} />
 
         {adding ? (
-          <form action={addAction} className="mt-3 border-t border-surface-border pt-3">
+          <form action={addAction} className="mt-3 border-t border-hairline pt-3">
             <input type="hidden" name="projectId" value={projectId} />
             <div className="field">
               <label className="label" htmlFor="member-user">Employee</label>

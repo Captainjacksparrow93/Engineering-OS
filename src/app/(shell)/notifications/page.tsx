@@ -22,14 +22,14 @@ export default async function NotificationsPage() {
         <EmptyState title="Nothing yet" hint="You will be told when work is assigned to you or something you depend on moves." />
       ) : (
         <Card bodyClassName="p-0">
-          <ul className="divide-y divide-surface-border">
+          <ul className="divide-y divide-hairline">
             {notifications.map((notification) => (
               <li key={notification.id} className={`flex items-start gap-3 px-4 py-3 ${notification.readAt ? 'opacity-60' : ''}`}>
-                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${notification.readAt ? 'bg-slate-300' : 'bg-brand-500'}`} />
+                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-pill ${notification.readAt ? 'bg-hairline-strong' : 'bg-ink'}`} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-800">{notification.title}</p>
-                  <p className="text-sm text-slate-600">{notification.body}</p>
-                  <p className="mt-0.5 text-[11px] text-slate-400">
+                  <p className="text-body-sm font-medium text-ink">{notification.title}</p>
+                  <p className="text-body-sm text-body">{notification.body}</p>
+                  <p className="mt-0.5 text-caption text-muted-soft">
                     {notification.createdAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
                   </p>
                 </div>

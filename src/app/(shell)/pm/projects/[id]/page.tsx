@@ -38,12 +38,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <span>{project.clientName}</span>
-            <span className="text-slate-300">·</span>
-            <span className="font-mono text-xs">{project.code}</span>
+            <span className="text-muted-soft">·</span>
+            <span className="code text-caption">{project.code}</span>
             {project.poNumber ? (
               <>
-                <span className="text-slate-300">·</span>
-                <span className="text-xs">PO {project.poNumber}</span>
+                <span className="text-muted-soft">·</span>
+                <span className="text-caption">PO {project.poNumber}</span>
               </>
             ) : null}
             <StatusBadge status={project.status} />
@@ -90,40 +90,40 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
         <div className="space-y-3">
           <Card title="Delivery">
-            <dl className="space-y-2 text-sm">
+            <dl className="space-y-2 text-body-sm">
               <div className="flex justify-between gap-2">
-                <dt className="text-slate-500">Kick-off</dt>
+                <dt className="text-muted">Kick-off</dt>
                 <dd className="font-medium">{formatDate(project.startDate)}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-slate-500">Target</dt>
-                <dd className={due !== null && due < 0 ? 'font-medium text-red-600' : 'font-medium'}>
+                <dt className="text-muted">Target</dt>
+                <dd className={due !== null && due < 0 ? 'font-medium text-error' : 'font-medium'}>
                   {formatDate(project.targetEndDate)}
                 </dd>
               </div>
               {due !== null ? (
                 <div className="flex justify-between gap-2">
-                  <dt className="text-slate-500">Time left</dt>
-                  <dd className={due < 0 ? 'font-medium text-red-600' : 'font-medium'}>
+                  <dt className="text-muted">Time left</dt>
+                  <dd className={due < 0 ? 'font-medium text-error' : 'font-medium'}>
                     {due < 0 ? `${-due} days late` : `${due} days`}
                   </dd>
                 </div>
               ) : null}
               {project.panelType ? (
                 <div className="flex justify-between gap-2">
-                  <dt className="text-slate-500">Panels</dt>
+                  <dt className="text-muted">Panels</dt>
                   <dd className="text-right font-medium">{project.panelCount} · {project.panelType}</dd>
                 </div>
               ) : null}
               {project.orderValue ? (
                 <div className="flex justify-between gap-2">
-                  <dt className="text-slate-500">Order value</dt>
+                  <dt className="text-muted">Order value</dt>
                   <dd className="font-medium">₹{Number(project.orderValue).toLocaleString('en-IN')}</dd>
                 </div>
               ) : null}
             </dl>
-            <div className="mt-3 border-t border-surface-border pt-3">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Overall</p>
+            <div className="mt-3 border-t border-hairline pt-3">
+              <p className="text-caption uppercase tracking-wide text-muted-soft">Overall</p>
               <ProgressBar className="mt-1.5" value={summary.progressPercent} />
             </div>
           </Card>

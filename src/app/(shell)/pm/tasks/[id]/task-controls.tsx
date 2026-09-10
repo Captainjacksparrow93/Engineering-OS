@@ -50,11 +50,11 @@ export function TaskControls({
       <div className="card-body space-y-3">
         {mayTransition && transitions.length > 0 ? (
           <div className="flex flex-col gap-2">
-            {transitions.map((transition) => (
+            {transitions.map((transition, index) => (
               <form key={transition.value} action={statusAction}>
                 <input type="hidden" name="taskId" value={task.id} />
                 <input type="hidden" name="status" value={transition.value} />
-                <SubmitButton variant={transition.variant ?? 'secondary'} className="w-full">
+                <SubmitButton variant={index === 0 ? (transition.variant ?? 'secondary') : 'secondary'} className="w-full">
                   {transition.label}
                 </SubmitButton>
               </form>
@@ -74,7 +74,7 @@ export function TaskControls({
         <FormMessage state={statusState} />
 
         {permissions.canAssign ? (
-          <div className="border-t border-surface-border pt-3">
+          <div className="border-t border-hairline pt-3">
             {reassigning ? (
               <form action={assignAction}>
                 <input type="hidden" name="taskId" value={task.id} />
@@ -115,7 +115,7 @@ export function TaskControls({
         ) : null}
 
         {permissions.canDelete ? (
-          <form action={deleteAction} className="border-t border-surface-border pt-3">
+          <form action={deleteAction} className="border-t border-hairline pt-3">
             <input type="hidden" name="taskId" value={task.id} />
             <input type="hidden" name="projectId" value={task.projectId} />
             <SubmitButton variant="danger" size="sm" className="w-full" confirm="Delete this task permanently?">

@@ -96,19 +96,19 @@ export function AdhocForm({
             <input id="requiredSkills" name="requiredSkills" defaultValue={filters.skills} className="input" placeholder="schematics, EPLAN" />
           </div>
 
-          <div className="rounded-md border border-surface-border bg-slate-50 px-3 py-2 text-sm">
+          <div className="rounded-md border border-hairline bg-canvas-soft px-3 py-2 text-body-sm">
             {selected ? (
-              <span className="text-slate-700">
+              <span className="text-ink">
                 Assigning to <strong>{suggestions.find((s) => s.id === selected)?.fullName}</strong>
               </span>
             ) : (
-              <span className="text-slate-500">Pick someone from the ranked list, or create it unassigned.</span>
+              <span className="text-muted">Pick someone from the ranked list, or create it unassigned.</span>
             )}
           </div>
 
           <FormMessage state={state} />
           <div className="mt-3">
-            <SubmitButton className="w-full" pendingLabel="Creating…">
+            <SubmitButton variant="primary" className="w-full" pendingLabel="Creating…">
               {selected ? 'Create and assign' : 'Create unassigned'}
             </SubmitButton>
           </div>
@@ -149,7 +149,7 @@ export function AdhocForm({
         <section className="card">
           <header className="card-header">
             <h2 className="card-title">Who can take this ({suggestions.length})</h2>
-            <span className="text-xs text-slate-500">Ranked by capacity, skills and grade</span>
+            <span className="text-caption text-muted">Ranked by capacity, skills and grade</span>
           </header>
           <div className="card-body space-y-2">
             {suggestions.length === 0 ? (
@@ -162,24 +162,24 @@ export function AdhocForm({
                 <label
                   key={suggestion.id}
                   className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition ${
-                    selected === suggestion.id ? 'border-brand-500 bg-brand-50' : 'border-surface-border hover:bg-slate-50'
+                    selected === suggestion.id ? 'border-ink bg-canvas-soft' : 'border-hairline hover:bg-canvas-soft'
                   }`}
                 >
                   <input
                     type="radio"
                     name="candidate"
-                    className="mt-1 accent-brand-600"
+                    className="mt-1 accent-ink"
                     checked={selected === suggestion.id}
                     onChange={() => setSelected(suggestion.id)}
                   />
                   <Avatar name={suggestion.fullName} color={suggestion.avatarColor} size={34} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-900">{suggestion.fullName}</span>
+                      <span className="text-body-sm font-semibold text-ink">{suggestion.fullName}</span>
                       <StatusBadge status={suggestion.status} />
-                      <span className="ml-auto text-sm font-semibold text-brand-600">{suggestion.score}</span>
+                      <span className="ml-auto text-body-sm font-semibold text-ink">{suggestion.score}</span>
                     </div>
-                    <p className="truncate text-xs text-slate-500">
+                    <p className="truncate text-caption text-muted">
                       {suggestion.designation ?? ''}
                       {suggestion.departmentName ? ` · ${suggestion.departmentName}` : ''}
                     </p>
@@ -189,13 +189,13 @@ export function AdhocForm({
                         value={Math.min(100, suggestion.utilizationPercent)}
                         tone={suggestion.utilizationPercent > 100 ? 'danger' : suggestion.utilizationPercent < 60 ? 'success' : 'default'}
                       />
-                      <p className="mt-1 text-[11px] text-slate-500">
+                      <p className="mt-1 text-caption text-muted">
                         {suggestion.utilizationPercent}% loaded · {suggestion.freeHours}h free · {suggestion.openTaskCount} open tasks
                       </p>
                     </div>
 
                     {suggestion.reasons.length ? (
-                      <p className="mt-1 text-[11px] text-slate-500">{suggestion.reasons.join(' · ')}</p>
+                      <p className="mt-1 text-caption text-muted">{suggestion.reasons.join(' · ')}</p>
                     ) : null}
                   </div>
                 </label>

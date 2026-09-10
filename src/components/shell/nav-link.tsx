@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 
+/** Active state is carried by ink weight and a soft canvas fill — never by orange. */
 export function NavLink({ href, label }: { href: string; label: string }) {
   const pathname = usePathname();
   const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(`${href}/`));
@@ -12,8 +13,8 @@ export function NavLink({ href, label }: { href: string; label: string }) {
     <Link
       href={href}
       className={clsx(
-        'block rounded-md px-2 py-1.5 text-sm transition',
-        active ? 'bg-brand-50 font-medium text-brand-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+        'block rounded-sm px-sm py-1.5 text-nav-link transition-colors',
+        active ? 'bg-surface-strong text-ink' : 'text-body hover:bg-canvas-soft hover:text-ink',
       )}
     >
       {label}

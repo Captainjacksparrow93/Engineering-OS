@@ -31,7 +31,7 @@ interface WbsTask {
  */
 export function WbsTable({ tasks, criticalTaskIds }: { tasks: WbsTask[]; criticalTaskIds: string[] }) {
   if (tasks.length === 0) {
-    return <p className="p-4 text-sm text-slate-500">No tasks yet. Break the project down below.</p>;
+    return <p className="p-4 text-body-sm text-muted">No tasks yet. Break the project down below.</p>;
   }
 
   const critical = new Set(criticalTaskIds);
@@ -68,29 +68,29 @@ export function WbsTable({ tasks, criticalTaskIds }: { tasks: WbsTask[]; critica
             const isPhase = task.type === 'PHASE' || task._count.children > 0;
             const overdue = task.plannedEnd && task.plannedEnd < new Date() && !['COMPLETED', 'CANCELLED'].includes(task.status);
             return (
-              <tr key={task.id} className={clsx(isPhase && 'bg-slate-50/60')}>
+              <tr key={task.id} className={clsx(isPhase && 'bg-canvas-soft')}>
                 <td style={{ paddingLeft: 12 + depth * 18 }}>
                   <Link
                     href={`/pm/tasks/${task.id}`}
-                    className={clsx('hover:text-brand-600', isPhase ? 'font-semibold text-slate-900' : 'text-slate-800')}
+                    className={clsx('hover:text-ink', isPhase ? 'font-semibold text-ink' : 'text-ink')}
                   >
                     {task.title}
                   </Link>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                    <span className="font-mono text-[11px] text-slate-400">{task.code}</span>
-                    {task.type === 'ADHOC' ? <span className="badge bg-fuchsia-100 text-fuchsia-700">ad-hoc</span> : null}
+                    <span className="code text-caption text-muted-soft">{task.code}</span>
+                    {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
                     {critical.has(task.id) && !isPhase ? (
-                      <span className="badge bg-red-50 text-red-600" title="Zero float - any slip moves the delivery date">
+                      <span className="badge bg-error/[0.06] text-error" title="Zero float - any slip moves the delivery date">
                         critical path
                       </span>
                     ) : null}
                     {task._count.dependencies > 0 ? (
-                      <span className="badge bg-slate-100 text-slate-500" title="Depends on other tasks">
+                      <span className="badge bg-surface-strong text-muted" title="Depends on other tasks">
                         {task._count.dependencies} dep
                       </span>
                     ) : null}
                     {task._count.handovers > 0 ? (
-                      <span className="badge bg-violet-100 text-violet-700">handover</span>
+                      <span className="badge bg-surface-strong text-ink">handover</span>
                     ) : null}
                     {!isPhase ? <PriorityBadge priority={task.priority} /> : null}
                   </div>
@@ -98,15 +98,15 @@ export function WbsTable({ tasks, criticalTaskIds }: { tasks: WbsTask[]; critica
                 <td>
                   <AvatarStack people={task.assignments.map((a) => a.user)} />
                 </td>
-                <td className="whitespace-nowrap text-xs">
-                  <span className={overdue ? 'font-medium text-red-600' : 'text-slate-600'}>
+                <td className="whitespace-nowrap text-caption">
+                  <span className={overdue ? 'font-medium text-error' : 'text-body'}>
                     {formatDate(task.plannedStart)} → {formatDate(task.plannedEnd)}
                   </span>
                   {task.schedule && task.schedule.floatDays > 0 ? (
-                    <span className="block text-[11px] text-slate-400">{task.schedule.floatDays}d float</span>
+                    <span className="block text-caption text-muted-soft">{task.schedule.floatDays}d float</span>
                   ) : null}
                 </td>
-                <td className="whitespace-nowrap text-xs text-slate-600">
+                <td className="whitespace-nowrap text-caption text-body">
                   {isPhase ? '—' : `${Math.round(task.actualHours)}/${Math.round(task.estimatedHours)}h`}
                 </td>
                 <td>
@@ -114,7 +114,7 @@ export function WbsTable({ tasks, criticalTaskIds }: { tasks: WbsTask[]; critica
                     value={task.rolledUpPercent}
                     tone={task.status === 'BLOCKED' ? 'danger' : task.status === 'COMPLETED' ? 'success' : 'default'}
                   />
-                  <span className="mt-1 block text-[11px] text-slate-500">{task.rolledUpPercent}%</span>
+                  <span className="mt-1 block text-caption text-muted">{task.rolledUpPercent}%</span>
                 </td>
                 <td>
                   <StatusBadge status={task.status} />

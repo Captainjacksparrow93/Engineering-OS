@@ -33,7 +33,9 @@ export function LoginForm() {
       </div>
 
       {state.error ? (
-        <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>
+        <p className="mb-base rounded-md border border-error/30 bg-error/[0.06] px-base py-sm text-body-sm text-ink">
+          {state.error}
+        </p>
       ) : null}
 
       <SubmitButton />

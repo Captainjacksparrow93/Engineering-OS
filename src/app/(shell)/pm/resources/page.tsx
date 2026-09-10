@@ -105,8 +105,8 @@ export default async function ResourcesPage({
                 <div className="mb-3 flex items-start gap-3">
                   <Avatar name={workload.person.fullName} color={workload.person.avatarColor} size={38} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-900">{workload.person.fullName}</p>
-                    <p className="truncate text-xs text-slate-500">
+                    <p className="truncate text-body-sm font-semibold text-ink">{workload.person.fullName}</p>
+                    <p className="truncate text-caption text-muted">
                       {workload.person.designation ?? workload.person.grade.replaceAll('_', ' ').toLowerCase()}
                       {workload.person.departmentName ? ` · ${workload.person.departmentName}` : ''}
                     </p>
@@ -114,11 +114,11 @@ export default async function ResourcesPage({
                   <StatusBadge status={workload.status} />
                 </div>
 
-                <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+                <div className="mb-1 flex items-center justify-between text-caption text-muted">
                   <span>
                     {workload.committedHours}h committed of {workload.capacityHours}h
                   </span>
-                  <span className={workload.utilizationPercent > 100 ? 'font-semibold text-red-600' : 'font-medium text-slate-700'}>
+                  <span className={workload.utilizationPercent > 100 ? 'font-semibold text-error' : 'font-medium text-ink'}>
                     {workload.utilizationPercent}%
                   </span>
                 </div>
@@ -127,42 +127,42 @@ export default async function ResourcesPage({
                   tone={workload.utilizationPercent > 100 ? 'danger' : workload.utilizationPercent < 60 ? 'success' : 'default'}
                 />
 
-                <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-600">
-                  <span><strong className="text-slate-800">{workload.freeHours}h</strong> free</span>
-                  <span><strong className="text-slate-800">{workload.openTaskCount}</strong> open tasks</span>
+                <div className="mt-3 flex flex-wrap gap-3 text-caption text-body">
+                  <span><strong className="text-ink">{workload.freeHours}h</strong> free</span>
+                  <span><strong className="text-ink">{workload.openTaskCount}</strong> open tasks</span>
                   {workload.overdueTaskCount > 0 ? (
-                    <span className="text-red-600"><strong>{workload.overdueTaskCount}</strong> overdue</span>
+                    <span className="text-error"><strong>{workload.overdueTaskCount}</strong> overdue</span>
                   ) : null}
                   {workload.leaveDays > 0 ? (
-                    <span className="text-amber-600"><strong>{workload.leaveDays}</strong> leave day(s)</span>
+                    <span className="text-muted"><strong className="text-body">{workload.leaveDays}</strong> leave day(s)</span>
                   ) : null}
                 </div>
 
                 {workload.person.skills.length ? (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {workload.person.skills.map((skill) => (
-                      <span key={skill} className="badge bg-slate-100 text-slate-600">{skill}</span>
+                      <span key={skill} className="badge bg-surface-strong text-body">{skill}</span>
                     ))}
                   </div>
                 ) : null}
 
                 {workload.assignments.length ? (
-                  <ul className="mt-3 space-y-1 border-t border-surface-border pt-2">
+                  <ul className="mt-3 space-y-1 border-t border-hairline pt-2">
                     {workload.assignments.slice(0, 4).map((assignment) => (
-                      <li key={assignment.taskId} className="flex items-center gap-2 text-xs">
-                        <Link href={`/pm/tasks/${assignment.taskId}`} className="min-w-0 flex-1 truncate text-slate-600 hover:text-brand-600">
+                      <li key={assignment.taskId} className="flex items-center gap-2 text-caption">
+                        <Link href={`/pm/tasks/${assignment.taskId}`} className="min-w-0 flex-1 truncate text-body hover:text-ink">
                           {assignment.taskTitle}
                         </Link>
-                        <span className="font-mono text-[10px] text-slate-400">{assignment.projectCode}</span>
+                        <span className="code text-caption text-muted-soft">{assignment.projectCode}</span>
                         <StatusBadge status={assignment.status} />
                       </li>
                     ))}
                     {workload.assignments.length > 4 ? (
-                      <li className="text-[11px] text-slate-400">+{workload.assignments.length - 4} more</li>
+                      <li className="text-caption text-muted-soft">+{workload.assignments.length - 4} more</li>
                     ) : null}
                   </ul>
                 ) : (
-                  <p className="mt-3 border-t border-surface-border pt-2 text-xs text-emerald-600">
+                  <p className="mt-3 border-t border-hairline pt-2 text-caption text-success">
                     No open tasks — available immediately.
                   </p>
                 )}

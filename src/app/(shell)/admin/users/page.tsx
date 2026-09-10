@@ -92,28 +92,28 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                     <span className="flex items-center gap-2">
                       <Avatar name={user.fullName} color={user.avatarColor} size={28} />
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-slate-800">{user.fullName}</span>
-                        <span className="block truncate text-[11px] text-slate-400">
+                        <span className="block truncate text-body-sm font-medium text-ink">{user.fullName}</span>
+                        <span className="block truncate text-caption text-muted-soft">
                           {user.employeeCode} · {user.email}
                         </span>
                       </span>
                     </span>
                   </td>
-                  <td className="text-xs text-slate-600">
+                  <td className="text-caption text-body">
                     {user.department?.name ?? '—'}
-                    <span className="block text-[11px] text-slate-400">{user.designation}</span>
+                    <span className="block text-caption text-muted-soft">{user.designation}</span>
                   </td>
-                  <td className="text-xs text-slate-600">{user.manager?.fullName ?? '—'}</td>
-                  <td className="text-xs text-slate-600">{user.dailyCapacityHours}h/day</td>
+                  <td className="text-caption text-body">{user.manager?.fullName ?? '—'}</td>
+                  <td className="text-caption text-body">{user.dailyCapacityHours}h/day</td>
                   <td>
                     {user.roleAssignments.length === 0 ? (
-                      <span className="text-xs text-red-500">no access</span>
+                      <span className="text-caption text-error">no access</span>
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {user.roleAssignments.map((assignment) => (
-                          <span key={assignment.id} className="badge bg-slate-100 text-slate-600" title={assignment.role.name}>
+                          <span key={assignment.id} className="badge bg-surface-strong text-body" title={assignment.role.name}>
                             {assignment.role.key.replaceAll('_', ' ').toLowerCase()}
-                            <span className="text-slate-400"> @ {scopeName(assignment.scopeType, assignment.scopeId)}</span>
+                            <span className="text-muted-soft"> @ {scopeName(assignment.scopeType, assignment.scopeId)}</span>
                           </span>
                         ))}
                       </div>

@@ -54,12 +54,12 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         title={task.title}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-xs">{task.code}</span>
+            <span className="code text-caption">{task.code}</span>
             <StatusBadge status={task.status} />
             <PriorityBadge priority={task.priority} />
-            {task.type === 'ADHOC' ? <span className="badge bg-fuchsia-100 text-fuchsia-700">ad-hoc</span> : null}
+            {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
             {task.parent ? (
-              <Link href={`/pm/tasks/${task.parent.id}`} className="text-xs text-brand-600 hover:underline">
+              <Link href={`/pm/tasks/${task.parent.id}`} className="text-caption text-ink hover:underline">
                 under {task.parent.code}
               </Link>
             ) : null}
@@ -74,7 +74,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             {blockers.map((blocker, index) => (
               <span key={blocker.predecessorId}>
                 {index > 0 ? ', ' : ''}
-                <Link href={`/pm/tasks/${blocker.predecessorId}`} className="font-mono underline">
+                <Link href={`/pm/tasks/${blocker.predecessorId}`} className="code underline">
                   {blocker.predecessorCode}
                 </Link>{' '}
                 ({blocker.reason})
@@ -101,31 +101,31 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         <div className="space-y-4 lg:col-span-2">
           <Card title="Details">
             {task.description ? (
-              <p className="mb-3 whitespace-pre-wrap text-sm text-slate-700">{task.description}</p>
+              <p className="mb-3 whitespace-pre-wrap text-body-sm text-ink">{task.description}</p>
             ) : (
-              <p className="mb-3 text-sm italic text-slate-400">No description.</p>
+              <p className="mb-3 text-body-sm italic text-muted-soft">No description.</p>
             )}
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <p className="label">Planned</p>
-                <p className={`text-sm ${due !== null && due < 0 ? 'font-medium text-red-600' : 'text-slate-700'}`}>
+                <p className={`text-body-sm ${due !== null && due < 0 ? 'font-medium text-error' : 'text-ink'}`}>
                   {formatDate(task.plannedStart)} → {formatDate(task.plannedEnd)}
                 </p>
               </div>
               <div>
                 <p className="label">Effort</p>
-                <p className="text-sm text-slate-700">
+                <p className="text-body-sm text-ink">
                   {Math.round(task.actualHours)}h spent of {Math.round(task.estimatedHours)}h
                 </p>
               </div>
               <div>
                 <p className="label">Downstream</p>
-                <p className="text-sm text-slate-700">{downstreamCount} task(s) wait on this</p>
+                <p className="text-body-sm text-ink">{downstreamCount} task(s) wait on this</p>
               </div>
               <div>
                 <p className="label">Raised by</p>
-                <p className="flex items-center gap-1.5 text-sm text-slate-700">
+                <p className="flex items-center gap-1.5 text-body-sm text-ink">
                   <Avatar name={task.createdBy.fullName} color={task.createdBy.avatarColor} size={18} />
                   {task.createdBy.fullName}
                 </p>
@@ -137,7 +137,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                 <p className="label">Skills needed</p>
                 <div className="flex flex-wrap gap-1">
                   {task.requiredSkills.map((skill) => (
-                    <span key={skill} className="badge bg-slate-100 text-slate-600">
+                    <span key={skill} className="badge bg-surface-strong text-body">
                       {skill}
                     </span>
                   ))}
@@ -145,10 +145,10 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
               </div>
             ) : null}
 
-            <div className="mt-4 border-t border-surface-border pt-3">
-              <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+            <div className="mt-4 border-t border-hairline pt-3">
+              <div className="mb-1 flex items-center justify-between text-caption text-muted">
                 <span>Progress</span>
-                <span className="font-medium text-slate-700">{task.percentComplete}%</span>
+                <span className="font-medium text-ink">{task.percentComplete}%</span>
               </div>
               <ProgressBar value={task.percentComplete} tone={task.status === 'BLOCKED' ? 'danger' : undefined} />
             </div>
@@ -161,10 +161,10 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                   {task.children.map((child) => (
                     <tr key={child.id}>
                       <td>
-                        <Link href={`/pm/tasks/${child.id}`} className="text-sm text-slate-800 hover:text-brand-600">
+                        <Link href={`/pm/tasks/${child.id}`} className="text-body-sm text-ink hover:text-ink">
                           {child.title}
                         </Link>
-                        <span className="ml-2 font-mono text-[11px] text-slate-400">{child.code}</span>
+                        <span className="code ml-2 text-caption text-muted-soft">{child.code}</span>
                       </td>
                       <td className="w-28">
                         <ProgressBar value={child.percentComplete} />
@@ -187,20 +187,20 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             {task.progressLogs.length === 0 ? (
               <p className="muted">Nothing logged yet.</p>
             ) : (
-              <ul className="divide-y divide-surface-border">
+              <ul className="divide-y divide-hairline">
                 {task.progressLogs.map((log) => (
                   <li key={log.id} className="flex gap-3 px-4 py-3">
                     <Avatar name={log.user.fullName} color={log.user.avatarColor} size={26} />
                     <div className="min-w-0 flex-1">
-                      <p className="flex flex-wrap items-center gap-2 text-sm">
-                        <span className="font-medium text-slate-800">{log.user.fullName}</span>
-                        <span className="badge bg-brand-50 text-brand-700">{log.percentComplete}%</span>
-                        {log.hoursSpent > 0 ? <span className="text-xs text-slate-500">{log.hoursSpent}h</span> : null}
-                        <span className="text-xs text-slate-400">{formatDate(log.loggedFor)}</span>
+                      <p className="flex flex-wrap items-center gap-2 text-body-sm">
+                        <span className="font-medium text-ink">{log.user.fullName}</span>
+                        <span className="badge bg-canvas-soft text-ink">{log.percentComplete}%</span>
+                        {log.hoursSpent > 0 ? <span className="text-caption text-muted">{log.hoursSpent}h</span> : null}
+                        <span className="text-caption text-muted-soft">{formatDate(log.loggedFor)}</span>
                       </p>
-                      <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-600">{log.note}</p>
+                      <p className="mt-0.5 whitespace-pre-wrap text-body-sm text-body">{log.note}</p>
                       {log.blocker ? (
-                        <p className="mt-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">
+                        <p className="mt-1 rounded border border-error/30 bg-error/[0.06] px-2 py-1 text-caption text-error">
                           Blocker: {log.blocker}
                         </p>
                       ) : null}
@@ -230,8 +230,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                   <li key={assignment.id} className="flex items-center gap-2">
                     <Avatar name={assignment.user.fullName} color={assignment.user.avatarColor} size={26} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-800">{assignment.user.fullName}</p>
-                      <p className="truncate text-[11px] text-slate-500">
+                      <p className="truncate text-body-sm font-medium text-ink">{assignment.user.fullName}</p>
+                      <p className="truncate text-caption text-muted">
                         {assignment.role.toLowerCase()} · {Math.round(assignment.allocatedHours)}h allocated
                       </p>
                     </div>
@@ -241,11 +241,11 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             )}
 
             {pastAssignments.length > 0 ? (
-              <div className="mt-3 border-t border-surface-border pt-3">
+              <div className="mt-3 border-t border-hairline pt-3">
                 <p className="label">Previously</p>
                 <ul className="space-y-1.5">
                   {pastAssignments.map((assignment) => (
-                    <li key={assignment.id} className="flex items-center gap-2 text-xs text-slate-500">
+                    <li key={assignment.id} className="flex items-center gap-2 text-caption text-muted">
                       <Avatar name={assignment.user.fullName} color={assignment.user.avatarColor} size={18} />
                       <span className="flex-1 truncate">{assignment.user.fullName}</span>
                       <StatusBadge status={assignment.status} />
@@ -285,16 +285,16 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             <Card title="Handover history">
               <ul className="space-y-2">
                 {task.handovers.map((handover) => (
-                  <li key={handover.id} className="rounded-md border border-surface-border p-2">
-                    <p className="flex items-center gap-1.5 text-xs">
+                  <li key={handover.id} className="rounded-md border border-hairline p-2">
+                    <p className="flex items-center gap-1.5 text-caption">
                       <Avatar name={handover.fromUser.fullName} color={handover.fromUser.avatarColor} size={16} />
-                      <span className="text-slate-600">{handover.fromUser.fullName}</span>
-                      <span className="text-slate-400">→</span>
+                      <span className="text-body">{handover.fromUser.fullName}</span>
+                      <span className="text-muted-soft">→</span>
                       <Avatar name={handover.toUser.fullName} color={handover.toUser.avatarColor} size={16} />
-                      <span className="text-slate-600">{handover.toUser.fullName}</span>
+                      <span className="text-body">{handover.toUser.fullName}</span>
                       <StatusBadge status={handover.status} className="ml-auto" />
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">{handover.reason}</p>
+                    <p className="mt-1 text-caption text-muted">{handover.reason}</p>
                   </li>
                 ))}
               </ul>

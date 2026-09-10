@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
-/** The launcher. One tile per module; unbuilt modules say so plainly. */
+/** The launcher. Feature cards on cream, hairline outlines, no shadows. */
 export default async function ModulesPage() {
   const principal = await requirePrincipal();
 
@@ -21,31 +21,26 @@ export default async function ModulesPage() {
         subtitle="Every function of the plant, under one roof. Project Management is live; the rest follow on the roadmap."
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-base sm:grid-cols-2 lg:grid-cols-3">
         {modules.map((module) => {
           const live = module.status === 'LIVE';
           return (
             <Link
               key={module.key}
               href={module.route}
-              className={`card group relative flex flex-col p-5 transition hover:shadow-md ${
-                live ? '' : 'opacity-90'
-              }`}
+              className="card flex flex-col p-lg transition-colors hover:border-hairline-strong hover:bg-canvas-soft"
             >
-              <div className="mb-3 flex items-start justify-between">
-                <span className="text-3xl" aria-hidden>
-                  {module.icon}
+              <div className="mb-base flex items-start justify-between gap-sm">
+                <h2 className="text-display-sm text-ink">{module.name}</h2>
+                <span className={live ? 'badge badge-success shrink-0' : 'badge badge-outline shrink-0'}>
+                  {live ? 'live' : 'soon'}
                 </span>
-                {live ? (
-                  <span className="badge bg-emerald-100 text-emerald-700">live</span>
-                ) : (
-                  <span className="badge bg-amber-100 text-amber-800">coming soon</span>
-                )}
               </div>
-              <h2 className="text-base font-semibold text-slate-900 group-hover:text-brand-700">{module.name}</h2>
-              <p className="mt-1 flex-1 text-sm text-slate-500">{module.description}</p>
+              <p className="flex-1 text-body-sm text-body">{module.description}</p>
               {module.plannedFor ? (
-                <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">{module.plannedFor}</p>
+                <p className="mt-base border-t border-hairline-soft pt-sm text-caption-uppercase uppercase text-muted-soft">
+                  {module.plannedFor}
+                </p>
               ) : null}
             </Link>
           );

@@ -2,92 +2,175 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Component recipes built from the tokens in `tailwind.config.ts`.
+ * Rules that hold everywhere: warm cream canvas (never white page floor),
+ * hairline-only depth (no shadows), 8px controls / 12px cards, display type at
+ * weight 400 with negative tracking, JetBrains Mono on every code surface.
+ */
+
 :root {
   color-scheme: light;
 }
 
 body {
-  @apply bg-surface-muted text-slate-800 antialiased;
+  @apply bg-canvas text-body antialiased;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 @layer components {
+  /* ---------------------------------------------------------------- surfaces */
   .card {
-    @apply rounded-lg border border-surface-border bg-white shadow-sm;
+    @apply rounded-lg border border-hairline bg-surface;
   }
   .card-header {
-    @apply flex items-center justify-between gap-3 border-b border-surface-border px-4 py-3;
+    @apply flex items-center justify-between gap-sm border-b border-hairline px-lg py-base;
   }
   .card-title {
-    @apply text-sm font-semibold text-slate-900;
+    @apply text-title-sm text-ink;
   }
   .card-body {
-    @apply p-4;
+    @apply p-lg;
+  }
+  /* Inset pane: the app's equivalent of an IDE pane inside a card. */
+  .pane {
+    @apply rounded-md border border-hairline-soft bg-canvas-soft p-base;
   }
 
+  /* ----------------------------------------------------------------- buttons */
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition
-      disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex h-10 items-center justify-center gap-xs rounded-md border px-[18px]
+      text-button transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
+  /* Cursor Orange. One primary action per screen — the brand voltage stays scarce. */
   .btn-primary {
-    @apply border-brand-600 bg-brand-600 text-white hover:bg-brand-700;
+    @apply border-primary bg-primary text-on-primary hover:bg-primary-active hover:border-primary-active;
   }
   .btn-secondary {
-    @apply border-surface-border bg-white text-slate-700 hover:bg-slate-50;
+    @apply border-hairline-strong bg-surface text-ink hover:bg-canvas-soft;
+  }
+  /* Ink-on-cream. For weighty non-brand actions where orange would be too loud. */
+  .btn-ink {
+    @apply h-11 border-ink bg-ink text-canvas hover:bg-body hover:border-body;
   }
   .btn-danger {
-    @apply border-red-200 bg-red-50 text-red-700 hover:bg-red-100;
+    @apply border-hairline-strong bg-surface text-error hover:bg-canvas-soft;
   }
   .btn-sm {
-    @apply px-2 py-1 text-xs;
+    @apply h-8 gap-xxs px-sm text-caption font-medium;
+  }
+  /* Inline text action. Never orange — see the scarcity rule. */
+  .btn-text {
+    @apply inline-flex items-center gap-xxs border-none bg-transparent px-0 text-button text-ink
+      underline-offset-4 hover:underline;
+  }
+  .link {
+    @apply text-ink underline-offset-4 hover:underline;
+  }
+  .link-muted {
+    @apply text-body underline-offset-4 hover:text-ink hover:underline;
   }
 
+  /* ------------------------------------------------------------------- forms */
   .input,
   .select,
   .textarea {
-    @apply w-full rounded-md border border-surface-border bg-white px-3 py-2 text-sm text-slate-800
-      outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
+    @apply w-full rounded-md border border-hairline-strong bg-surface px-base py-sm text-body-sm
+      text-ink outline-none transition-colors placeholder:text-muted-soft
+      focus:border-ink focus:ring-1 focus:ring-ink;
+  }
+  .input,
+  .select {
+    @apply h-11;
+  }
+  .textarea {
+    @apply h-auto py-sm;
   }
   .label {
-    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500;
+    @apply mb-xs block text-caption-uppercase uppercase text-muted;
   }
   .field {
-    @apply mb-3;
+    @apply mb-base;
   }
   .hint {
-    @apply mt-1 text-xs text-slate-500;
+    @apply mt-xxs text-caption text-muted;
   }
 
+  /* ------------------------------------------------------------------ badges */
   .badge {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide;
+    @apply inline-flex shrink-0 items-center gap-xxs whitespace-nowrap rounded-pill px-[10px] py-xxs
+      text-caption-uppercase uppercase;
+  }
+  .badge-neutral {
+    @apply bg-surface-strong text-ink;
+  }
+  .badge-outline {
+    @apply border border-hairline-strong bg-surface text-body;
+  }
+  .badge-ink {
+    @apply bg-ink text-canvas;
+  }
+  .badge-error {
+    @apply bg-error text-on-primary;
+  }
+  .badge-success {
+    @apply bg-success text-on-primary;
   }
 
+  /* Work-stage pills. Scoped to lifecycle/timeline stage markers only. */
+  .stage-pill {
+    @apply inline-flex shrink-0 items-center whitespace-nowrap rounded-pill px-[10px] py-xxs
+      text-caption-uppercase uppercase text-ink;
+  }
+
+  /* ------------------------------------------------------------------ tables */
   .table {
-    @apply w-full border-collapse text-sm;
+    @apply w-full border-collapse text-body-sm;
   }
   .table thead th {
-    @apply border-b border-surface-border bg-slate-50 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+    @apply border-b border-hairline bg-canvas-soft px-base py-sm text-left text-caption-uppercase uppercase text-muted;
   }
   .table tbody td {
-    @apply border-b border-surface-border px-3 py-2 align-middle;
+    @apply border-b border-hairline-soft px-base py-sm align-middle text-body;
+  }
+  .table tbody tr:last-child td {
+    @apply border-b-0;
   }
   .table tbody tr:hover {
-    @apply bg-slate-50/70;
+    @apply bg-canvas-soft;
   }
 
+  /* ------------------------------------------------------------------- stats */
   .stat {
-    @apply rounded-lg border border-surface-border bg-white px-4 py-3;
-  }
-  .stat-value {
-    @apply text-2xl font-semibold text-slate-900;
+    @apply rounded-lg border border-hairline bg-surface px-lg py-base;
   }
   .stat-label {
-    @apply text-xs uppercase tracking-wide text-slate-500;
+    @apply text-caption-uppercase uppercase text-muted;
+  }
+  .stat-value {
+    @apply mt-xxs text-display-sm text-ink;
   }
 
+  /* -------------------------------------------------------------- typography */
+  .page-title {
+    @apply text-display-md text-ink;
+  }
   .section-title {
-    @apply text-lg font-semibold text-slate-900;
+    @apply text-display-sm text-ink;
   }
   .muted {
-    @apply text-sm text-slate-500;
+    @apply text-body-sm text-muted;
+  }
+  /* Every code surface: task codes, employee codes, permission keys, payloads. */
+  .code {
+    @apply whitespace-nowrap font-mono text-code text-body;
+  }
+  .code-chip {
+    @apply inline-flex items-center rounded-xs bg-surface-strong px-1.5 py-0.5 font-mono text-code
+      normal-case text-ink;
+  }
+  .code-block {
+    @apply rounded-lg border border-hairline bg-surface p-md font-mono text-code text-ink;
   }
 }

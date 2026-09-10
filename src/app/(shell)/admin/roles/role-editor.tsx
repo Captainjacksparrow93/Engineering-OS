@@ -22,7 +22,7 @@ export function RolePermissionEditor({
       <>
         <div className="mb-3 flex flex-wrap gap-1">
           {selected.map((key) => (
-            <span key={key} className="badge bg-slate-100 font-mono text-slate-600">
+            <span key={key} className="code-chip">
               {key}
             </span>
           ))}
@@ -39,21 +39,21 @@ export function RolePermissionEditor({
       <input type="hidden" name="roleKey" value={roleKey} />
       <div className="grid gap-4 sm:grid-cols-2">
         {Object.entries(grouped).map(([module, permissions]) => (
-          <fieldset key={module} className="rounded-md border border-surface-border p-3">
-            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{module}</legend>
+          <fieldset key={module} className="rounded-md border border-hairline p-3">
+            <legend className="px-1 text-caption font-semibold uppercase tracking-wide text-muted">{module}</legend>
             <div className="space-y-1.5">
               {permissions.map((permission) => (
-                <label key={permission.key} className="flex items-start gap-2 text-sm">
+                <label key={permission.key} className="flex items-start gap-2 text-body-sm">
                   <input
                     type="checkbox"
                     name="permissions"
                     value={permission.key}
                     defaultChecked={selected.includes(permission.key)}
-                    className="mt-1 accent-brand-600"
+                    className="mt-1 accent-ink"
                   />
                   <span>
-                    <span className="block font-mono text-[11px] text-slate-500">{permission.key}</span>
-                    <span className="block text-slate-700">{permission.description}</span>
+                    <span className="code block text-caption text-muted">{permission.key}</span>
+                    <span className="block text-ink">{permission.description}</span>
                   </span>
                 </label>
               ))}

@@ -52,16 +52,16 @@ export function DependencyPanel({
         <div>
           <p className="label">This task waits on</p>
           {dependencies.length === 0 ? (
-            <p className="text-sm text-slate-400">Nothing — it can start as soon as it is scheduled.</p>
+            <p className="text-body-sm text-muted-soft">Nothing — it can start as soon as it is scheduled.</p>
           ) : (
             <ul className="space-y-1.5">
               {dependencies.map((edge) => (
-                <li key={edge.id} className="flex items-center gap-2 rounded border border-surface-border px-2 py-1.5">
+                <li key={edge.id} className="flex items-center gap-2 rounded border border-hairline px-2 py-1.5">
                   <div className="min-w-0 flex-1">
-                    <Link href={`/pm/tasks/${edge.predecessor!.id}`} className="block truncate text-sm text-slate-800 hover:text-brand-600">
+                    <Link href={`/pm/tasks/${edge.predecessor!.id}`} className="block truncate text-body-sm text-ink hover:text-ink">
                       {edge.predecessor!.title}
                     </Link>
-                    <span className="text-[11px] text-slate-400">
+                    <span className="text-caption text-muted-soft">
                       {edge.predecessor!.code} · {TYPE_LABEL[edge.type]}
                       {edge.lagDays !== 0 ? ` · ${edge.lagDays > 0 ? '+' : ''}${edge.lagDays}d` : ''}
                     </span>
@@ -83,12 +83,12 @@ export function DependencyPanel({
         <div>
           <p className="label">Waiting on this task</p>
           {dependents.length === 0 ? (
-            <p className="text-sm text-slate-400">Nothing downstream.</p>
+            <p className="text-body-sm text-muted-soft">Nothing downstream.</p>
           ) : (
             <ul className="space-y-1">
               {dependents.map((edge) => (
-                <li key={edge.id} className="flex items-center gap-2 text-sm">
-                  <Link href={`/pm/tasks/${edge.successor!.id}`} className="min-w-0 flex-1 truncate text-slate-700 hover:text-brand-600">
+                <li key={edge.id} className="flex items-center gap-2 text-body-sm">
+                  <Link href={`/pm/tasks/${edge.successor!.id}`} className="min-w-0 flex-1 truncate text-ink hover:text-ink">
                     {edge.successor!.title}
                   </Link>
                   <StatusBadge status={edge.successor!.status} />
@@ -101,7 +101,7 @@ export function DependencyPanel({
         <FormMessage state={removeState} />
 
         {adding ? (
-          <form action={addAction} className="border-t border-surface-border pt-3">
+          <form action={addAction} className="border-t border-hairline pt-3">
             <input type="hidden" name="successorId" value={taskId} />
             <div className="field">
               <label className="label" htmlFor="predecessorId">Must happen before this task</label>

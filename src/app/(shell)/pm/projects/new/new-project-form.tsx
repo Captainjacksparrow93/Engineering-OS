@@ -125,7 +125,7 @@ export function NewProjectForm({ managers, departments }: { managers: Option[]; 
 
           <FormMessage state={state} />
           <div className="mt-3">
-            <SubmitButton className="w-full" pendingLabel="Creating…">Create project</SubmitButton>
+            <SubmitButton variant="primary" className="w-full" pendingLabel="Creating…">Create project</SubmitButton>
           </div>
         </div>
       </section>

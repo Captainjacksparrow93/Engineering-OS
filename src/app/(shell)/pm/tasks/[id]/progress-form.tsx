@@ -16,17 +16,17 @@ export function ProgressForm({ taskId, currentPercent }: { taskId: string; curre
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <section className="card border-brand-100">
-      <header className="card-header bg-brand-50/50">
+    <section className="card border-hairline">
+      <header className="card-header bg-canvas-soft">
         <h2 className="card-title">Punch in progress</h2>
-        <span className="text-xs text-slate-500">Currently {currentPercent}%</span>
+        <span className="text-caption text-muted">Currently {currentPercent}%</span>
       </header>
       <form action={action} className="card-body">
         <input type="hidden" name="taskId" value={taskId} />
 
         <div className="field">
           <label className="label" htmlFor="percentComplete">
-            Completion: <span className="text-brand-600">{percent}%</span>
+            Completion: <span className="text-ink">{percent}%</span>
           </label>
           <input
             id="percentComplete"
@@ -37,7 +37,7 @@ export function ProgressForm({ taskId, currentPercent }: { taskId: string; curre
             step={5}
             value={percent}
             onChange={(event) => setPercent(Number(event.target.value))}
-            className="w-full accent-brand-600"
+            className="w-full accent-ink"
           />
           <p className="hint">Progress cannot be reduced. If work was undone, say so in the note and raise a blocker.</p>
         </div>

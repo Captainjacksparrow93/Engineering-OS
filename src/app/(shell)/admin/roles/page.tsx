@@ -41,9 +41,9 @@ export default async function RolesPage() {
           <Card
             key={role.id}
             title={`${role.name} (${role.key})`}
-            action={<span className="text-xs text-slate-500">{role._count.assignments} grant(s) live</span>}
+            action={<span className="text-caption text-muted">{role._count.assignments} grant(s) live</span>}
           >
-            <p className="mb-3 text-sm text-slate-600">{role.description}</p>
+            <p className="mb-3 text-body-sm text-body">{role.description}</p>
 
             {canManage && role.key !== 'SUPER_ADMIN' ? (
               <RolePermissionEditor
@@ -54,7 +54,7 @@ export default async function RolesPage() {
             ) : (
               <div className="flex flex-wrap gap-1">
                 {role.permissions.map((p) => (
-                  <span key={p.permission.id} className="badge bg-slate-100 font-mono text-slate-600" title={p.permission.description ?? ''}>
+                  <span key={p.permission.id} className="code-chip" title={p.permission.description ?? ''}>
                     {p.permission.key}
                   </span>
                 ))}

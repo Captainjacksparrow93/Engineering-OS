@@ -30,31 +30,31 @@ export default async function HandoversPage() {
           ) : (
             <ul className="space-y-3">
               {incoming.map((handover) => (
-                <li key={handover.id} className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                <li key={handover.id} className="rounded-lg border border-error/25 bg-error/[0.05] p-3">
                   <div className="mb-2 flex items-start gap-2">
                     <Avatar name={handover.fromUser.fullName} color={handover.fromUser.avatarColor} />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-slate-800">
+                      <p className="text-body-sm text-ink">
                         <span className="font-medium">{handover.fromUser.fullName}</span> wants to pass you{' '}
-                        <Link href={`/pm/tasks/${handover.task.id}`} className="font-mono text-brand-600 hover:underline">
+                        <Link href={`/pm/tasks/${handover.task.id}`} className="code text-ink hover:underline">
                           {handover.task.code}
                         </Link>
                       </p>
-                      <p className="text-sm text-slate-600">{handover.task.title}</p>
+                      <p className="text-body-sm text-body">{handover.task.title}</p>
                     </div>
                     <PriorityBadge priority={handover.task.priority} />
                   </div>
 
-                  <p className="mb-2 rounded border border-surface-border bg-white px-2 py-1.5 text-sm text-slate-600">
+                  <p className="mb-2 rounded border border-hairline bg-surface px-2 py-1.5 text-body-sm text-body">
                     {handover.reason}
                   </p>
 
-                  <div className="mb-2 flex flex-wrap gap-3 text-xs text-slate-500">
+                  <div className="mb-2 flex flex-wrap gap-3 text-caption text-muted">
                     <span>
-                      <strong className="text-slate-700">{handover.remainingPercent}%</strong> remaining
+                      <strong className="text-ink">{handover.remainingPercent}%</strong> remaining
                     </span>
                     <span>
-                      ~<strong className="text-slate-700">{handover.remainingHours}h</strong> of work
+                      ~<strong className="text-ink">{handover.remainingHours}h</strong> of work
                     </span>
                     <span>Due {formatDate(handover.task.plannedEnd)}</span>
                     <span>{handover.task.project.code}</span>
@@ -74,16 +74,16 @@ export default async function HandoversPage() {
             ) : (
               <ul className="space-y-2">
                 {outgoing.map((handover) => (
-                  <li key={handover.id} className="flex flex-wrap items-center gap-2 rounded border border-surface-border p-2">
+                  <li key={handover.id} className="flex flex-wrap items-center gap-2 rounded border border-hairline p-2">
                     <Avatar name={handover.toUser.fullName} color={handover.toUser.avatarColor} size={24} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-800">
-                        <Link href={`/pm/tasks/${handover.task.id}`} className="font-mono text-xs text-brand-600 hover:underline">
+                      <p className="truncate text-body-sm text-ink">
+                        <Link href={`/pm/tasks/${handover.task.id}`} className="code text-caption text-ink hover:underline">
                           {handover.task.code}
                         </Link>{' '}
                         → {handover.toUser.fullName}
                       </p>
-                      <p className="truncate text-[11px] text-slate-500">{handover.reason}</p>
+                      <p className="truncate text-caption text-muted">{handover.reason}</p>
                     </div>
                     <StatusBadge status={handover.status} />
                     {handover.status === 'PENDING' ? <HandoverWithdraw handoverId={handover.id} /> : null}
@@ -97,16 +97,16 @@ export default async function HandoversPage() {
             <Card title={`In flight on your projects (${oversight.length})`}>
               <ul className="space-y-2">
                 {oversight.map((handover) => (
-                  <li key={handover.id} className="rounded border border-surface-border p-2">
-                    <p className="flex flex-wrap items-center gap-1.5 text-sm text-slate-700">
+                  <li key={handover.id} className="rounded border border-hairline p-2">
+                    <p className="flex flex-wrap items-center gap-1.5 text-body-sm text-ink">
                       <span className="font-medium">{handover.fromUser.fullName}</span>
-                      <span className="text-slate-400">→</span>
+                      <span className="text-muted-soft">→</span>
                       <span className="font-medium">{handover.toUser.fullName}</span>
-                      <Link href={`/pm/tasks/${handover.task.id}`} className="font-mono text-xs text-brand-600 hover:underline">
+                      <Link href={`/pm/tasks/${handover.task.id}`} className="code text-caption text-ink hover:underline">
                         {handover.task.code}
                       </Link>
                     </p>
-                    <p className="mt-0.5 text-xs text-slate-500">{handover.reason}</p>
+                    <p className="mt-0.5 text-caption text-muted">{handover.reason}</p>
                     <div className="mt-2">
                       <HandoverDecision handoverId={handover.id} asManager />
                     </div>

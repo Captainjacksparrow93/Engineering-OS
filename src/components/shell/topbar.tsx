@@ -3,32 +3,33 @@ import { Avatar } from '@/components/ui';
 import { signOut } from '@/app/actions/auth';
 import type { Principal } from '@/core/rbac/types';
 
+/** 64px canvas bar, hairline base, no shadow — per the top-nav spec. */
 export function Topbar({ principal, unread }: { principal: Principal; unread: number }) {
   const roleLabel = principal.roleKeys.length
-    ? principal.roleKeys.map((key) => key.replaceAll('_', ' ').toLowerCase()).join(' · ')
+    ? principal.roleKeys.map((key) => key.replaceAll('_', ' ')).join(' · ')
     : 'no role assigned';
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-surface-border bg-white/90 px-4 py-2.5 backdrop-blur md:px-6">
-      <div className="flex items-center gap-3">
-        <Link href="/modules" className="text-sm font-medium text-slate-600 hover:text-brand-600 md:hidden">
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-base border-b border-hairline bg-canvas/95 px-base backdrop-blur md:px-xl">
+      <div className="flex items-center gap-base">
+        <Link href="/modules" className="text-nav-link text-ink md:hidden">
           Menu
         </Link>
-        <p className="text-sm text-slate-500">
-          Signed in as <span className="font-medium text-slate-800">{principal.fullName}</span>
-          <span className="ml-2 hidden rounded-full bg-slate-100 px-2 py-0.5 text-[11px] uppercase tracking-wide text-slate-500 sm:inline">
-            {roleLabel}
-          </span>
+        <p className="text-body-sm text-muted">
+          Signed in as <span className="text-ink">{principal.fullName}</span>
         </p>
+        <span className="badge badge-neutral hidden sm:inline-flex">{roleLabel}</span>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Link href="/notifications" className="relative text-slate-500 hover:text-brand-600" title="Notifications">
-          <span className="text-lg" aria-hidden>
-            🔔
-          </span>
+      <div className="flex items-center gap-base">
+        <Link
+          href="/notifications"
+          className="flex items-center gap-xs text-nav-link text-body hover:text-ink"
+          title="Notifications"
+        >
+          Inbox
           {unread > 0 ? (
-            <span className="absolute -right-1.5 -top-1 rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-white">
+            <span className="inline-flex min-w-[18px] justify-center rounded-pill bg-error px-1.5 py-px text-caption-uppercase text-on-primary">
               {unread > 9 ? '9+' : unread}
             </span>
           ) : null}

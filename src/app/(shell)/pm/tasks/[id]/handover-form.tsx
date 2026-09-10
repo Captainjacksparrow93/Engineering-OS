@@ -48,8 +48,8 @@ export function HandoverForm({
   const ranked = candidates.slice(0, 6);
 
   return (
-    <section className="card border-violet-200">
-      <header className="card-header bg-violet-50/60">
+    <section className="card border-hairline-strong">
+      <header className="card-header bg-canvas-soft">
         <h2 className="card-title">Hand over {remainingPercent}% remaining</h2>
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(false)}>
           Cancel
@@ -66,7 +66,7 @@ export function HandoverForm({
                 <li key={candidate.id}>
                   <label
                     className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 transition ${
-                      selected === candidate.id ? 'border-brand-500 bg-brand-50' : 'border-surface-border hover:bg-slate-50'
+                      selected === candidate.id ? 'border-ink bg-canvas-soft' : 'border-hairline hover:bg-canvas-soft'
                     }`}
                   >
                     <input
@@ -75,17 +75,17 @@ export function HandoverForm({
                       value={candidate.id}
                       checked={selected === candidate.id}
                       onChange={() => setSelected(candidate.id)}
-                      className="accent-brand-600"
+                      className="accent-ink"
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-slate-800">{candidate.fullName}</span>
-                      <span className="block truncate text-[11px] text-slate-500">
+                      <span className="block truncate text-body-sm font-medium text-ink">{candidate.fullName}</span>
+                      <span className="block truncate text-caption text-muted">
                         {candidate.designation ?? ''} · {candidate.freeHours}h free
                         {candidate.matchedSkills.length ? ` · ${candidate.matchedSkills.join(', ')}` : ''}
                       </span>
                     </span>
                     <StatusBadge status={candidate.status} />
-                    <span className="text-xs font-semibold text-brand-600">{candidate.score}</span>
+                    <span className="text-caption font-semibold text-ink">{candidate.score}</span>
                   </label>
                 </li>
               ))}
@@ -120,7 +120,7 @@ export function HandoverForm({
 
         <FormMessage state={state} />
         <div className="mt-2">
-          <SubmitButton className="w-full" pendingLabel="Sending…">Send handover request</SubmitButton>
+          <SubmitButton variant="ink" className="w-full" pendingLabel="Sending…">Send handover request</SubmitButton>
         </div>
       </form>
     </section>
