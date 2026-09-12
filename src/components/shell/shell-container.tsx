@@ -1,0 +1,41 @@
+'use client';
+
+import React from 'react';
+import { ShellProvider } from './shell-context';
+
+export function ShellContainer({
+  sidebar,
+  topbar,
+  children,
+}: {
+  sidebar: React.ReactNode;
+  topbar: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <ShellProvider>
+      <div className="flex h-screen w-screen overflow-hidden bg-canvas text-ink">
+        {/* Sidebar slot (width managed dynamically inside Sidebar) */}
+        {sidebar}
+
+        {/* Main layout column */}
+        <div className="flex h-full flex-1 flex-col min-w-0 overflow-hidden">
+          {/* Topbar: pinned at the top, shrink-0 */}
+          {topbar}
+
+          {/* Main content viewport: the ONLY container that scrolls */}
+          <main className="flex-1 overflow-y-auto px-base py-lg md:px-xl">
+            <div className="mx-auto w-full max-w-content">
+              {children}
+            </div>
+          </main>
+
+          {/* Footer: pinned at the bottom, shrink-0 */}
+          <footer className="shrink-0 border-t border-hairline px-base py-2.5 text-caption text-muted-soft md:px-xl">
+            ACS Engitech Pvt Ltd · Engineering OS
+          </footer>
+        </div>
+      </div>
+    </ShellProvider>
+  );
+}

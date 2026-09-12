@@ -4,8 +4,9 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/core/db/prisma';
 import { listUsers } from '@/modules/admin/services/admin.service';
 import { SYSTEM_ROLES } from '@/core/rbac/permissions';
-import { Avatar, Card, PageHeader, StatusBadge } from '@/components/ui';
+import { PageHeader } from '@/components/ui';
 import { UserAdminPanel } from './user-admin-panel';
+import { UsersTable } from './users-table';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,12 +39,6 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const canAssign = hasPermissionAnywhere(principal, 'admin.role.assign');
   const roleOptions = Object.entries(SYSTEM_ROLES).map(([key, role]) => ({ key, name: role.name }));
 
-  const scopeName = (scopeType: string, scopeId: string | null) => {
-    if (scopeType === 'GLOBAL') return 'company-wide';
-    if (scopeType === 'DEPARTMENT') return departments.find((d) => d.id === scopeId)?.name ?? 'a department';
-    return projects.find((p) => p.id === scopeId)?.code ?? 'a project';
-  };
-
   return (
     <>
       <PageHeader
@@ -72,62 +67,11 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         </div>
       ) : null}
 
-      <Card bodyClassName="p-0">
-        <div className="overflow-x-auto">
-          <table className="table min-w-[900px]">
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>Department</th>
-                <th>Reports to</th>
-                <th>Capacity</th>
-                <th>Roles & scope</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td>
-                    <span className="flex items-center gap-2">
-                      <Avatar name={user.fullName} color={user.avatarColor} size={28} />
-                      <span className="min-w-0">
-                        <span className="block truncate text-body-sm font-medium text-ink">{user.fullName}</span>
-                        <span className="block truncate text-caption text-muted-soft">
-                          {user.employeeCode} · {user.email}
-                        </span>
-                      </span>
-                    </span>
-                  </td>
-                  <td className="text-caption text-body">
-                    {user.department?.name ?? '—'}
-                    <span className="block text-caption text-muted-soft">{user.designation}</span>
-                  </td>
-                  <td className="text-caption text-body">{user.manager?.fullName ?? '—'}</td>
-                  <td className="text-caption text-body">{user.dailyCapacityHours}h/day</td>
-                  <td>
-                    {user.roleAssignments.length === 0 ? (
-                      <span className="text-caption text-error">no access</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {user.roleAssignments.map((assignment) => (
-                          <span key={assignment.id} className="badge bg-surface-strong text-body" title={assignment.role.name}>
-                            {assignment.role.key.replaceAll('_', ' ').toLowerCase()}
-                            <span className="text-muted-soft"> @ {scopeName(assignment.scopeType, assignment.scopeId)}</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <StatusBadge status={user.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <UsersTable
+        users={users}
+        departments={departments}
+        projects={projects}
+      />
     </>
   );
 }

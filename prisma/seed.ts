@@ -36,8 +36,8 @@ async function main() {
   for (const key of ALL_PERMISSIONS) {
     await prisma.permission.upsert({
       where: { key },
-      create: { key, name: PERMISSIONS[key], module: key.split('.')[0]!, description: PERMISSIONS[key] },
-      update: { name: PERMISSIONS[key], description: PERMISSIONS[key] },
+      create: { key, module: key.split('.')[0]!, description: PERMISSIONS[key] },
+      update: { description: PERMISSIONS[key] },
     });
   }
   const permissions = await prisma.permission.findMany();
@@ -1538,15 +1538,15 @@ async function main() {
   for (const seed of taskSeeds) {
     const pid = projectId.get(seed.project)!;
     const task = await prisma.task.upsert({
-      where: { projectId_taskNumber: { projectId: pid, taskNumber: seed.key } },
+      where: { projectId_code: { projectId: pid, code: seed.key } },
       create: {
         projectId: pid,
-        taskNumber: seed.key,
+        code: seed.key,
         title: seed.title,
         type: seed.type ?? 'PROJECT',
         estimatedHours: seed.hours,
-        plannedStartDate: day(seed.start),
-        plannedEndDate: day(seed.end),
+        plannedStart: day(seed.start),
+        plannedEnd: day(seed.end),
         priority: seed.priority ?? 'MEDIUM',
         status: seed.status ?? 'TODO',
         percentComplete: seed.percent ?? 0,
@@ -1581,15 +1581,23 @@ async function main() {
 
     await prisma.projectMember.upsert({
       where: { projectId_userId: { projectId: pid, userId: uid } },
-      create: { projectId: pid, userId: uid, role: 'CONTRIBUTOR' },
+      create: { projectId: pid, userId: uid, role: 'ENGINEER' },
       update: {},
     });
 
-    await prisma.taskAssignment.upsert({
-      where: { taskId_userId: { taskId: tid, userId: uid } },
-      create: { taskId: tid, userId: uid, allocatedHours: seed.hours, status: 'ACTIVE' },
-      update: { allocatedHours: seed.hours },
+    const existingAssignment = await prisma.taskAssignment.findFirst({
+      where: { taskId: tid, userId: uid },
     });
+    if (!existingAssignment) {
+      await prisma.taskAssignment.create({
+        data: { taskId: tid, userId: uid, allocatedHours: seed.hours, status: 'ACTIVE' },
+      });
+    } else {
+      await prisma.taskAssignment.update({
+        where: { id: existingAssignment.id },
+        data: { allocatedHours: seed.hours },
+      });
+    }
   }
 
   // Set dependencies
