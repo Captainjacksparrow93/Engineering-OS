@@ -45,6 +45,7 @@ services:
       SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-43200}
       NODE_ENV: production
       PORT: '3000'
+      HOSTNAME: '0.0.0.0'
       SEED_PASSWORD: ${SEED_PASSWORD:-ChangeMe@2026!}
     networks:
       - engos_internal_net # Talks to private PostgreSQL DB

@@ -31,6 +31,7 @@ RUN apk add --no-cache openssl && addgroup -g 1001 -S nodejs && adduser -S nextj
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
