@@ -27,8 +27,8 @@ if [ ! -f .env ]; then
   echo "==> Creating .env from .env.example..."
   cp .env.example .env
 
-  RANDOM_AUTH_SECRET=$(openssl rand -base64 32 2>/dev/null || tr -dc 'A-Za-z0-9!@#$%^&*' < /dev/urandom | head -c 32)
-  RANDOM_DB_PASS=$(openssl rand -base64 16 2>/dev/null || tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 20)
+  RANDOM_AUTH_SECRET=$(openssl rand -hex 32)
+  RANDOM_DB_PASS=$(openssl rand -hex 16)
 
   sed -i "s/generate-a-random-32-char-secret-key-here/${RANDOM_AUTH_SECRET}/" .env
   sed -i "s/generate-a-strong-db-password-here/${RANDOM_DB_PASS}/g" .env
