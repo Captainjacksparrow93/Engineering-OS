@@ -38,7 +38,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ['npx', 'prisma', 'migrate', 'deploy']
+    command: ['node', 'node_modules/prisma/build/index.js', 'migrate', 'deploy']
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-engos}:${POSTGRES_PASSWORD:-engos_secure_password}@db:5432/${POSTGRES_DB:-engineering_os}?schema=public
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
