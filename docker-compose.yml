@@ -1,6 +1,5 @@
 # ---------------------------------------------------------------------------
 # Engineering OS - Hostinger VPS Traefik Deployment Configuration
-# Using Prebuilt Docker Image from GitHub Container Registry (GHCR)
 # ---------------------------------------------------------------------------
 
 services:
@@ -79,7 +78,6 @@ services:
       - "traefik.http.routers.engos.tls.certresolver=mytlschallenge"
       - "traefik.http.services.engos.loadbalancer.server.port=3000"
       - "traefik.docker.network=n8n_default"
-      - "com.centurylinklabs.watchtower.enable=true"
     healthcheck:
       test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -100,27 +98,6 @@ services:
       resources:
         limits:
           memory: 768M
-
-  # Optional Watchtower service: automatically polls GHCR for new images and restarts app
-  watchtower:
-    container_name: engos_watchtower
-    image: containrrr/watchtower:latest
-    restart: unless-stopped
-    environment:
-      WATCHTOWER_CLEANUP: "true"
-      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-120} # Checks every 2 minutes
-      WATCHTOWER_LABEL_ENABLE: "true"
-      WATCHTOWER_WARN_ON_HEAD_FAILURE: "never"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /root/.docker/config.json:/config.json:ro # For private registry auth if needed
-    networks:
-      - engos_internal_net
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '5m'
-        max-file: '2'
 
 volumes:
   engos_db_data:

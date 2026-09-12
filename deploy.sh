@@ -41,7 +41,7 @@ mkdir -p scripts
 chmod +x scripts/*.sh 2>/dev/null || true
 
 echo "==> Pulling prebuilt Docker images..."
-docker compose pull db app migrate watchtower || true
+docker compose pull db app migrate || true
 
 echo "==> Launching Docker containers in background..."
 docker compose up -d
