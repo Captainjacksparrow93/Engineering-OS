@@ -1,59 +1,132 @@
 # ---------------------------------------------------------------------------
-# Engineering OS - single-node deployment.
-#
-# Suitable as-is for a factory server: one Postgres, one app container, a
-# migration job that runs before the app accepts traffic. Scaling out means
-# running more `app` replicas behind a load balancer - the app holds no local
-# state, so nothing else changes.
+# Engineering OS - Hostinger VPS Traefik Deployment Configuration
+# Using Prebuilt Docker Image from GitHub Container Registry (GHCR)
 # ---------------------------------------------------------------------------
+
 services:
   db:
+    container_name: engos_db
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-engos}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-engos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-engos_secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-engineering_os}
     volumes:
-      - db-data:/var/lib/postgresql/data
-      # Nightly dumps land here; point your offsite backup at this directory.
+      - engos_db_data:/var/lib/postgresql/data
       - ./backups:/backups
-    ports:
-      - '${DB_PORT:-5432}:5432'
+    networks:
+      - engos_internal_net # Isolated network - NOT exposed to internet or Traefik
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-engos} -d ${POSTGRES_DB:-engineering_os}']
       interval: 10s
       timeout: 5s
       retries: 10
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # Runs once per deploy, before the app starts serving.
   migrate:
-    build: .
+    container_name: engos_migrate
+    image: ${APP_IMAGE:-ghcr.io/n8nmonk-wq/engineering-os:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
     command: ['npx', 'prisma', 'migrate', 'deploy']
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-engos}:${POSTGRES_PASSWORD:-engos}@db:5432/${POSTGRES_DB:-engineering_os}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-engos}:${POSTGRES_PASSWORD:-engos_secure_password}@db:5432/${POSTGRES_DB:-engineering_os}?schema=public
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - engos_internal_net
     restart: 'no'
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
 
   app:
-    build: .
+    container_name: engos_app
+    image: ${APP_IMAGE:-ghcr.io/n8nmonk-wq/engineering-os:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-engos}:${POSTGRES_PASSWORD:-engos}@db:5432/${POSTGRES_DB:-engineering_os}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-engos}:${POSTGRES_PASSWORD:-engos_secure_password}@db:5432/${POSTGRES_DB:-engineering_os}?schema=public
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
-      APP_URL: ${APP_URL:-http://localhost:3000}
+      APP_URL: ${APP_URL:-https://engos.srv1275499.hstgr.cloud}
       SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-43200}
       NODE_ENV: production
-    ports:
-      - '${APP_PORT:-3000}:3000'
+      PORT: '3000'
+    networks:
+      - engos_internal_net # Talks to private PostgreSQL DB
+      - n8n_default       # Joins central Traefik network for automated HTTPS
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.engos.rule=Host(`${DOMAIN:-engos.srv1275499.hstgr.cloud}`)"
+      - "traefik.http.routers.engos.entrypoints=websecure"
+      - "traefik.http.routers.engos.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.engos.loadbalancer.server.port=3000"
+      - "traefik.docker.network=n8n_default"
+      - "com.centurylinklabs.watchtower.enable=true"
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     depends_on:
       db:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  # Optional Watchtower service: automatically polls GHCR for new images and restarts app
+  watchtower:
+    container_name: engos_watchtower
+    image: containrrr/watchtower:latest
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-120} # Checks every 2 minutes
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_WARN_ON_HEAD_FAILURE: "never"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/.docker/config.json:/config.json:ro # For private registry auth if needed
+    networks:
+      - engos_internal_net
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '5m'
+        max-file: '2'
 
 volumes:
-  db-data:
+  engos_db_data:
+
+networks:
+  engos_internal_net:
+    driver: bridge
+  n8n_default:
+    external: true
