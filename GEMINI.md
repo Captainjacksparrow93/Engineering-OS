@@ -1,6 +1,13 @@
 # Mandatory Engineering & Development Protocol
 
-All code changes, bug investigations, architectural designs, refactorings, and feature implementations in this project MUST strictly and unconditionally adhere to the 5-pillar engineering protocol below:
+All code changes, bug investigations, architectural designs, refactorings, and feature implementations in this project MUST strictly and unconditionally adhere to the protocols below:
+
+---
+
+## 0. MANDATORY: Explain in Simple Terms & Wait for User's "GO" (Golden Rule)
+- **Plain-Language Summary First**: For EVERY change, request, feature, or bug fix described by the user, you MUST first describe the proposed change back in very simple, plain, everyday terms.
+- **Strictly No Code Before Approval**: Absolutely DO NOT write, edit, generate, or delete any code until the user has reviewed the explanation and explicitly given their approval.
+- **Wait for "Go"**: Always pause and prompt the user for confirmation. Only proceed with actual coding after the user says "go", confirms, or approves.
 
 ---
 

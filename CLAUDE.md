@@ -1,5 +1,11 @@
 # Engineering OS — working notes
 
+## Mandatory Rule: Explain in Simple Terms & Wait for User's "GO"
+
+- **Plain-Language Summary First**: For EVERY change, request, feature, or bug fix described by the user, describe the proposed change back in very simple, plain, everyday terms.
+- **Strictly No Code Before Approval**: Absolutely DO NOT write, edit, generate, or delete any code until the user has reviewed the explanation and explicitly given their approval.
+- **Wait for "Go"**: Always pause and prompt the user for confirmation. Only proceed with actual coding after the user says "go", confirms, or approves.
+
 ## Design system: mandatory
 
 All UI work follows [`docs/design-system.md`](docs/design-system.md), which applies the

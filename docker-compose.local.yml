@@ -1,0 +1,40 @@
+services:
+  db:
+    container_name: engos_local_db
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: engos
+      POSTGRES_PASSWORD: engos_local_password
+      POSTGRES_DB: engineering_os
+    volumes:
+      - engos_local_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U engos -d engineering_os']
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  app:
+    container_name: engos_local_app
+    image: engos-test:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://engos:engos_local_password@db:5432/engineering_os?schema=public"
+      AUTH_SECRET: "local-dev-secret-key-32-characters-long-key"
+      APP_URL: "http://localhost:3000"
+      SESSION_TTL_SECONDS: "43200"
+      NODE_ENV: "production"
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      SEED_PASSWORD: "ChangeMe@2026!"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  engos_local_db_data:
