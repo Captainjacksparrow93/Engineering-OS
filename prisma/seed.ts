@@ -13,10 +13,7 @@ import { MODULES } from '../src/core/modules/registry';
 
 const prisma = new PrismaClient();
 
-const PASSWORD: string = process.env.SEED_PASSWORD ?? '';
-if (!PASSWORD) {
-  throw new Error('Set SEED_PASSWORD in your environment before seeding.');
-}
+const PASSWORD: string = process.env.SEED_PASSWORD || 'ChangeMe@2026!';
 
 const COLOURS = ['#2f5fd8', '#0f9d58', '#d93025', '#f4b400', '#7b1fa2', '#00838f', '#ef6c00', '#5d4037'];
 const colourFor = (seed: string) => {
