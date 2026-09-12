@@ -31,29 +31,6 @@ services:
         limits:
           memory: 512M
 
-  # Runs once per deploy, before the app starts serving.
-  migrate:
-    container_name: engos_migrate
-    image: ${APP_IMAGE:-ghcr.io/n8nmonk-wq/engineering-os:latest}
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: ['node', 'node_modules/prisma/build/index.js', 'migrate', 'deploy']
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-engos}:${POSTGRES_PASSWORD:-engos_secure_password}@db:5432/${POSTGRES_DB:-engineering_os}?schema=public
-      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - engos_internal_net
-    restart: 'no'
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '10m'
-        max-file: '3'
-
   app:
     container_name: engos_app
     image: ${APP_IMAGE:-ghcr.io/n8nmonk-wq/engineering-os:latest}
@@ -87,8 +64,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
     logging:
       driver: 'json-file'
       options:

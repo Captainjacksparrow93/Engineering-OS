@@ -72,7 +72,7 @@ jobs:
 
             echo "==> Pulling prebuilt image on VPS..."
             cd /root/engos-docker
-            docker compose pull app migrate
+            docker compose pull app
 
             echo "==> Updating containers..."
             docker compose up -d
