@@ -44,7 +44,7 @@ echo "==> Pulling prebuilt Docker images..."
 docker compose pull db app migrate || true
 
 echo "==> Launching Docker containers in background..."
-docker compose up -d
+docker compose up -d --build
 
 echo "==> Waiting for services to become healthy..."
 sleep 5
