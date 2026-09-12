@@ -44,13 +44,13 @@ different people — the navigation, the data and the available actions genuinel
 
 | Email | Role | What they see |
 |-------|------|---------------|
-| `rajesh.deshmukh@vidyutswitchgear.com` | Director | Every project, portfolio health, the blocker list |
-| `meera.iyer@vidyutswitchgear.com` | Head of Engineering | Everything in Engineering and its sub-departments |
-| `priya.nair@vidyutswitchgear.com` | Project Manager | Her two projects in full, her team's load |
-| `kavita.rao@vidyutswitchgear.com` | Lead Engineer | Executes, creates tasks, pulls peers in |
-| `farhan.qureshi@vidyutswitchgear.com` | Design Engineer | His own queue and progress |
-| `sneha.patil@vidyutswitchgear.com` | Junior Engineer | Her queue only — no resource board, no project creation |
-| `admin@vidyutswitchgear.com` | Platform admin | People, roles, permissions, audit trail |
+| `satishkumar.nagar@acsengitech.com` | Director | Every project, portfolio health, the blocker list |
+| `dilipkumar.asediya@acsengitech.com` | Head of Technical | Everything in Technical, Design, and sub-departments |
+| `parth.nagar@acsengitech.com` | Project Manager | Full project control of Tata Chemicals MCC order |
+| `paras.prajapati@acsengitech.com` | Project Manager | Full project control of Sunrise Cement APFC order |
+| `jay.patel@acsengitech.com` | Sr. Design Engineer | Design tasks, GA drawings, schematics |
+| `amey.kulkarni@acsengitech.com` | Testing & QC Manager | Routine testing, FAT, quality clearance |
+| `admin@acsengitech.com` | Platform admin | People, roles, permissions, audit trail |
 
 Change these passwords before anyone real uses the system.
 
