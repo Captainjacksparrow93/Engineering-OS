@@ -84,7 +84,7 @@ export function TaskControls({
                     <option value="" disabled>Select</option>
                     {assignableUsers.map((user) => (
                       <option key={user.id} value={user.id}>
-                        {user.fullName}{user.designation ? ` — ${user.designation}` : ''}
+                        {user.fullName}{user.designation ? ` - ${user.designation}` : ''}
                       </option>
                     ))}
                   </select>

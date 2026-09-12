@@ -6,13 +6,37 @@ import { signOut } from '@/app/actions/auth';
 import type { Principal } from '@/core/rbac/types';
 import { useShell } from './shell-context';
 
-/** 64px canvas bar, hairline base, no shadow — per the top-nav spec. */
 export function Topbar({ principal, unread }: { principal: Principal; unread: number }) {
   const { isCollapsed, toggleCollapsed } = useShell();
 
-  const roleLabel = principal.roleKeys.length
-    ? principal.roleKeys.map((key) => key.replaceAll('_', ' ')).join(' · ')
-    : 'no role assigned';
+  // Format to First Name + Last Name (e.g. Satishkumar Mohanbhai Nagar -> Satish Nagar, Admin Controller -> Satish Nagar)
+  const formatName = (name: string) => {
+    if (name === 'Admin Controller' || name === 'Super Admin') return 'Satish Nagar';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length <= 1) return name;
+    if (parts.length === 2) return name;
+    let first = parts[0]!;
+    if (first.toLowerCase().endsWith('kumar')) {
+      first = first.slice(0, -5);
+    }
+    const last = parts[parts.length - 1]!;
+    return `${first} ${last}`;
+  };
+
+  const displayName = formatName(principal.fullName);
+
+  // Format role to clean title (e.g. SUPER_ADMIN / DIRECTOR -> Director)
+  const formatRole = (keys: string[]) => {
+    if (keys.includes('DIRECTOR') || keys.includes('SUPER_ADMIN')) return 'Director';
+    if (keys.length === 0) return 'Member';
+    return keys[0]!
+      .toLowerCase()
+      .split('_')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  };
+
+  const displayRole = formatRole(principal.roleKeys);
 
   return (
     <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-base border-b border-hairline bg-canvas/95 px-base backdrop-blur md:px-xl">
@@ -35,10 +59,11 @@ export function Topbar({ principal, unread }: { principal: Principal; unread: nu
           </svg>
         </button>
 
-        <p className="text-body-sm text-muted">
-          Signed in as <span className="text-ink font-medium">{principal.fullName}</span>
-        </p>
-        <span className="badge badge-neutral hidden sm:inline-flex">{roleLabel}</span>
+        {/* User identification: First Name + Last Name and clean Role Title */}
+        <div className="flex items-center gap-2">
+          <span className="text-body-sm font-semibold text-ink">{displayName}</span>
+          <span className="badge badge-neutral font-medium text-caption">{displayRole}</span>
+        </div>
       </div>
 
       <div className="flex items-center gap-base">
@@ -54,7 +79,7 @@ export function Topbar({ principal, unread }: { principal: Principal; unread: nu
             </span>
           ) : null}
         </Link>
-        <Avatar name={principal.fullName} color={principal.avatarColor} size={30} />
+        <Avatar name={displayName} color={principal.avatarColor} size={30} />
         <form action={signOut}>
           <button type="submit" className="btn btn-secondary btn-sm">
             Sign out

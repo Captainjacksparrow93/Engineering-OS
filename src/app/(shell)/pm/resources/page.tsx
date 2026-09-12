@@ -163,7 +163,7 @@ export default async function ResourcesPage({
                   </ul>
                 ) : (
                   <p className="mt-3 border-t border-hairline pt-2 text-caption text-success">
-                    No open tasks — available immediately.
+                    No open tasks - available immediately.
                   </p>
                 )}
               </Card>

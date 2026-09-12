@@ -77,7 +77,7 @@ export function TeamPanel({
                 <option value="" disabled>Select</option>
                 {available.map((person) => (
                   <option key={person.id} value={person.id}>
-                    {person.fullName}{person.designation ? ` — ${person.designation}` : ''}
+                    {person.fullName}{person.designation ? ` - ${person.designation}` : ''}
                   </option>
                 ))}
               </select>

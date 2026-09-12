@@ -19,7 +19,7 @@ export default async function LoginPage() {
           </p>
           <h1 className="text-display-lg text-ink">Sign in</h1>
           <p className="mt-sm text-body-md text-body">
-            One platform for the whole plant — projects today, the rest of the works to follow.
+            One platform for the whole plant - projects today, the rest of the works to follow.
           </p>
         </div>
 

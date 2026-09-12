@@ -73,7 +73,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                     </td>
                     <td>
                       <pre className="max-w-md overflow-x-auto whitespace-pre-wrap break-words text-caption text-muted">
-                        {entry.diff ? JSON.stringify(entry.diff) : '—'}
+                        {entry.diff ? JSON.stringify(entry.diff) : '-'}
                       </pre>
                     </td>
                   </tr>

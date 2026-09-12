@@ -92,7 +92,7 @@ export default async function MyWorkPage({
                             </span>
                           </>
                         ) : (
-                          '—'
+                          '-'
                         )}
                       </td>
                       <td className="w-28">

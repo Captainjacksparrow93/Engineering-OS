@@ -107,7 +107,7 @@ export function WbsTable({ tasks, criticalTaskIds }: { tasks: WbsTask[]; critica
                   ) : null}
                 </td>
                 <td className="whitespace-nowrap text-caption text-body">
-                  {isPhase ? '—' : `${Math.round(task.actualHours)}/${Math.round(task.estimatedHours)}h`}
+                  {isPhase ? '-' : `${Math.round(task.actualHours)}/${Math.round(task.estimatedHours)}h`}
                 </td>
                 <td>
                   <ProgressBar

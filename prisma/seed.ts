@@ -143,21 +143,25 @@ async function main() {
   }
 
   const people: PersonSeed[] = [
-    // Super Admin Controller
+    // Super Admin & Director
     {
       code: 'ACS-0001',
-      name: 'Admin Controller',
+      name: 'Satish Nagar',
       email: 'admin@acsengitech.com',
-      designation: 'System Administrator',
-      grade: 'MANAGER',
-      skills: ['system administration', 'security'],
-      roles: [{ key: 'SUPER_ADMIN', scopeType: 'GLOBAL' }],
+      designation: 'Director',
+      grade: 'DIRECTOR',
+      dept: 'DIR',
+      skills: ['corporate strategy', 'operations', 'executive governance'],
+      roles: [
+        { key: 'SUPER_ADMIN', scopeType: 'GLOBAL' },
+        { key: 'DIRECTOR', scopeType: 'GLOBAL' },
+      ],
     },
 
     // Directors
     {
       code: 'ACS-0002',
-      name: 'Satishkumar Mohanbhai Nagar',
+      name: 'Satish Nagar',
       email: 'satishkumar.nagar@acsengitech.com',
       designation: 'Director',
       grade: 'DIRECTOR',

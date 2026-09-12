@@ -52,7 +52,7 @@ export function DependencyPanel({
         <div>
           <p className="label">This task waits on</p>
           {dependencies.length === 0 ? (
-            <p className="text-body-sm text-muted-soft">Nothing — it can start as soon as it is scheduled.</p>
+            <p className="text-body-sm text-muted-soft">Nothing - it can start as soon as it is scheduled.</p>
           ) : (
             <ul className="space-y-1.5">
               {dependencies.map((edge) => (
@@ -109,7 +109,7 @@ export function DependencyPanel({
                 <option value="" disabled>Select a task</option>
                 {projectTasks.map((task) => (
                   <option key={task.id} value={task.id}>
-                    {task.code} — {task.title}
+                    {task.code} - {task.title}
                   </option>
                 ))}
               </select>

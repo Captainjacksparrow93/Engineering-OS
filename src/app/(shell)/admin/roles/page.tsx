@@ -40,7 +40,7 @@ export default async function RolesPage() {
         {roles.map((role) => (
           <Card
             key={role.id}
-            title={`${role.name} (${role.key})`}
+            title={role.name}
             action={<span className="text-caption text-muted">{role._count.assignments} grant(s) live</span>}
           >
             <p className="mb-3 text-body-sm text-body">{role.description}</p>
@@ -52,10 +52,10 @@ export default async function RolesPage() {
                 selected={role.permissions.map((p) => p.permission.key)}
               />
             ) : (
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1.5">
                 {role.permissions.map((p) => (
-                  <span key={p.permission.id} className="code-chip" title={p.permission.description ?? ''}>
-                    {p.permission.key}
+                  <span key={p.permission.id} className="badge bg-surface-strong text-body">
+                    {p.permission.description ?? p.permission.key}
                   </span>
                 ))}
               </div>

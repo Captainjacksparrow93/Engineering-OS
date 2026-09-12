@@ -65,8 +65,8 @@ export function UsersTable({ users, departments, projects }: UsersTableProps) {
         minWidth: 140,
         cell: (u) => (
           <div>
-            <span className="block text-caption text-body">{u.department?.name ?? '—'}</span>
-            <span className="block text-caption text-muted-soft">{u.designation ?? '—'}</span>
+            <span className="block text-caption text-body">{u.department?.name ?? '-'}</span>
+            <span className="block text-caption text-muted-soft">{u.designation ?? '-'}</span>
           </div>
         ),
       },
@@ -77,7 +77,7 @@ export function UsersTable({ users, departments, projects }: UsersTableProps) {
         defaultWidth: 160,
         minWidth: 120,
         cell: (u) => (
-          <span className="text-caption text-body">{u.manager?.fullName ?? '—'}</span>
+          <span className="text-caption text-body">{u.manager?.fullName ?? '-'}</span>
         ),
       },
       {

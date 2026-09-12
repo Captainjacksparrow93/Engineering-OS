@@ -65,7 +65,7 @@ export default async function AdhocPage({
       {projects.length === 0 ? (
         <Alert tone="warning">
           You have no active projects in scope. Ad-hoc work still belongs to a project so that its effort is costed
-          correctly — create or join a project first.
+          correctly - create or join a project first.
         </Alert>
       ) : (
         <AdhocForm

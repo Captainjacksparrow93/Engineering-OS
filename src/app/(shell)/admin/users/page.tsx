@@ -43,16 +43,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     <>
       <PageHeader
         title="People & access"
-        subtitle={`${users.length} account${users.length === 1 ? '' : 's'}. Roles are always granted at a scope — company, department or a single project.`}
+        subtitle={`${users.length} account${users.length === 1 ? '' : 's'}. Roles are always granted at a scope - company, department or a single project.`}
       />
-
-      <form className="mb-4 flex items-end gap-2" action="/admin/users">
-        <div>
-          <label className="label" htmlFor="q">Search</label>
-          <input id="q" name="q" defaultValue={params.q ?? ''} className="input w-64" placeholder="Name, email or employee code" />
-        </div>
-        <button type="submit" className="btn btn-secondary mb-0.5">Search</button>
-      </form>
 
       {canManage || canAssign ? (
         <div className="mb-4">
@@ -63,9 +55,18 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
             departments={departments}
             projects={projects}
             users={users.map((u) => ({ id: u.id, fullName: u.fullName, employeeCode: u.employeeCode }))}
+            searchQuery={params.q ?? ''}
           />
         </div>
-      ) : null}
+      ) : (
+        <form className="mb-4 flex items-end gap-2" action="/admin/users">
+          <div>
+            <label className="label" htmlFor="q">Search</label>
+            <input id="q" name="q" defaultValue={params.q ?? ''} className="input w-64" placeholder="Name, email or employee code" />
+          </div>
+          <button type="submit" className="btn btn-secondary mb-0.5">Search</button>
+        </form>
+      )}
 
       <UsersTable
         users={users}

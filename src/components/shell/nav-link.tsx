@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 
-/** Active state is carried by ink weight and a soft canvas fill — never by orange. */
+/** Active state is carried by ink weight and a soft canvas fill - never by orange. */
 export function NavLink({
   href,
   label,

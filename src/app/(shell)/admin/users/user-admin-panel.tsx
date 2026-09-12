@@ -24,6 +24,7 @@ export function UserAdminPanel({
   departments,
   projects,
   users,
+  searchQuery = '',
 }: {
   canCreate: boolean;
   canAssign: boolean;
@@ -31,6 +32,7 @@ export function UserAdminPanel({
   departments: Array<{ id: string; name: string }>;
   projects: Array<{ id: string; code: string; name: string }>;
   users: Array<{ id: string; fullName: string; employeeCode: string }>;
+  searchQuery?: string;
 }) {
   const [tab, setTab] = useState<'none' | 'create' | 'grant' | 'status'>('none');
   const [createState, createAction] = useActionState<ActionState, FormData>(createUserAction, {});
@@ -40,9 +42,22 @@ export function UserAdminPanel({
 
   return (
     <section className="card">
-      <header className="card-header">
-        <h2 className="card-title">Administration</h2>
-        <div className="flex flex-wrap gap-2">
+      <header className="card-header flex flex-wrap items-center justify-between gap-3">
+        {/* Compact Search Bar replacing Administration text */}
+        <form action="/admin/users" className="flex items-center gap-2">
+          <input
+            id="q"
+            name="q"
+            defaultValue={searchQuery}
+            className="input !h-8 w-60 text-body-sm"
+            placeholder="Search name, email, code..."
+          />
+          <button type="submit" className="btn btn-secondary btn-sm">
+            Search
+          </button>
+        </form>
+
+        <div className="flex flex-wrap items-center gap-2">
           {canCreate ? (
             <button
               type="button"
@@ -204,7 +219,7 @@ export function UserAdminPanel({
                 : null}
               {scopeType === 'PROJECT'
                 ? projects.map((project) => (
-                    <option key={project.id} value={project.id}>{project.code} — {project.name}</option>
+                    <option key={project.id} value={project.id}>{project.code} - {project.name}</option>
                   ))
                 : null}
             </select>

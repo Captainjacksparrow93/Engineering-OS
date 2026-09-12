@@ -73,7 +73,7 @@ export default async function DashboardPage() {
                       <Link href={`/pm/tasks/${handover.task.id}`} className="text-ink hover:underline">
                         {handover.task.code}
                       </Link>{' '}
-                      — {handover.task.title}
+                      - {handover.task.title}
                     </p>
                     <p className="truncate text-caption text-muted">{handover.reason}</p>
                   </div>
@@ -134,7 +134,7 @@ export default async function DashboardPage() {
                               {due !== null ? <span className="block text-caption text-muted-soft">{due < 0 ? `${-due}d late` : `in ${due}d`}</span> : null}
                             </span>
                           ) : (
-                            '—'
+                            '-'
                           )}
                         </td>
                         <td className="w-28">

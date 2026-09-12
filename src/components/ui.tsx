@@ -66,7 +66,7 @@ export function AvatarStack({ people }: { people: Array<{ id: string; fullName: 
 /**
  * Work-stage pills.
  *
- * The five pastels mark stages of work in flight — the direct analogue of the agent
+ * The five pastels mark stages of work in flight - the direct analogue of the agent
  * action timeline they were designed for. States that are not stages (blocked,
  * cancelled, on hold) deliberately fall through to semantic or neutral treatments so
  * the pastels keep meaning only one thing.
@@ -82,13 +82,13 @@ const STAGE_STYLES: Record<string, string> = {
 };
 
 const STATE_STYLES: Record<string, string> = {
-  // Risk and terminal states — never a stage pastel.
+  // Risk and terminal states - never a stage pastel.
   BLOCKED: 'badge-error',
   CANCELLED: 'badge-neutral text-muted line-through',
   ON_HOLD: 'badge-outline',
   DRAFT: 'badge-outline',
 
-  // Assignment and handover bookkeeping — system state, not work stage.
+  // Assignment and handover bookkeeping - system state, not work stage.
   ACTIVE: 'badge-ink',
   PENDING: 'badge-outline',
   ACCEPTED: 'badge-success',
@@ -98,7 +98,7 @@ const STATE_STYLES: Record<string, string> = {
   SUSPENDED: 'badge-error',
   EXITED: 'badge-neutral text-muted',
 
-  // Capacity signals — good/bad, so the two semantic tokens carry them.
+  // Capacity signals - good/bad, so the two semantic tokens carry them.
   FREE: 'badge-success',
   AVAILABLE: 'badge-success',
   BUSY: 'badge-neutral',
@@ -244,7 +244,7 @@ export function Card({
 
 /**
  * Only three tones exist. "Warning" is the error token held back to a tint rather than
- * a fourth colour — the palette has exactly two semantic hues and keeps them.
+ * a fourth colour - the palette has exactly two semantic hues and keeps them.
  */
 export function Alert({
   tone = 'info',

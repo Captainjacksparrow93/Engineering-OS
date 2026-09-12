@@ -51,7 +51,7 @@ export function AdhocForm({
               <option value="" disabled>Select</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
-                  {project.code} — {project.name}
+                  {project.code} - {project.name}
                 </option>
               ))}
             </select>

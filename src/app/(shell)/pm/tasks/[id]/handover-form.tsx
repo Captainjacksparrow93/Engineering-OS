@@ -98,7 +98,7 @@ export function HandoverForm({
               <option value="" disabled>Select a peer</option>
               {fallbackPeers.map((peer) => (
                 <option key={peer.id} value={peer.id}>
-                  {peer.fullName}{peer.designation ? ` — ${peer.designation}` : ''}
+                  {peer.fullName}{peer.designation ? ` - ${peer.designation}` : ''}
                 </option>
               ))}
             </select>

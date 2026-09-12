@@ -76,7 +76,7 @@ export function NewProjectForm({ managers, departments }: { managers: Option[]; 
               <option value="" disabled>Select</option>
               {managers.map((manager) => (
                 <option key={manager.id} value={manager.id}>
-                  {manager.fullName}{manager.designation ? ` — ${manager.designation}` : ''}
+                  {manager.fullName}{manager.designation ? ` - ${manager.designation}` : ''}
                 </option>
               ))}
             </select>

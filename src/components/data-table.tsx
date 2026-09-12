@@ -319,18 +319,17 @@ export function DataTable<T>({
             type="button"
             onClick={() => setSettingsOpen((prev) => !prev)}
             className={clsx(
-              'btn btn-sm btn-secondary flex items-center gap-1.5 transition-colors',
+              'btn btn-sm btn-secondary flex items-center gap-1.5 transition-colors shadow-xs',
               settingsOpen && 'border-ink bg-surface-strong text-ink'
             )}
-            title="Configure columns and table view"
+            title="Show or hide table columns"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3a9 9 0 0 1 9 9c0 2.5-1 4-2 5.5l-1 1.5H6l-1-1.5C4 16 3 14.5 3 12a9 9 0 0 1 9-9z" />
-              <path d="M12 8v4" />
-              <path d="M12 16h.01" />
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+              <circle cx="12" cy="12" r="3" />
             </svg>
-            <span>Columns</span>
-            <span className="text-[11px] text-muted-soft">({activeColumns.length}/{columns.length})</span>
+            <span className="font-medium">Columns (Show/Hide)</span>
+            <span className="text-[11px] text-muted-soft font-mono">({activeColumns.length}/{columns.length})</span>
           </button>
 
           {/* Column Customizer Popover */}
