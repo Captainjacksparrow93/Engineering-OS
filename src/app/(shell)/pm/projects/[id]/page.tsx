@@ -7,6 +7,8 @@ import { Alert, Card, PageHeader, PriorityBadge, ProgressBar, Stat, StatusBadge 
 import { WbsTable } from './wbs-table';
 import { AddTaskForm } from './add-task-form';
 import { TeamPanel } from './team-panel';
+import { CompleteProjectButton } from './complete-project-button';
+import { HandoverProjectButton } from './handover-project-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -147,3 +149,4 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     </>
   );
 }
+

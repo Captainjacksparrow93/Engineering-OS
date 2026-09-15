@@ -43,3 +43,26 @@ export async function signOut(): Promise<void> {
   await destroySession();
   redirect('/login');
 }
+
+export async function quickSwitchPersona(email: string, redirectTo?: string): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { email: email.toLowerCase().trim() },
+    select: { id: true, status: true },
+  });
+
+  if (!user || user.status !== 'ACTIVE') {
+    throw new Error(`Test persona ${email} not found or inactive`);
+  }
+
+  await destroySession();
+
+  const headerList = await headers();
+  await createSession(user.id, {
+    userAgent: headerList.get('user-agent') ?? undefined,
+    ip: headerList.get('x-forwarded-for')?.split(',')[0]?.trim(),
+  });
+  await audit({ actorId: user.id, module: 'core', action: 'auth.persona_quick_switched', entityType: 'User', entityId: user.id });
+
+  redirect(redirectTo || '/dashboard');
+}
+

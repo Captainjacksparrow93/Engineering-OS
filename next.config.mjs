@@ -1,5 +1,8 @@
+import path from 'node:path';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  outputFileTracingRoot: path.resolve('.'),
   reactStrictMode: true,
   // Standalone output is what the Docker image copies; `next start` in local dev warns
   // about it, so it is opt-in via the build environment instead of always on.

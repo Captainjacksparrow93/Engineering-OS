@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 import { addMemberAction, removeMemberAction, type ActionState } from '@/app/actions/pm';
 import { FormMessage, SubmitButton } from '@/components/form';
 import { Avatar } from '@/components/ui';
+import { formatName } from '@/core/utils/strings';
 
 interface Member {
   id: string;
@@ -45,19 +46,18 @@ export function TeamPanel({
         <ul className="space-y-2">
           {members.map((member) => (
             <li key={member.id} className="flex items-center gap-2">
-              <Avatar name={member.user.fullName} color={member.user.avatarColor} size={26} />
+              <Avatar name={formatName(member.user.fullName)} color={member.user.avatarColor} size={26} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-body-sm font-medium text-ink">{member.user.fullName}</p>
+                <p className="truncate text-body-sm font-medium text-ink">{formatName(member.user.fullName)}</p>
                 <p className="truncate text-caption text-muted">
-                  {member.role.toLowerCase()}
-                  {member.user.designation ? ` · ${member.user.designation}` : ''}
+                    {member.user.designation || member.role.toLowerCase()}
                 </p>
               </div>
               {canManage && member.role !== 'MANAGER' ? (
                 <form action={removeAction}>
                   <input type="hidden" name="projectId" value={projectId} />
                   <input type="hidden" name="userId" value={member.user.id} />
-                  <SubmitButton variant="secondary" size="sm" confirm={`Remove ${member.user.fullName} from this project?`}>
+                  <SubmitButton variant="secondary" size="sm" confirm={`Remove ${formatName(member.user.fullName)} from this project?`}>
                     ✕
                   </SubmitButton>
                 </form>
@@ -77,7 +77,7 @@ export function TeamPanel({
                 <option value="" disabled>Select</option>
                 {available.map((person) => (
                   <option key={person.id} value={person.id}>
-                    {person.fullName}{person.designation ? ` - ${person.designation}` : ''}
+                    {formatName(person.fullName)} - {person.designation || 'Engineer'}
                   </option>
                 ))}
               </select>
@@ -101,3 +101,6 @@ export function TeamPanel({
     </section>
   );
 }
+
+
+

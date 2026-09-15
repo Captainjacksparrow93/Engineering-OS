@@ -40,11 +40,13 @@ export async function logProgress(principal: Principal, input: ProgressInput) {
   if (loggedFor > today) throw new DomainError('You cannot log progress for a future date.');
 
   const nextStatus =
-    input.percentComplete >= 100
-      ? 'IN_REVIEW'
-      : task.status === 'TODO' || task.status === 'BLOCKED'
-        ? 'IN_PROGRESS'
-        : task.status;
+    input.blocker
+      ? 'BLOCKED'
+      : input.percentComplete >= 100
+        ? 'IN_REVIEW'
+        : task.status === 'TODO' || task.status === 'BLOCKED'
+          ? 'IN_PROGRESS'
+          : task.status;
 
   const result = await prisma.$transaction(async (tx) => {
     const log = await tx.taskProgressLog.create({

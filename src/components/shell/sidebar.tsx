@@ -100,16 +100,20 @@ const Icons = {
   ),
 };
 
-const PM_NAV: NavItem[] = [
+const WORKSPACE_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: Icons.Dashboard },
   { label: 'My work', href: '/pm/my-work', icon: Icons.MyWork },
-  { label: 'Projects', href: '/pm/projects', requires: 'pm.project.read', icon: Icons.Projects },
   { label: 'Handovers', href: '/pm/handovers', icon: Icons.Handovers },
-  { label: 'Resource board', href: '/pm/resources', requires: 'pm.resource.read', icon: Icons.Resources },
-  { label: 'Assign ad-hoc work', href: '/pm/adhoc', requires: 'pm.task.adhoc.create', icon: Icons.AdHoc },
+  { label: 'Ad hoc', href: '/pm/adhoc', requires: 'pm.task.adhoc.create', icon: Icons.AdHoc },
+];
+
+const MANAGEMENT_NAV: NavItem[] = [
+  { label: 'Projects', href: '/pm/projects', requires: 'pm.project.read', icon: Icons.Projects },
+  { label: 'Resource', href: '/pm/resources', requires: 'pm.resource.read', icon: Icons.Resources },
 ];
 
 const ADMIN_NAV: NavItem[] = [
+  { label: 'Checklists', href: '/pm/templates', requires: 'pm.project.create', icon: Icons.MyWork },
   { label: 'People', href: '/admin/users', requires: 'admin.user.read', icon: Icons.People },
   { label: 'Roles & permissions', href: '/admin/roles', requires: 'admin.role.read', icon: Icons.Roles },
   { label: 'Audit trail', href: '/admin/audit', requires: 'admin.audit.read', icon: Icons.Audit },
@@ -121,6 +125,7 @@ export function Sidebar({ principal }: { principal: Principal }) {
   const visible = (item: NavItem) => !item.requires || hasPermissionAnywhere(principal, item.requires);
   const adminItems = ADMIN_NAV.filter(visible);
   const upcoming = MODULES.filter((m) => m.status === 'COMING_SOON');
+  const isDirector = principal.grade === 'DIRECTOR' || principal.roleKeys.includes('DIRECTOR');
 
   return (
     <aside
@@ -129,29 +134,67 @@ export function Sidebar({ principal }: { principal: Principal }) {
         isCollapsed ? 'w-16' : 'w-64'
       )}
     >
-      {/* Top Header / Wordmark */}
+      {/* Top Header / Wordmark & Collapse Toggle */}
       <div className={clsx('flex h-16 items-center border-b border-hairline shrink-0', isCollapsed ? 'justify-center px-2' : 'px-lg')}>
-        <Link href="/dashboard" className="flex items-baseline gap-xxs" title="Engineering OS · ACS Engitech">
-          <span className="text-display-sm text-primary font-bold">Engineering</span>
-          {!isCollapsed ? (
-            <span className="text-display-sm text-ink">OS</span>
-          ) : null}
-        </Link>
+        {!isCollapsed ? (
+          <div className="flex items-center justify-between w-full">
+            <Link href="/dashboard" className="flex items-baseline gap-xxs" title="Engineering OS · ACS Engitech Pvt Ltd">
+              <span className="text-display-sm text-primary font-bold">Engineering</span>
+              <span className="text-display-sm text-ink">OS</span>
+            </Link>
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              title="Collapse sidebar (Ctrl+B)"
+              className="inline-flex items-center justify-center rounded-md border border-hairline p-1.5 text-muted hover:bg-surface-strong hover:text-ink transition-colors"
+            >
+              {Icons.Collapse}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            title="Expand sidebar (Ctrl+B)"
+            className="inline-flex items-center justify-center rounded-md border border-hairline p-1.5 text-muted hover:bg-surface-strong hover:text-ink transition-colors"
+          >
+            {Icons.Expand}
+          </button>
+        )}
       </div>
 
       {/* Navigation List (Independent scroll container) */}
       <nav className="flex-1 overflow-y-auto px-2 py-md space-y-1">
-        {!isCollapsed ? (
-          <p className="px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Project management</p>
-        ) : (
-          <div className="my-1 border-t border-hairline-soft" />
+        {/* Workspace Group */}
+        {WORKSPACE_NAV.filter(visible).length > 0 && (
+          <div key="workspace-section">
+            {!isCollapsed ? (
+              <p className="px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Workspace</p>
+            ) : (
+              <div className="my-1 border-t border-hairline-soft" />
+            )}
+            {WORKSPACE_NAV.filter(visible).map((item) => (
+              <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} collapsed={isCollapsed} />
+            ))}
+          </div>
         )}
-        {PM_NAV.filter(visible).map((item) => (
-          <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} collapsed={isCollapsed} />
-        ))}
+
+        {/* Management Group */}
+        {MANAGEMENT_NAV.filter(visible).length > 0 && (
+          <div key="management-section">
+            {!isCollapsed ? (
+              <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Management</p>
+            ) : (
+              <div className="my-2 border-t border-hairline-soft" />
+            )}
+            {MANAGEMENT_NAV.filter(visible).map((item) => (
+              <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} collapsed={isCollapsed} />
+            ))}
+          </div>
+        )}
 
         {adminItems.length ? (
-          <>
+          <div key="admin-section">
             {!isCollapsed ? (
               <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Administration</p>
             ) : (
@@ -160,51 +203,39 @@ export function Sidebar({ principal }: { principal: Principal }) {
             {adminItems.map((item) => (
               <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} collapsed={isCollapsed} />
             ))}
-          </>
-        ) : null}
-
-        {!isCollapsed ? (
-          <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Other modules</p>
-        ) : (
-          <div className="my-2 border-t border-hairline-soft" />
-        )}
-        <NavLink href="/modules" label="All modules" icon={Icons.Modules} collapsed={isCollapsed} />
-
-        {!isCollapsed ? (
-          upcoming.map((module) => (
-            <Link
-              key={module.key}
-              href={module.route}
-              className="flex items-center justify-between gap-xs rounded-sm px-sm py-1.5 text-nav-link text-muted-soft hover:bg-canvas-soft hover:text-body"
-            >
-              <span className="truncate">{module.name}</span>
-              <span className="shrink-0 text-caption-uppercase uppercase text-muted-soft">soon</span>
-            </Link>
-          ))
-        ) : null}
-      </nav>
-
-      {/* Bottom Footer: Company Branding & Collapse Toggle */}
-      <div className="border-t border-hairline shrink-0 px-3 py-2.5 flex items-center justify-between gap-2 bg-canvas">
-        {!isCollapsed ? (
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-caption font-medium text-ink">ACS Engitech</p>
-            <p className="truncate text-[11px] text-muted-soft">Operations Platform</p>
           </div>
         ) : null}
 
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          title={isCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
-          className={clsx(
-            'inline-flex items-center justify-center rounded-md border border-hairline p-1.5 text-muted hover:bg-surface-strong hover:text-ink transition-colors',
-            isCollapsed ? 'w-full' : ''
-          )}
-        >
-          {isCollapsed ? Icons.Expand : Icons.Collapse}
-          {!isCollapsed ? <span className="ml-1 text-caption">Collapse</span> : null}
-        </button>
+        {isDirector ? (
+          <>
+            {!isCollapsed ? (
+              <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Other modules</p>
+            ) : (
+              <div className="my-2 border-t border-hairline-soft" />
+            )}
+            <NavLink href="/modules" label="All modules" icon={Icons.Modules} collapsed={isCollapsed} />
+
+            {!isCollapsed ? (
+              upcoming.map((module) => (
+                <Link
+                  key={module.key}
+                  href={module.route}
+                  className="flex items-center justify-between gap-xs rounded-sm px-sm py-1.5 text-nav-link text-muted-soft hover:bg-canvas-soft hover:text-body"
+                >
+                  <span className="truncate">{module.name}</span>
+                  <span className="shrink-0 text-caption-uppercase uppercase text-muted-soft">soon</span>
+                </Link>
+              ))
+            ) : null}
+          </>
+        ) : null}
+      </nav>
+
+      {/* Bottom Footer */}
+      <div className="border-t border-hairline shrink-0 px-3 py-2.5 flex items-center h-[41px] bg-canvas text-caption text-muted-soft">
+        {!isCollapsed ? (
+          <span className="truncate font-medium text-ink">ACS Engitech Pvt Ltd</span>
+        ) : null}
       </div>
     </aside>
   );

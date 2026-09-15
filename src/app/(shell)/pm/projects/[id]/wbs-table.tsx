@@ -77,7 +77,7 @@ export function WbsTable({ tasks, criticalTaskIds }: { tasks: WbsTask[]; critica
                     {task.title}
                   </Link>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                    <span className="code text-caption text-muted-soft">{task.code}</span>
+                    
                     {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
                     {critical.has(task.id) && !isPhase ? (
                       <span className="badge bg-error/[0.06] text-error" title="Zero float - any slip moves the delivery date">
@@ -127,3 +127,4 @@ export function WbsTable({ tasks, criticalTaskIds }: { tasks: WbsTask[]; critica
     </div>
   );
 }
+

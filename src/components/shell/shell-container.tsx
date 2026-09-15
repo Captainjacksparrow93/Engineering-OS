@@ -29,11 +29,6 @@ export function ShellContainer({
               {children}
             </div>
           </main>
-
-          {/* Footer: pinned at the bottom, shrink-0 */}
-          <footer className="shrink-0 border-t border-hairline px-base py-2.5 text-caption text-muted-soft md:px-xl">
-            ACS Engitech Pvt Ltd · Engineering OS
-          </footer>
         </div>
       </div>
     </ShellProvider>

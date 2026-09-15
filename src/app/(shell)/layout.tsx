@@ -20,8 +20,8 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   return (
     <ShellContainer
-      sidebar={<Sidebar principal={principal} />}
-      topbar={<Topbar principal={principal} unread={notifications} />}
+      sidebar={<Sidebar key="shell-sidebar" principal={principal} />}
+      topbar={<Topbar key="shell-topbar" principal={principal} unread={notifications} />}
     >
       {children}
     </ShellContainer>

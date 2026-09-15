@@ -20,7 +20,7 @@ import { blockingReasons, completionBlockers, downstreamTaskIds, rollUpProgress,
 const ALLOWED_TRANSITIONS: Record<PrismaTaskStatus, PrismaTaskStatus[]> = {
   DRAFT: ['TODO', 'CANCELLED'],
   BLOCKED: ['TODO', 'IN_PROGRESS', 'CANCELLED'],
-  TODO: ['IN_PROGRESS', 'BLOCKED', 'CANCELLED'],
+  TODO: ['IN_PROGRESS', 'IN_REVIEW', 'COMPLETED', 'BLOCKED', 'CANCELLED'],
   IN_PROGRESS: ['IN_REVIEW', 'COMPLETED', 'BLOCKED', 'TODO', 'CANCELLED'],
   IN_REVIEW: ['COMPLETED', 'IN_PROGRESS', 'CANCELLED'],
   COMPLETED: ['IN_PROGRESS'],
@@ -380,7 +380,13 @@ export async function recomputeTaskDerivedState(projectId: string, tx: Tx = pris
 
     if (task.status === 'TODO' || task.status === 'BLOCKED') {
       const blockers = blockingReasons(task.id, graph);
-      const shouldBe = blockers.length > 0 ? 'BLOCKED' : 'TODO';
+      const latestLog = await tx.taskProgressLog.findFirst({
+        where: { taskId: task.id },
+        orderBy: { createdAt: 'desc' },
+        select: { blocker: true },
+      });
+      const hasRoadblock = Boolean(latestLog?.blocker);
+      const shouldBe = blockers.length > 0 || hasRoadblock ? 'BLOCKED' : 'TODO';
       if (shouldBe !== task.status) updates.status = shouldBe;
     }
 
@@ -544,3 +550,158 @@ export async function addComment(principal: Principal, taskId: string, body: str
     return comment;
   });
 }
+
+/**
+ * Project Manager Quality Gate: Approve task submitted for review.
+ * Marks task COMPLETED, auto-unlocks downstream tasks, and checks if the entire project is completed.
+ */
+export async function approveTaskReview(principal: Principal, taskId: string) {
+  const task = await prisma.task.findUniqueOrThrow({
+    where: { id: taskId },
+    include: {
+      project: { select: { id: true, managerId: true, sponsorId: true, code: true, name: true } },
+    },
+  });
+
+  const isManager = task.project.managerId === principal.userId;
+  const isHeadOrDirector =
+    principal.grade === 'DIRECTOR' ||
+    principal.grade === 'HEAD' ||
+    principal.roleKeys.includes('DIRECTOR') ||
+    principal.roleKeys.includes('DEPARTMENT_HEAD');
+
+  if (!isManager && !isHeadOrDirector) {
+    throw new DomainError('Only the Project Manager or Department Head can approve task reviews.');
+  }
+
+  const updatedTask = await changeTaskStatus(principal, taskId, 'COMPLETED');
+
+  // Check if all tasks in the project are completed
+  const remainingOpen = await prisma.task.count({
+    where: {
+      projectId: task.projectId,
+      id: { not: taskId },
+      status: { notIn: ['COMPLETED', 'CANCELLED'] },
+    },
+  });
+
+  return {
+    task: updatedTask,
+    allTasksCompleted: remainingOpen === 0,
+    projectId: task.projectId,
+    projectCode: task.project.code,
+    projectName: task.project.name,
+  };
+}
+
+/**
+ * Project Manager Quality Gate: Disapprove/reject task submitted for review.
+ * Reverts task to IN_PROGRESS, adds corrective feedback comment, and notifies assignee.
+ */
+export async function disapproveTaskReview(principal: Principal, taskId: string, feedback: string) {
+  const task = await prisma.task.findUniqueOrThrow({
+    where: { id: taskId },
+    include: {
+      project: { select: { id: true, managerId: true, sponsorId: true, code: true } },
+      assignments: { where: { status: 'ACTIVE' }, select: { userId: true } },
+    },
+  });
+
+  const isManager = task.project.managerId === principal.userId;
+  const isHeadOrDirector =
+    principal.grade === 'DIRECTOR' ||
+    principal.grade === 'HEAD' ||
+    principal.roleKeys.includes('DIRECTOR') ||
+    principal.roleKeys.includes('DEPARTMENT_HEAD');
+
+  if (!isManager && !isHeadOrDirector) {
+    throw new DomainError('Only the Project Manager or Department Head can disapprove task reviews.');
+  }
+
+  const updatedTask = await changeTaskStatus(principal, taskId, 'IN_PROGRESS', feedback);
+
+  const trimmedFeedback = feedback.trim();
+  if (trimmedFeedback) {
+    await prisma.taskComment.create({
+      data: {
+        taskId,
+        userId: principal.userId,
+        body: `[PM Review - Revision Required]: ${trimmedFeedback}`,
+      },
+    });
+  }
+
+  const assigneeIds = task.assignments.map((a) => a.userId);
+  if (assigneeIds.length > 0) {
+    await notify({
+      userIds: assigneeIds,
+      title: `Task needs revision: ${task.code}`,
+      body: `${principal.fullName} requested revisions: ${trimmedFeedback.slice(0, 140)}`,
+      link: `/pm/tasks/${taskId}`,
+    });
+  }
+
+  return updatedTask;
+}
+
+/**
+ * Roadblock Flagging: Engineer flags an active task with a handwritten explanation.
+ */
+export async function flagRoadblock(principal: Principal, taskId: string, comment: string) {
+  const trimmed = comment.trim();
+  if (trimmed.length < 5) {
+    throw new DomainError('Please enter a specific explanation of the roadblock (at least 5 characters).');
+  }
+
+  const task = await prisma.task.findUniqueOrThrow({
+    where: { id: taskId },
+    include: {
+      project: { select: { id: true, managerId: true, sponsorId: true, code: true } },
+    },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.taskProgressLog.create({
+      data: {
+        taskId,
+        userId: principal.userId,
+        percentComplete: task.percentComplete,
+        hoursSpent: 0,
+        note: `[ROADBLOCK FLAGGED]: ${trimmed}`,
+        blocker: trimmed,
+        loggedFor: new Date(),
+      },
+    });
+
+    await tx.task.update({
+      where: { id: taskId },
+      data: { status: 'BLOCKED' },
+    });
+
+    await notify(
+      {
+        userIds: [task.project.managerId, task.project.sponsorId].filter((id): id is string => Boolean(id)),
+        title: `Roadblock flagged on ${task.code}`,
+        body: `${principal.fullName}: ${trimmed.slice(0, 200)}`,
+        link: `/pm/tasks/${taskId}`,
+      },
+      tx,
+    );
+
+    await publish(
+      {
+        name: EVENTS.TASK_BLOCKED,
+        module: 'pm',
+        entityType: 'Task',
+        entityId: taskId,
+        actorId: principal.userId,
+        payload: { projectId: task.projectId, code: task.code, blocker: trimmed },
+      },
+      tx,
+    );
+  });
+
+  await recomputeTaskDerivedState(task.projectId);
+  return { success: true };
+}
+

@@ -33,7 +33,6 @@ export default async function RolesPage() {
     <>
       <PageHeader
         title="Roles & permissions"
-        subtitle="Application code checks permissions, never job titles. A role granted on one project gives nothing on another."
       />
 
       <div className="space-y-4">

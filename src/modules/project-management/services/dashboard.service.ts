@@ -3,22 +3,29 @@ import { can } from '@/core/rbac/engine';
 import type { Principal } from '@/core/rbac/types';
 import { addDays, startOfDay } from '@/core/utils/dates';
 import { projectVisibilityWhere } from './access';
+import { getWorkloads } from './availability.service';
 
-/**
- * The landing screen.
- *
- * One dashboard serves everyone, but the panels differ by what the person can see:
- * a director gets portfolio health and the blocker list; an engineer gets their queue
- * and their pending handovers. Both come from the same visibility rules as everything
- * else, so nothing leaks.
- */
 export async function getDashboard(principal: Principal) {
   const today = startOfDay(new Date());
-  const horizon = addDays(today, 7);
+  const horizon = addDays(today, 14);
   const visibility = projectVisibilityWhere(principal);
-  const isManagement = can(principal, 'pm.report.read') || can(principal, 'pm.project.read.all');
+  const isManagement =
+    can(principal, 'pm.report.read') ||
+    can(principal, 'pm.project.read.all') ||
+    principal.grade === 'DIRECTOR' ||
+    principal.grade === 'HEAD' ||
+    principal.roleKeys.includes('DIRECTOR') ||
+    principal.roleKeys.includes('DEPARTMENT_HEAD');
 
-  const [projects, myAssignments, incomingHandovers, blockers, recentProgress, unreadCount] = await Promise.all([
+  const [
+    projects,
+    myAssignments,
+    incomingHandovers,
+    activeRoadblocks,
+    recentProgress,
+    unreadCount,
+    pendingReviewsCount,
+  ] = await Promise.all([
     prisma.project.findMany({
       where: { ...visibility, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
       select: {
@@ -29,8 +36,20 @@ export async function getDashboard(principal: Principal) {
         status: true,
         priority: true,
         targetEndDate: true,
-        manager: { select: { id: true, fullName: true, avatarColor: true } },
-        tasks: { select: { status: true, estimatedHours: true, percentComplete: true, plannedEnd: true } },
+        startDate: true,
+        manager: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
+        tasks: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            status: true,
+            estimatedHours: true,
+            percentComplete: true,
+            plannedEnd: true,
+          },
+          orderBy: { code: 'asc' },
+        },
       },
       orderBy: [{ priority: 'desc' }, { targetEndDate: 'asc' }],
       take: 25,
@@ -71,13 +90,18 @@ export async function getDashboard(principal: Principal) {
       ? prisma.taskProgressLog.findMany({
           where: {
             blocker: { not: null },
-            createdAt: { gte: addDays(today, -14) },
-            task: { project: visibility, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+            task: { project: visibility, status: { in: ['BLOCKED', 'IN_PROGRESS', 'TODO'] } },
           },
           include: {
-            user: { select: { id: true, fullName: true, avatarColor: true } },
+            user: { select: { id: true, fullName: true, avatarColor: true, designation: true, grade: true } },
             task: {
-              select: { id: true, code: true, title: true, status: true, project: { select: { id: true, code: true } } },
+              select: {
+                id: true,
+                code: true,
+                title: true,
+                status: true,
+                project: { select: { id: true, code: true, name: true, clientName: true } },
+              },
             },
           },
           orderBy: { createdAt: 'desc' },
@@ -88,18 +112,34 @@ export async function getDashboard(principal: Principal) {
       where: { task: { project: visibility } },
       include: {
         user: { select: { id: true, fullName: true, avatarColor: true } },
-        task: { select: { id: true, code: true, title: true, project: { select: { id: true, code: true } } } },
+        task: { select: { id: true, code: true, title: true, project: { select: { id: true, code: true, name: true } } } },
       },
       orderBy: { createdAt: 'desc' },
-      take: 12,
+      take: 15,
     }),
     prisma.notification.count({ where: { userId: principal.userId, readAt: null } }),
+    prisma.task.count({
+      where: { project: visibility, status: 'IN_REVIEW' },
+    }),
   ]);
 
+  // Transform projects
   const projectCards = projects.map((project) => {
     const tasks = project.tasks;
     const totalHours = tasks.reduce((sum, t) => sum + t.estimatedHours, 0) || 1;
     const weighted = tasks.reduce((sum, t) => sum + t.percentComplete * t.estimatedHours, 0);
+    const completedTasks = tasks.filter((t) => t.status === 'COMPLETED');
+    const firstIncomplete = tasks.find((t) => !['COMPLETED', 'CANCELLED'].includes(t.status));
+
+    const blockedCount = tasks.filter((t) => t.status === 'BLOCKED').length;
+    const overdueCount = tasks.filter(
+      (t) => t.plannedEnd && t.plannedEnd < today && !['COMPLETED', 'CANCELLED'].includes(t.status),
+    ).length;
+
+    let health: 'HEALTHY' | 'AT_RISK' | 'BLOCKED' = 'HEALTHY';
+    if (blockedCount > 0) health = 'BLOCKED';
+    else if (overdueCount > 0) health = 'AT_RISK';
+
     return {
       id: project.id,
       code: project.code,
@@ -110,14 +150,44 @@ export async function getDashboard(principal: Principal) {
       targetEndDate: project.targetEndDate,
       manager: project.manager,
       taskCount: tasks.length,
-      blockedCount: tasks.filter((t) => t.status === 'BLOCKED').length,
-      overdueCount: tasks.filter(
-        (t) => t.plannedEnd && t.plannedEnd < today && !['COMPLETED', 'CANCELLED'].includes(t.status),
-      ).length,
+      completedTaskCount: completedTasks.length,
+      currentStep: firstIncomplete ? firstIncomplete.title : 'All steps completed',
+      blockedCount,
+      overdueCount,
       progressPercent: Math.round(weighted / totalHours),
       dueSoon: Boolean(project.targetEndDate && project.targetEndDate <= horizon),
+      health,
     };
   });
+
+  // Calculate workloads for team operations if management
+  let parthTeamWorkload: Array<any> = [];
+  let parasTeamWorkload: Array<any> = [];
+
+  if (isManagement) {
+    try {
+      const workloads = await getWorkloads(principal, { from: today, to: horizon });
+
+      // Separate into teams by engineer names
+      parthTeamWorkload = workloads
+        .filter((w) =>
+          ['Parth', 'Shivam', 'Agastya', 'Sahil', 'Abbasali', 'Het', 'Dhrupin', 'Jigar Girishbhai'].some((name) =>
+            w.person.fullName.includes(name),
+          ),
+        )
+        .slice(0, 10);
+
+      parasTeamWorkload = workloads
+        .filter((w) =>
+          ['Paras', 'Ridhhi', 'Harsh', 'Chirag', 'Hitesh', 'Krupesh', 'Harmitsinh', 'Munaf', 'Ashish', 'Tejas'].some(
+            (name) => w.person.fullName.includes(name),
+          ),
+        )
+        .slice(0, 10);
+    } catch {
+      // Fallback
+    }
+  }
 
   return {
     isManagement,
@@ -125,8 +195,9 @@ export async function getDashboard(principal: Principal) {
     projects: projectCards,
     portfolio: {
       activeProjects: projectCards.length,
-      atRisk: projectCards.filter((p) => p.blockedCount > 0 || p.overdueCount > 0).length,
-      blockedTasks: projectCards.reduce((sum, p) => sum + p.blockedCount, 0),
+      atRisk: projectCards.filter((p) => p.health === 'AT_RISK').length,
+      activeRoadblocks: activeRoadblocks.length || projectCards.reduce((sum, p) => sum + p.blockedCount, 0),
+      pendingReviews: pendingReviewsCount,
       overdueTasks: projectCards.reduce((sum, p) => sum + p.overdueCount, 0),
     },
     myWork: {
@@ -139,7 +210,11 @@ export async function getDashboard(principal: Principal) {
       items: myAssignments,
     },
     incomingHandovers,
-    blockers,
+    activeRoadblocks,
     recentProgress,
+    teamOperations: {
+      parthTeam: parthTeamWorkload,
+      parasTeam: parasTeamWorkload,
+    },
   };
 }

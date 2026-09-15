@@ -25,6 +25,11 @@ export interface DataTableProps<T> {
   emptyMessage?: string;
   className?: string;
   toolbarActions?: React.ReactNode;
+  onRowClick?: (row: T) => void;
+  renderToolbar?: (props: { columnsButton: React.ReactNode; activeCount: number; totalCount: number }) => React.ReactNode;
+  pageSizeOptions?: number[];
+  defaultPageSize?: number;
+  itemNoun?: string;
 }
 
 interface StoredTablePrefs {
@@ -42,6 +47,11 @@ export function DataTable<T>({
   emptyMessage = 'No matching records found.',
   className,
   toolbarActions,
+  onRowClick,
+  renderToolbar,
+  pageSizeOptions = [25, 50, 200],
+  defaultPageSize = 25,
+  itemNoun = 'records',
 }: DataTableProps<T>) {
   const storageKey = `engos_table_${tableId}_prefs`;
 
@@ -209,54 +219,73 @@ export function DataTable<T>({
     return copy;
   }, [data, sortState, columnMap]);
 
-  // Column Resizing via Pointer Events
+  // Pagination state
+  const [pageSize, setPageSize] = useState<number>(defaultPageSize);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  const pagedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sortedData.slice(start, start + pageSize);
+  }, [sortedData, currentPage, pageSize]);
+
+  // Column Resizing via Window Mouse Events
   const resizingRef = useRef<{
     colId: string;
     startX: number;
     startWidth: number;
   } | null>(null);
 
-  const startResize = (e: React.PointerEvent, col: ColumnDef<T>, currentWidth: number) => {
+  const startResize = (e: React.MouseEvent, col: ColumnDef<T>, currentWidth: number) => {
     e.preventDefault();
     e.stopPropagation();
 
-    const target = e.currentTarget as HTMLElement;
-    target.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startWidth = currentWidth || col.defaultWidth || 160;
+    const min = col.minWidth ?? 60;
+    const max = col.maxWidth ?? 900;
 
     resizingRef.current = {
       colId: col.id,
-      startX: e.clientX,
-      startWidth: currentWidth || col.defaultWidth || 160,
+      startX,
+      startWidth,
     };
-  };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!resizingRef.current) return;
-    const { colId, startX, startWidth } = resizingRef.current;
-    const col = columnMap.get(colId);
-    const min = col?.minWidth ?? 80;
-    const max = col?.maxWidth ?? 800;
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizingRef.current) return;
+      moveEvent.preventDefault();
+      const deltaX = moveEvent.clientX - startX;
+      const newWidth = Math.max(min, Math.min(max, startWidth + deltaX));
+      setColumnWidths((prev) => ({
+        ...prev,
+        [col.id]: newWidth,
+      }));
+    };
 
-    const deltaX = e.clientX - startX;
-    const newWidth = Math.max(min, Math.min(max, startWidth + deltaX));
+    const handleMouseUp = (upEvent: MouseEvent) => {
+      upEvent.preventDefault();
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      resizingRef.current = null;
+      setColumnWidths((latest) => {
+        savePrefs(columnOrder, latest, hiddenColumns, sortState);
+        return latest;
+      });
+    };
 
-    setColumnWidths((prev) => ({
-      ...prev,
-      [colId]: newWidth,
-    }));
-  };
-
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (!resizingRef.current) return;
-    const target = e.currentTarget as HTMLElement;
-    try {
-      target.releasePointerCapture(e.pointerId);
-    } catch {
-      // Ignore
-    }
-    const finalWidths = { ...columnWidths };
-    resizingRef.current = null;
-    savePrefs(columnOrder, finalWidths, hiddenColumns, sortState);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
   };
 
   // Drag and Drop Reordering Handlers
@@ -306,86 +335,98 @@ export function DataTable<T>({
     savePrefs(columnOrder, columnWidths, nextHidden, sortState);
   };
 
+  const columnsButtonNode = (
+    <div className="relative inline-block text-left" ref={settingsRef}>
+      <button
+        type="button"
+        onClick={() => setSettingsOpen((prev) => !prev)}
+        className={clsx(
+          'btn btn-sm btn-secondary flex items-center gap-1.5 transition-colors shadow-xs',
+          settingsOpen && 'border-ink bg-surface-strong text-ink'
+        )}
+        title="Show or hide table columns"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        <span className="font-medium">Columns</span>
+      </button>
+
+      {/* Column Customizer Popover */}
+      {settingsOpen ? (
+        <div className="absolute right-0 top-full z-30 mt-1 w-60 rounded-lg border border-hairline bg-surface p-3 shadow-lg">
+          <div className="flex items-center justify-between pb-2 border-b border-hairline">
+            <span className="text-caption font-semibold text-ink">Customize Columns</span>
+            <button
+              type="button"
+              onClick={resetLayout}
+              className="text-[11px] text-primary hover:underline"
+            >
+              Reset layout
+            </button>
+          </div>
+
+          <div className="max-h-56 overflow-y-auto space-y-1.5 pt-2">
+            {columns.map((col) => {
+              const isVisible = !hiddenColumns.includes(col.id);
+              const canToggle = col.hideable !== false;
+              return (
+                <label
+                  key={col.id}
+                  className={clsx(
+                    'flex items-center justify-between gap-2 rounded px-1.5 py-1 text-caption text-ink cursor-pointer hover:bg-canvas-soft',
+                    !canToggle && 'opacity-60 cursor-not-allowed'
+                  )}
+                >
+                  <span className="truncate">{col.header}</span>
+                  <input
+                    type="checkbox"
+                    checked={isVisible}
+                    disabled={!canToggle}
+                    onChange={() => toggleColumnVisibility(col.id)}
+                    className="rounded border-hairline-strong text-primary focus:ring-primary h-3.5 w-3.5"
+                  />
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+
   return (
     <div className={clsx('space-y-2', className)}>
       {/* Top Table Toolbar with Controls */}
-      <div className="flex items-center justify-between gap-2 px-1">
-        <div className="flex items-center gap-2">
-          {toolbarActions}
+      {renderToolbar ? (
+        renderToolbar({
+          columnsButton: columnsButtonNode,
+          activeCount: activeColumns.length,
+          totalCount: columns.length,
+        })
+      ) : (
+        <div className="flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-2">
+            {toolbarActions}
+          </div>
+          {columnsButtonNode}
         </div>
+      )}
 
-        <div className="relative" ref={settingsRef}>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen((prev) => !prev)}
-            className={clsx(
-              'btn btn-sm btn-secondary flex items-center gap-1.5 transition-colors shadow-xs',
-              settingsOpen && 'border-ink bg-surface-strong text-ink'
-            )}
-            title="Show or hide table columns"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            <span className="font-medium">Columns (Show/Hide)</span>
-            <span className="text-[11px] text-muted-soft font-mono">({activeColumns.length}/{columns.length})</span>
-          </button>
-
-          {/* Column Customizer Popover */}
-          {settingsOpen ? (
-            <div className="absolute right-0 top-full z-30 mt-1 w-64 rounded-lg border border-hairline bg-surface p-3 shadow-lg">
-              <div className="flex items-center justify-between pb-2 border-b border-hairline">
-                <span className="text-caption font-semibold text-ink">Customize Columns</span>
-                <button
-                  type="button"
-                  onClick={resetLayout}
-                  className="text-[11px] text-primary hover:underline"
-                >
-                  Reset layout
-                </button>
-              </div>
-
-              <p className="py-2 text-[11px] text-muted-soft">
-                Drag column headers left or right to reorder. Drag borders to resize.
-              </p>
-
-              <div className="max-h-56 overflow-y-auto space-y-1.5 pt-1">
-                {columns.map((col) => {
-                  const isVisible = !hiddenColumns.includes(col.id);
-                  const canToggle = col.hideable !== false;
-                  return (
-                    <label
-                      key={col.id}
-                      className={clsx(
-                        'flex items-center justify-between gap-2 rounded px-1.5 py-1 text-caption text-ink cursor-pointer hover:bg-canvas-soft',
-                        !canToggle && 'opacity-60 cursor-not-allowed'
-                      )}
-                    >
-                      <span className="truncate">{col.header}</span>
-                      <input
-                        type="checkbox"
-                        checked={isVisible}
-                        disabled={!canToggle}
-                        onChange={() => toggleColumnVisibility(col.id)}
-                        className="rounded border-hairline-strong text-primary focus:ring-primary h-3.5 w-3.5"
-                      />
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Main Table Container with Independent Horizontal & Vertical Layout */}
+      {/* Main Table Container with Fixed Layout for Pixel-Perfect Drag Resizing */}
       <div className="overflow-x-auto rounded-lg border border-hairline bg-surface">
-        <table className="table w-full border-collapse text-left select-none">
+        <table className="w-full table-fixed border-collapse text-left select-none">
+          <colgroup>
+            {activeColumns.map((col) => {
+              const width = columnWidths[col.id] || col.defaultWidth;
+              return <col key={col.id} style={{ width: width ? `${width}px` : undefined }} />;
+            })}
+          </colgroup>
           <thead>
             <tr className="border-b border-hairline bg-canvas-soft">
               {activeColumns.map((col) => {
-                const width = columnWidths[col.id];
+                const width = columnWidths[col.id] || col.defaultWidth;
                 const isSorted = sortState?.id === col.id;
                 const isDragging = draggedColId === col.id;
                 const isDragOver = dragOverColId === col.id;
@@ -394,14 +435,14 @@ export function DataTable<T>({
                 return (
                   <th
                     key={col.id}
-                    draggable
+                    draggable={!resizingRef.current}
                     onDragStart={(e) => handleDragStart(e, col.id)}
                     onDragOver={(e) => handleDragOver(e, col.id)}
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, col.id)}
-                    style={{ width: width ? `${width}px` : undefined, minWidth: `${col.minWidth ?? 80}px` }}
+                    style={{ width: width ? `${width}px` : undefined, minWidth: `${col.minWidth ?? 60}px` }}
                     className={clsx(
-                      'group relative px-base py-3 text-caption font-semibold text-muted tracking-wider uppercase transition-colors',
+                      'group relative px-base py-3 text-caption font-semibold text-muted tracking-wider uppercase transition-colors overflow-hidden',
                       isSortable ? 'cursor-pointer hover:text-ink hover:bg-surface-strong/50' : 'cursor-default',
                       isDragging && 'opacity-40 bg-surface-strong',
                       isDragOver && 'border-l-2 border-primary bg-primary/5',
@@ -409,7 +450,7 @@ export function DataTable<T>({
                     )}
                     onClick={() => isSortable && handleSortClick(col)}
                   >
-                    <div className="flex items-center gap-1.5 justify-between">
+                    <div className="flex items-center gap-1.5 justify-between pr-2">
                       <span className="truncate" title={`Drag to move "${col.header}"`}>
                         {col.header}
                       </span>
@@ -430,10 +471,17 @@ export function DataTable<T>({
 
                     {/* Column Resizer Handle */}
                     <div
-                      onPointerDown={(e) => startResize(e, col, width || 160)}
-                      onPointerMove={handlePointerMove}
-                      onPointerUp={handlePointerUp}
-                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-primary/50 transition-colors z-10 select-none touch-none"
+                      draggable={false}
+                      onMouseDown={(e) => startResize(e, col, width || 160)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDragStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      className="absolute right-0 top-0 bottom-0 w-3 cursor-col-resize hover:bg-primary/50 transition-colors z-20 select-none touch-none"
                       title="Drag to resize column"
                     />
                   </th>
@@ -442,7 +490,7 @@ export function DataTable<T>({
             </tr>
           </thead>
           <tbody className="divide-y divide-hairline">
-            {sortedData.length === 0 ? (
+            {pagedData.length === 0 ? (
               <tr>
                 <td
                   colSpan={activeColumns.length}
@@ -452,15 +500,22 @@ export function DataTable<T>({
                 </td>
               </tr>
             ) : (
-              sortedData.map((row) => (
-                <tr key={keyExtractor(row)} className="hover:bg-canvas-soft/60 transition-colors">
+              pagedData.map((row) => (
+                <tr
+                  key={keyExtractor(row)}
+                  onClick={() => onRowClick && onRowClick(row)}
+                  className={clsx(
+                    'hover:bg-canvas-soft/70 transition-colors',
+                    onRowClick && 'cursor-pointer'
+                  )}
+                >
                   {activeColumns.map((col) => {
                     const content = col.cell ? col.cell(row) : col.accessor ? col.accessor(row) : null;
                     return (
                       <td
                         key={col.id}
                         className={clsx(
-                          'px-base py-3 text-body-sm text-body align-middle',
+                          'px-base py-3 text-body-sm text-body align-middle truncate',
                           col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
                         )}
                       >
@@ -473,6 +528,82 @@ export function DataTable<T>({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination & Total Count Footer */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-2 text-caption text-muted">
+        {/* Total & Current Range */}
+        <div className="font-medium">
+          {sortedData.length > 0 ? (
+            <span>
+              Showing <span className="text-ink font-semibold">{(currentPage - 1) * pageSize + 1}</span> to{' '}
+              <span className="text-ink font-semibold">{Math.min(currentPage * pageSize, sortedData.length)}</span> of{' '}
+              <span className="text-ink font-semibold">{sortedData.length}</span> {itemNoun}
+            </span>
+          ) : (
+            <span>0 {itemNoun}</span>
+          )}
+        </div>
+
+        {/* Controls: Page Size + Previous/Next */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <span>Show</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                const newSize = Number(e.target.value);
+                setPageSize(newSize);
+                setCurrentPage(1);
+              }}
+              className="select !h-7 !py-0 !px-2 text-caption font-medium bg-surface border-hairline rounded"
+            >
+              {pageSizeOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className={clsx(
+                'btn btn-sm btn-secondary !h-7 !w-7 !p-0 flex items-center justify-center transition-colors',
+                currentPage <= 1 && 'opacity-40 cursor-not-allowed'
+              )}
+              title="Previous page"
+              aria-label="Previous page"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+
+            <span className="px-2 font-medium text-ink">
+              {currentPage} / {totalPages}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className={clsx(
+                'btn btn-sm btn-secondary !h-7 !w-7 !p-0 flex items-center justify-center transition-colors',
+                currentPage >= totalPages && 'opacity-40 cursor-not-allowed'
+              )}
+              title="Next page"
+              aria-label="Next page"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

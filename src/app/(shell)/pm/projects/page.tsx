@@ -3,6 +3,7 @@ import { requirePrincipal } from '@/core/auth/session';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { listProjects } from '@/modules/project-management/services/project.service';
 import { formatDate, daysUntil } from '@/core/utils/dates';
+import { formatName } from '@/core/utils/strings';
 import { Avatar, EmptyState, PageHeader, PriorityBadge, ProgressBar, StatusBadge } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
@@ -112,8 +113,8 @@ export default async function ProjectsPage({
 
                 <div className="mt-3 flex items-center justify-between border-t border-hairline pt-2.5 text-caption">
                   <span className="flex items-center gap-1.5 text-body">
-                    <Avatar name={project.manager.fullName} color={project.manager.avatarColor} size={20} />
-                    {project.manager.fullName}
+                    <Avatar name={formatName(project.manager.fullName)} color={project.manager.avatarColor} size={20} />
+                    {formatName(project.manager.fullName)}
                   </span>
                   <span className={late ? 'font-medium text-error' : 'text-muted'}>
                     {formatDate(project.targetEndDate)}
@@ -127,3 +128,5 @@ export default async function ProjectsPage({
     </>
   );
 }
+
+

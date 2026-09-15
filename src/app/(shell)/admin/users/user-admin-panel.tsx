@@ -17,6 +17,18 @@ const GRADES = [
   'DIRECTOR',
 ];
 
+interface UserAdminPanelProps {
+  canCreate: boolean;
+  canAssign: boolean;
+  roles: Array<{ key: string; name: string }>;
+  departments: Array<{ id: string; name: string }>;
+  projects: Array<{ id: string; code: string; name: string }>;
+  users: Array<{ id: string; fullName: string; employeeCode: string }>;
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
+  columnsButton?: React.ReactNode;
+}
+
 export function UserAdminPanel({
   canCreate,
   canAssign,
@@ -25,15 +37,9 @@ export function UserAdminPanel({
   projects,
   users,
   searchQuery = '',
-}: {
-  canCreate: boolean;
-  canAssign: boolean;
-  roles: Array<{ key: string; name: string }>;
-  departments: Array<{ id: string; name: string }>;
-  projects: Array<{ id: string; code: string; name: string }>;
-  users: Array<{ id: string; fullName: string; employeeCode: string }>;
-  searchQuery?: string;
-}) {
+  onSearchChange,
+  columnsButton,
+}: UserAdminPanelProps) {
   const [tab, setTab] = useState<'none' | 'create' | 'grant' | 'status'>('none');
   const [createState, createAction] = useActionState<ActionState, FormData>(createUserAction, {});
   const [grantState, grantAction] = useActionState<ActionState, FormData>(assignRoleAction, {});
@@ -43,21 +49,35 @@ export function UserAdminPanel({
   return (
     <section className="card">
       <header className="card-header flex flex-wrap items-center justify-between gap-3">
-        {/* Compact Search Bar replacing Administration text */}
-        <form action="/admin/users" className="flex items-center gap-2">
+        {/* Instant Live Search Bar */}
+        <div className="relative flex items-center">
+          <div className="absolute left-2.5 text-muted pointer-events-none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+          </div>
           <input
-            id="q"
-            name="q"
-            defaultValue={searchQuery}
-            className="input !h-8 w-60 text-body-sm"
-            placeholder="Search name, email, code..."
+            type="text"
+            value={searchQuery}
+            onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
+            className="input !h-8 w-64 pl-8 pr-7 text-body-sm"
+            placeholder="Search name, department, role..."
           />
-          <button type="submit" className="btn btn-secondary btn-sm">
-            Search
-          </button>
-        </form>
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => onSearchChange && onSearchChange('')}
+              className="absolute right-2 text-muted hover:text-ink text-xs"
+              title="Clear search"
+            >
+              ✕
+            </button>
+          ) : null}
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {columnsButton}
           {canCreate ? (
             <button
               type="button"

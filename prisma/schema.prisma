@@ -686,3 +686,44 @@ model TaskComment {
   @@index([taskId, createdAt])
   @@map("pm_task_comments")
 }
+
+// =====================================================================================
+// PM :: Checklist Templates (Automation Standard Packages)
+// =====================================================================================
+
+model ChecklistTemplate {
+  id          String   @id @default(cuid())
+  code        String   @unique // PLC, SCADA, HMI
+  name        String
+  description String?
+  category    String   @default("AUTOMATION")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items ChecklistTemplateItem[]
+
+  @@map("pm_checklist_templates")
+}
+
+model ChecklistTemplateItem {
+  id                  String   @id @default(cuid())
+  templateId          String
+  stepNumber          Int
+  code                String
+  title               String
+  description         String?
+  recommendedSeniority String  @default("JUNIOR") // ASST_MANAGER, SENIOR, JUNIOR, TRAINEE
+  defaultDurationDays Int      @default(2)
+  isSimulationSignoff Boolean  @default(false)
+  dependsOnStep       Int?
+  sortOrder           Int      @default(1)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  template ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, stepNumber])
+  @@map("pm_checklist_template_items")
+}
+

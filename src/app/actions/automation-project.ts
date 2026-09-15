@@ -1,0 +1,30 @@
+'use server';
+
+import { redirect } from 'next/navigation';
+import { requirePrincipal } from '@/core/auth/session';
+import {
+  createAutomationProject,
+  type CreateAutomationProjectInput,
+} from '@/modules/project-management/services/automation-project.service';
+
+export async function createAutomationProjectAction(input: CreateAutomationProjectInput) {
+  const principal = await requirePrincipal();
+  let projectId: string | null = null;
+
+  try {
+    const project = await createAutomationProject(principal, input);
+    projectId = project.id;
+  } catch (error) {
+    console.error('Failed to create automation project:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create automation project.',
+    };
+  }
+
+
+  if (projectId) {
+    redirect(`/pm/projects/${projectId}`);
+  }
+  return { success: true };
+}

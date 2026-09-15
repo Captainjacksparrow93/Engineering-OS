@@ -59,10 +59,21 @@ export function ProgressForm({ taskId, currentPercent }: { taskId: string; curre
         </div>
 
         {showBlocker ? (
-          <div className="field">
-            <label className="label" htmlFor="blocker">Blocker</label>
-            <textarea id="blocker" name="blocker" rows={2} className="textarea" placeholder="What is stopping you, and who needs to act?" />
-            <p className="hint">Raising a blocker notifies the project manager and the sponsor immediately.</p>
+          <div className="field rounded-md border border-error/30 bg-error/[0.04] p-3">
+            <label className="label text-xs font-semibold text-error" htmlFor="blocker">
+              Roadblock Explanation *
+            </label>
+            <textarea
+              id="blocker"
+              name="blocker"
+              rows={2}
+              required
+              className="textarea text-sm w-full border-error/40 focus:border-error"
+              placeholder="Describe exactly what is holding you up (e.g. Waiting for client approved P&ID revision 3, missing vendor GSD file for Danfoss VFD, etc.)"
+            />
+            <p className="hint text-error/80 mt-1">
+              This handwritten explanation will immediately alert the Project Manager and Department Head on the Roadblock Radar.
+            </p>
           </div>
         ) : null}
 

@@ -5,7 +5,6 @@ import { prisma } from '@/core/db/prisma';
 import { listUsers } from '@/modules/admin/services/admin.service';
 import { SYSTEM_ROLES } from '@/core/rbac/permissions';
 import { PageHeader } from '@/components/ui';
-import { UserAdminPanel } from './user-admin-panel';
 import { UsersTable } from './users-table';
 
 export const dynamic = 'force-dynamic';
@@ -21,19 +20,28 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   if (!hasPermissionAnywhere(principal, 'admin.user.read')) redirect('/dashboard');
 
   const params = await searchParams;
-  const [users, departments, projects] = await Promise.all([
-    listUsers(principal, params.q),
-    prisma.department.findMany({
-      where: { companyId: principal.companyId },
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.project.findMany({
-      where: { companyId: principal.companyId, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
-      select: { id: true, code: true, name: true },
-      orderBy: { code: 'asc' },
-    }),
-  ]);
+  let users: Awaited<ReturnType<typeof listUsers>> = [];
+  let departments: Array<{ id: string; name: string }> = [];
+  let projects: Array<{ id: string; code: string; name: string }> = [];
+
+  try {
+    [users, departments, projects] = await Promise.all([
+      listUsers(principal, params.q),
+      prisma.department.findMany({
+        where: { companyId: principal.companyId },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.project.findMany({
+        where: { companyId: principal.companyId, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+        select: { id: true, code: true, name: true },
+        orderBy: { code: 'asc' },
+      }),
+    ]);
+  } catch (error) {
+    console.error('Failed to load users page data:', error);
+    redirect('/dashboard');
+  }
 
   const canManage = hasPermissionAnywhere(principal, 'admin.user.manage');
   const canAssign = hasPermissionAnywhere(principal, 'admin.role.assign');
@@ -43,35 +51,16 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     <>
       <PageHeader
         title="People & access"
-        subtitle={`${users.length} account${users.length === 1 ? '' : 's'}. Roles are always granted at a scope - company, department or a single project.`}
       />
-
-      {canManage || canAssign ? (
-        <div className="mb-4">
-          <UserAdminPanel
-            canCreate={canManage}
-            canAssign={canAssign}
-            roles={roleOptions}
-            departments={departments}
-            projects={projects}
-            users={users.map((u) => ({ id: u.id, fullName: u.fullName, employeeCode: u.employeeCode }))}
-            searchQuery={params.q ?? ''}
-          />
-        </div>
-      ) : (
-        <form className="mb-4 flex items-end gap-2" action="/admin/users">
-          <div>
-            <label className="label" htmlFor="q">Search</label>
-            <input id="q" name="q" defaultValue={params.q ?? ''} className="input w-64" placeholder="Name, email or employee code" />
-          </div>
-          <button type="submit" className="btn btn-secondary mb-0.5">Search</button>
-        </form>
-      )}
 
       <UsersTable
         users={users}
         departments={departments}
         projects={projects}
+        canManage={canManage}
+        canAssign={canAssign}
+        roleOptions={roleOptions}
+        searchQuery={params.q ?? ''}
       />
     </>
   );

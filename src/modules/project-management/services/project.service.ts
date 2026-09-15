@@ -484,3 +484,178 @@ function gradeToRoleKey(grade: string): string {
       return 'SENIOR_ENGINEER';
   }
 }
+
+/**
+ * Final Step Gate: Mark project as COMPLETED and dispatch automated notification to the Department Head.
+ */
+export async function completeAutomationProject(principal: Principal, projectId: string) {
+  const project = await prisma.project.findUniqueOrThrow({
+    where: { id: projectId },
+    include: {
+      manager: { select: { id: true, fullName: true } },
+    },
+  });
+
+  const isManager = project.managerId === principal.userId;
+  const isSponsor = project.sponsorId === principal.userId;
+  const isHeadOrDirector =
+    principal.grade === 'DIRECTOR' ||
+    principal.grade === 'HEAD' ||
+    principal.roleKeys.includes('DIRECTOR') ||
+    principal.roleKeys.includes('DEPARTMENT_HEAD');
+
+  if (!isManager && !isSponsor && !isHeadOrDirector) {
+    throw new DomainError('Only the Project Manager or Department Head can mark this project as completed.');
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const res = await tx.project.update({
+      where: { id: projectId },
+      data: {
+        status: 'COMPLETED',
+        actualEndDate: new Date(),
+      },
+    });
+
+    // Notify Department Heads and Sponsor
+    const heads = await tx.user.findMany({
+      where: {
+        companyId: principal.companyId,
+        status: 'ACTIVE',
+        OR: [
+          { id: project.sponsorId ?? undefined },
+          { grade: 'HEAD' },
+          { roleAssignments: { some: { role: { key: 'DEPARTMENT_HEAD' } } } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    await notify(
+      {
+        userIds: heads.map((h) => h.id),
+        title: `Project Completed: ${project.code}`,
+        body: `PM ${project.manager.fullName} marked project "${project.name}" as COMPLETED and ready for review.`,
+        link: `/pm/projects/${projectId}`,
+      },
+      tx,
+    );
+
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'pm',
+        action: 'project.completed',
+        entityType: 'Project',
+        entityId: projectId,
+        diff: { status: 'COMPLETED', completedBy: principal.fullName },
+      },
+      tx,
+    );
+
+    return res;
+  });
+
+  return updated;
+}
+
+export async function handoverProject(
+  principal: Principal,
+  projectId: string,
+  newManagerId: string,
+) {
+  await assertProjectPermission(principal, projectId, 'pm.project.update');
+
+  const newManager = await prisma.user.findFirst({
+    where: { id: newManagerId, companyId: principal.companyId, status: 'ACTIVE' },
+  });
+  if (!newManager) throw new DomainError('Target manager is not active.');
+
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) throw new NotFoundError('Project not found');
+
+  const oldManagerId = project.managerId;
+  if (oldManagerId === newManagerId) return;
+
+  const managerRole = await prisma.role.findUnique({ where: { key: 'PROJECT_MANAGER' } });
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Update project managerId
+    await tx.project.update({
+      where: { id: projectId },
+      data: { managerId: newManagerId },
+    });
+
+    // 2. Assign new manager to project members
+    await tx.projectMember.upsert({
+      where: { projectId_userId: { projectId, userId: newManagerId } },
+      create: { projectId, userId: newManagerId, role: 'MANAGER', allocationPercent: 100 },
+      update: { role: 'MANAGER' },
+    });
+
+    // 3. Grant RBAC Role to new manager
+    if (managerRole) {
+      await tx.roleAssignment.upsert({
+        where: {
+          userId_roleId_scopeType_scopeId: { userId: newManagerId, roleId: managerRole.id, scopeType: 'PROJECT', scopeId: projectId },
+        },
+        create: { userId: newManagerId, roleId: managerRole.id, scopeType: 'PROJECT', scopeId: projectId, grantedBy: principal.userId },
+        update: {},
+      });
+    }
+
+    // 4. Revoke old manager's RBAC role
+    if (managerRole) {
+      await tx.roleAssignment.deleteMany({
+        where: { userId: oldManagerId, roleId: managerRole.id, scopeType: 'PROJECT', scopeId: projectId },
+      });
+    }
+    await tx.projectMember.updateMany({
+      where: { projectId, userId: oldManagerId, role: 'MANAGER' },
+      data: { role: 'OBSERVER' },
+    });
+
+    // 5. Bulk reassign all open task assignments from old PM to new PM
+    const openAssignments = await tx.taskAssignment.findMany({
+      where: {
+        userId: oldManagerId,
+        status: 'ACTIVE',
+        task: { projectId, status: { notIn: ['COMPLETED', 'CANCELLED'] } }
+      },
+      select: { id: true, taskId: true }
+    });
+
+    if (openAssignments.length > 0) {
+      await tx.taskAssignment.updateMany({
+        where: { id: { in: openAssignments.map(a => a.id) } },
+        data: { userId: newManagerId },
+      });
+
+      for (const a of openAssignments) {
+        await audit(
+          {
+            actorId: principal.userId,
+            module: 'pm',
+            action: 'task.reassigned',
+            entityType: 'Task',
+            entityId: a.taskId,
+            diff: { assigneeId: { old: oldManagerId, new: newManagerId }, bulkHandover: true },
+          },
+          tx,
+        );
+      }
+    }
+
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'pm',
+        action: 'project.manager.handover',
+        entityType: 'Project',
+        entityId: projectId,
+        diff: { managerId: { old: oldManagerId, new: newManagerId }, tasksMoved: openAssignments.length },
+      },
+      tx,
+    );
+  });
+}

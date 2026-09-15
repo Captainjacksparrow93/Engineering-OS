@@ -153,7 +153,6 @@ export const SYSTEM_ROLES: Record<
       'pm.progress.log',
       'pm.handover.request',
       'pm.handover.decide',
-      'pm.resource.read',
     ],
   },
   JUNIOR_ENGINEER: {

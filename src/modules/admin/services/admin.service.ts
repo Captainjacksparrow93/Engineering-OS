@@ -1,6 +1,7 @@
 import { prisma } from '@/core/db/prisma';
 import { assertCan } from '@/core/rbac/guard';
-import { DomainError } from '@/core/rbac/errors';
+import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
+import { DomainError, ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
 import { hashPassword, passwordIssues } from '@/core/auth/password';
@@ -14,16 +15,28 @@ import type { ScopeType } from '@prisma/client';
  */
 
 export async function listUsers(principal: Principal, search?: string) {
-  assertCan(principal, 'admin.user.read');
+  if (!hasPermissionAnywhere(principal, 'admin.user.read')) {
+    throw new ForbiddenError('Missing permission: admin.user.read');
+  }
+
+  // Global permission holders see all company users; department-scoped heads see their department.
+  const hasGlobal = can(principal, 'admin.user.read');
+  const departmentFilter = hasGlobal
+    ? {}
+    : { departmentId: { in: principal.coveredDepartmentIds } };
+
   return prisma.user.findMany({
     where: {
       companyId: principal.companyId,
+      ...departmentFilter,
       ...(search
         ? {
             OR: [
               { fullName: { contains: search, mode: 'insensitive' as const } },
               { email: { contains: search, mode: 'insensitive' as const } },
               { employeeCode: { contains: search, mode: 'insensitive' as const } },
+              { designation: { contains: search, mode: 'insensitive' as const } },
+              { department: { name: { contains: search, mode: 'insensitive' as const } } },
             ],
           }
         : {}),

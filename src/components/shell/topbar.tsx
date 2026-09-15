@@ -9,21 +9,7 @@ import { useShell } from './shell-context';
 export function Topbar({ principal, unread }: { principal: Principal; unread: number }) {
   const { isCollapsed, toggleCollapsed } = useShell();
 
-  // Format to First Name + Last Name (e.g. Satishkumar Mohanbhai Nagar -> Satish Nagar, Admin Controller -> Satish Nagar)
-  const formatName = (name: string) => {
-    if (name === 'Admin Controller' || name === 'Super Admin') return 'Satish Nagar';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length <= 1) return name;
-    if (parts.length === 2) return name;
-    let first = parts[0]!;
-    if (first.toLowerCase().endsWith('kumar')) {
-      first = first.slice(0, -5);
-    }
-    const last = parts[parts.length - 1]!;
-    return `${first} ${last}`;
-  };
-
-  const displayName = formatName(principal.fullName);
+  const displayName = principal.fullName;
 
   // Format role to clean title (e.g. SUPER_ADMIN / DIRECTOR -> Director)
   const formatRole = (keys: string[]) => {
@@ -89,3 +75,4 @@ export function Topbar({ principal, unread }: { principal: Principal; unread: nu
     </header>
   );
 }
+

@@ -15,8 +15,8 @@ import {
   progressSchema,
   updateProjectSchema,
 } from '@/modules/project-management/validation/schemas';
-import { addProjectMember, createProject, removeProjectMember, updateProject } from '@/modules/project-management/services/project.service';
-import { addComment, assignTask, changeTaskStatus, createTask, deleteTask } from '@/modules/project-management/services/task.service';
+import { addProjectMember, completeAutomationProject, createProject, removeProjectMember, updateProject } from '@/modules/project-management/services/project.service';
+import { addComment, approveTaskReview, assignTask, changeTaskStatus, createTask, deleteTask, disapproveTaskReview, flagRoadblock } from '@/modules/project-management/services/task.service';
 import { addDependency, removeDependency } from '@/modules/project-management/services/dependency.service';
 import { logProgress } from '@/modules/project-management/services/progress.service';
 import { cancelHandover, decideHandover, requestHandover } from '@/modules/project-management/services/handover.service';
@@ -335,5 +335,82 @@ export async function markNotificationReadAction(_prev: ActionState, form: FormD
   const principal = await requirePrincipal();
   const state = await run(() => markRead(principal.userId, String(form.get('notificationId'))));
   revalidatePath('/notifications');
+  return state;
+}
+
+// -------------------------------------------------------------- PM quality gate & review
+
+export async function approveTaskReviewAction(taskId: string) {
+  const principal = await requirePrincipal();
+  try {
+    const result = await approveTaskReview(principal, taskId);
+    revalidatePath(`/pm/tasks/${taskId}`);
+    revalidatePath(`/pm/projects/${result.projectId}`);
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    return { success: true, allTasksCompleted: result.allTasksCompleted, projectId: result.projectId, projectName: result.projectName };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to approve task.' };
+  }
+}
+
+export async function disapproveTaskReviewAction(taskId: string, feedback: string) {
+  const principal = await requirePrincipal();
+  try {
+    const task = await disapproveTaskReview(principal, taskId, feedback);
+    revalidatePath(`/pm/tasks/${taskId}`);
+    revalidatePath(`/pm/projects/${task.projectId}`);
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to disapprove task.' };
+  }
+}
+
+export async function flagRoadblockAction(taskId: string, comment: string) {
+  const principal = await requirePrincipal();
+  try {
+    await flagRoadblock(principal, taskId, comment);
+    revalidatePath(`/pm/tasks/${taskId}`);
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to flag roadblock.' };
+  }
+}
+
+export async function completeAutomationProjectAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    await completeAutomationProject(principal, projectId);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to complete project.' };
+  }
+}
+
+export async function handoverProjectAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const projectId = String(form.get('projectId'));
+  const newManagerId = String(form.get('newManagerId'));
+
+  if (!projectId || !newManagerId) {
+    return { error: 'Missing fields' };
+  }
+
+  const state = await run(async () => {
+    const { handoverProject } = await import('@/modules/project-management/services/project.service');
+    await handoverProject(principal, projectId, newManagerId);
+    return 'Handover complete';
+  });
+
+  if (!state.error) {
+    revalidatePath('/pm/projects/' + projectId);
+  }
   return state;
 }

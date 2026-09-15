@@ -17,7 +17,38 @@ export const dynamic = 'force-dynamic';
 export default async function TaskPage({ params }: { params: Promise<{ id: string }> }) {
   const principal = await requirePrincipal();
   const { id } = await params;
-  const { task, blockers, downstreamCount, permissions } = await getTaskDetail(principal, id);
+
+  let detail;
+  try {
+    detail = await getTaskDetail(principal, id);
+  } catch (err) {
+    return (
+      <div className="mx-auto max-w-md py-16 text-center">
+        <div className="card p-8 space-y-4 border-hairline bg-surface">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-800 text-xl font-bold">
+            !
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-ink">Task Not Found</h1>
+            <p className="mt-1 text-xs text-muted">
+              This task does not exist or may have been deleted.
+            </p>
+          </div>
+          <div className="pt-2 flex items-center justify-center gap-2">
+            <Link href="/pm/my-work" className="btn btn-primary btn-sm">
+              My Work
+            </Link>
+            <Link href="/dashboard" className="btn btn-secondary btn-sm">
+              Dashboard
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const { task, blockers, downstreamCount, permissions } = detail;
+
 
   const [candidates, peers, projectTasks, assignableUsers] = await Promise.all([
     permissions.canHandover ? handoverCandidates(principal, task.id) : Promise.resolve([]),
