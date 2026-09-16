@@ -1,4 +1,4 @@
-﻿import { startOfDay } from '@/core/utils/dates';
+import { startOfDay } from '@/core/utils/dates';
 
 export interface ProgressTask {
   id?: string;
@@ -77,3 +77,21 @@ export function projectHealth(input: HealthInput): HealthStatus {
 
   return 'ON_TRACK';
 }
+
+export function timeElapsedPercent(
+  startDate: Date | string | null | undefined,
+  targetEndDate: Date | string | null | undefined,
+  asOfDate: Date = new Date()
+): number {
+  if (!startDate || !targetEndDate) return 0;
+  const start = startOfDay(new Date(startDate)).getTime();
+  const end = startOfDay(new Date(targetEndDate)).getTime();
+  const today = startOfDay(asOfDate).getTime();
+
+  if (end <= start) return 100;
+  if (today <= start) return 0;
+  if (today >= end) return 100;
+
+  return Math.min(100, Math.max(0, Math.round(((today - start) / (end - start)) * 100)));
+}
+

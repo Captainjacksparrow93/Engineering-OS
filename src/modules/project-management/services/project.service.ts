@@ -687,4 +687,118 @@ export async function completeAutomationProject(principal: Principal, projectId:
   return updated;
 }
 
+export async function getProjectTimeline(principal: Principal, projectId: string) {
+  await assertProjectVisible(principal, projectId);
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      clientName: true,
+      startDate: true,
+      targetEndDate: true,
+      status: true,
+      manager: { select: { id: true, fullName: true, avatarColor: true } },
+      tasks: {
+        where: { status: { not: 'CANCELLED' } },
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          status: true,
+          percentComplete: true,
+          parentId: true,
+          type: true,
+          plannedStart: true,
+          plannedEnd: true,
+          submittedAt: true,
+          completedAt: true,
+          completedBy: { select: { id: true, fullName: true } },
+          assignments: {
+            where: { status: 'ACTIVE' },
+            select: { user: { select: { id: true, fullName: true, avatarColor: true } } },
+          },
+        },
+        orderBy: [{ parentId: 'asc' }, { code: 'asc' }],
+      },
+    },
+  });
+
+  if (!project) throw new NotFoundError('Project not found');
+
+  const phaseTasks = project.tasks.filter((t) => t.type === 'PHASE' || (project.tasks.some((c) => c.parentId === t.id) && !t.parentId));
+  const leafTasks = project.tasks.filter((t) => t.type !== 'PHASE' && !project.tasks.some((c) => c.parentId === t.id));
+
+  let latestLeafEnd: Date = project.targetEndDate ?? new Date();
+  for (const t of leafTasks) {
+    if (t.plannedEnd && t.plannedEnd > latestLeafEnd) {
+      latestLeafEnd = t.plannedEnd;
+    }
+  }
+
+  const lanes = phaseTasks.length > 0
+    ? phaseTasks.map((phase) => {
+        const steps = leafTasks
+          .filter((t) => t.parentId === phase.id)
+          .map((t, idx) => ({
+            taskId: t.id,
+            stepNumber: idx + 1,
+            code: t.code,
+            title: t.title,
+            status: t.status,
+            plannedStart: t.plannedStart,
+            plannedEnd: t.plannedEnd,
+            submittedAt: t.submittedAt,
+            completedAt: t.completedAt,
+            completedBy: t.completedBy ? { id: t.completedBy.id, fullName: t.completedBy.fullName } : null,
+            assignee: t.assignments[0]?.user ?? null,
+          }));
+        return {
+          id: phase.id,
+          name: phase.title,
+          steps,
+        };
+      })
+    : [
+        {
+          id: 'default',
+          name: 'Deliverables',
+          steps: leafTasks.map((t, idx) => ({
+            taskId: t.id,
+            stepNumber: idx + 1,
+            code: t.code,
+            title: t.title,
+            status: t.status,
+            plannedStart: t.plannedStart,
+            plannedEnd: t.plannedEnd,
+            submittedAt: t.submittedAt,
+            completedAt: t.completedAt,
+            completedBy: t.completedBy ? { id: t.completedBy.id, fullName: t.completedBy.fullName } : null,
+            assignee: t.assignments[0]?.user ?? null,
+          })),
+        },
+      ];
+
+  const totalSteps = lanes.reduce((sum, l) => sum + l.steps.length, 0);
+  const completedSteps = lanes.reduce((sum, l) => sum + l.steps.filter((s) => s.status === 'COMPLETED').length, 0);
+
+  return {
+    projectId: project.id,
+    projectName: project.name,
+    projectCode: project.code,
+    clientName: project.clientName,
+    status: project.status,
+    manager: project.manager,
+    startDate: project.startDate,
+    targetEndDate: project.targetEndDate,
+    forecastEndDate: latestLeafEnd,
+    totalSteps,
+    completedSteps,
+    lanes,
+  };
+}
+
+
 

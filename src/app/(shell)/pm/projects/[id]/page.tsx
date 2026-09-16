@@ -2,18 +2,26 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
-import { getProjectWorkspace } from '@/modules/project-management/services/project.service';
+import { getProjectWorkspace, getProjectTimeline } from '@/modules/project-management/services/project.service';
+import { can } from '@/core/rbac/engine';
 import { formatDate, daysUntil } from '@/core/utils/dates';
-import { Alert, Card, PageHeader, ProgressBar, Stat } from '@/components/ui';
+import { Alert, Card, PageHeader, ProgressBar, Stat, StatusBadge, PriorityBadge } from '@/components/ui';
+import { ProjectTimeline } from '@/components/project-timeline';
 import { WbsTable } from './wbs-table';
 import { AddTaskForm } from './add-task-form';
 import { TeamPanel } from './team-panel';
 import { CompleteProjectButton } from './complete-project-button';
 import { HandoverProjectButton } from './handover-project-button';
-import { ProjectStatusSelector } from './project-status-selector';
-import { ProjectPrioritySelector } from './project-priority-selector';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const project = await prisma.project.findUnique({ where: { id }, select: { name: true } });
+  return {
+    title: `${project?.name || 'Project'} · Engineering OS`,
+  };
+}
 
 /**
  * The project workspace: the checklist tasks, the schedule and the team, on one
@@ -22,12 +30,18 @@ export const dynamic = 'force-dynamic';
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const principal = await requirePrincipal();
   const { id } = await params;
+
   let workspace;
+  let timeline;
   try {
-    workspace = await getProjectWorkspace(principal, id);
+    [workspace, timeline] = await Promise.all([
+      getProjectWorkspace(principal, id),
+      getProjectTimeline(principal, id),
+    ]);
   } catch {
     notFound();
   }
+
   const { project, tasks, summary, permissions, criticalTaskIds } = workspace;
 
   const colleagues = permissions.canAssign || permissions.canManageMembers || permissions.canEditProject
@@ -48,6 +62,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     : [];
 
   const due = daysUntil(project.targetEndDate);
+  const allLeafClosed = tasks
+    .filter((t) => t.type !== 'PHASE' && !tasks.some((c) => c.parentId === t.id))
+    .every((t) => t.status === 'COMPLETED' || t.status === 'CANCELLED');
 
   return (
     <>
@@ -58,56 +75,68 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           <span className="flex flex-wrap items-center gap-2">
             <span>{project.clientName}</span>
             <span className="text-muted-soft">·</span>
-            
             {project.poNumber ? (
               <>
+                <span className="text-caption text-muted">PO {project.poNumber}</span>
                 <span className="text-muted-soft">·</span>
-                <span className="text-caption">PO {project.poNumber}</span>
               </>
             ) : null}
-            <ProjectStatusSelector projectId={project.id} currentStatus={project.status} canEdit={permissions.canEditProject} />
-            <ProjectPrioritySelector projectId={project.id} currentPriority={project.priority} canEdit={permissions.canEditProject} />
+            <StatusBadge status={project.status} />
+            <PriorityBadge priority={project.priority} />
           </span>
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/pm/resources?projectId=${project.id}`} className="btn btn-secondary">
+            <Link href={`/pm/resources?projectId=${project.id}`} className="btn btn-secondary text-body-sm">
               Team load
             </Link>
             {permissions.canManageMembers ? (
               <HandoverProjectButton projectId={project.id} colleagues={colleagues} />
             ) : null}
             {permissions.canCreateTask ? (
-              <Link href={`/pm/adhoc?projectId=${project.id}`} className="btn btn-primary">
-                Raise ad-hoc task
+              <Link href={`/pm/adhoc?projectId=${project.id}`} className="btn btn-primary text-body-sm">
+                Add urgent task
               </Link>
             ) : null}
           </div>
         }
       />
 
-      {project.status !== 'COMPLETED' && summary.progressPercent === 100 ? (
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
+      {/* Interactive Project Visual Timeline */}
+      <ProjectTimeline data={timeline} className="mb-6" />
+
+      {/* Completion Banner */}
+      {project.status !== 'COMPLETED' && allLeafClosed ? (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-success/30 bg-success/[0.08] p-4 text-ink">
           <div>
-            <p className="font-semibold text-emerald-950">All tasks are 100% complete!</p>
-            <p className="text-body-sm text-emerald-800">
+            <p className="font-semibold text-ink">All tasks are completed!</p>
+            <p className="text-body-sm text-muted">
               Ready to mark this project completed and notify leadership?
             </p>
           </div>
-          <CompleteProjectButton projectId={project.id} />
+          {permissions.canEditProject ? (
+            <CompleteProjectButton projectId={project.id} />
+          ) : null}
         </div>
       ) : null}
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Stat label="Progress" value={`${summary.progressPercent}%`} hint={`${summary.completedCount}/${summary.taskCount} tasks done`} />
-        <Stat label="Open tasks" value={summary.openCount} />
-        <Stat label="Blocked" value={summary.blockedCount} tone={summary.blockedCount ? 'danger' : 'success'} />
-        <Stat label="Overdue" value={summary.overdueCount} tone={summary.overdueCount ? 'danger' : 'success'} />
+      {/* 4 Stat Cards without hours */}
+      <div className="mb-5 grid gap-3 grid-cols-2 sm:grid-cols-4">
         <Stat
-          label="Effort"
-          value={`${summary.actualHours}/${summary.estimatedHours}h`}
-          tone={summary.actualHours > summary.estimatedHours ? 'warning' : 'default'}
-          hint="Actual vs estimated"
+          label="Progress"
+          value={`${summary.progressPercent}%`}
+          hint={`${summary.completedCount}/${summary.taskCount} tasks done`}
+        />
+        <Stat label="Open tasks" value={summary.openCount} />
+        <Stat
+          label="Blocked"
+          value={summary.blockedCount}
+          tone={summary.blockedCount ? 'danger' : 'success'}
+        />
+        <Stat
+          label="Overdue"
+          value={summary.overdueCount}
+          tone={summary.overdueCount ? 'danger' : 'success'}
         />
       </div>
 
@@ -117,8 +146,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         </div>
       ) : null}
 
-      <div className="mb-5 grid gap-3 lg:grid-cols-4">
-        <Card className="lg:col-span-3" title="Project Tasks & Checklist" bodyClassName="p-0">
+      {/* Main Grid: Checklist & Details Sidebar */}
+      <div className="mb-5 grid gap-4 lg:grid-cols-4">
+        <Card className="lg:col-span-3" title="Project Deliverables & Tasks" bodyClassName="p-0">
           <WbsTable
             tasks={tasks}
             criticalTaskIds={criticalTaskIds}
@@ -129,7 +159,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           />
         </Card>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           <Card title="Delivery">
             <dl className="space-y-2 text-body-sm">
               <div className="flex justify-between gap-2">
@@ -156,15 +186,15 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                   <dd className="text-right font-medium">{project.panelCount} · {project.panelType}</dd>
                 </div>
               ) : null}
-              {project.orderValue ? (
+              {project.orderValue && (permissions.canEditProject || can(principal, 'pm.oversight')) ? (
                 <div className="flex justify-between gap-2">
                   <dt className="text-muted">Order value</dt>
-                  <dd className="font-medium">₹{Number(project.orderValue).toLocaleString('en-IN')}</dd>
+                  <dd className="font-medium font-mono">₹{Number(project.orderValue).toLocaleString('en-IN')}</dd>
                 </div>
               ) : null}
             </dl>
             <div className="mt-3 border-t border-hairline pt-3">
-              <p className="text-caption uppercase tracking-wide text-muted-soft">Overall</p>
+              <p className="text-caption uppercase tracking-wide text-muted">Overall progress</p>
               <ProgressBar className="mt-1.5" value={summary.progressPercent} />
             </div>
           </Card>
@@ -188,5 +218,3 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     </>
   );
 }
-
-

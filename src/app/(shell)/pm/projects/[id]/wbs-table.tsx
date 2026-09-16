@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { ProgressBar, StatusBadge, AvatarStack } from '@/components/ui';
+import { ProgressBar, StatusBadge } from '@/components/ui';
 import { AssigneeCell } from '@/components/assignee-cell';
 import { cleanTaskTitle } from '@/core/utils/strings';
 
@@ -33,12 +33,6 @@ interface Colleague {
   avatarColor?: string | null;
 }
 
-type SortField = 'task' | 'assignee' | 'progress' | 'status';
-type SortDir = 'asc' | 'desc';
-
-/**
- * The checklist tasks rendered as a clean, focused table with interactive sorting.
- */
 export function WbsTable({
   tasks,
   criticalTaskIds,
@@ -54,203 +48,221 @@ export function WbsTable({
   colleagues?: Colleague[];
   currentUserId?: string;
 }) {
-  const [filterMode, setFilterMode] = useState<'all' | 'mine'>('all');
-  const [sortField, setSortField] = useState<SortField | null>(null);
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      if (sortDir === 'asc') setSortDir('desc');
-      else setSortField(null);
-    } else {
-      setSortField(field);
-      setSortDir('asc');
-    }
-  };
+  const [filterMode, setFilterMode] = useState<'all' | 'open' | 'review' | 'problems' | 'mine'>('all');
+  const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(new Set());
 
   const critical = useMemo(() => new Set(criticalTaskIds), [criticalTaskIds]);
 
-  const childrenOf = useMemo(() => {
-    const map = new Map<string | null, WbsTask[]>();
-    for (const task of tasks) {
-      const key = task.parentId ?? null;
-      map.set(key, [...(map.get(key) ?? []), task]);
-    }
-    return map;
+  const toggleUnit = (unitId: string) => {
+    setCollapsedUnits((prev) => {
+      const next = new Set(prev);
+      if (next.has(unitId)) next.delete(unitId);
+      else next.add(unitId);
+      return next;
+    });
+  };
+
+  // Group tasks into units (phases)
+  const phases = useMemo(() => {
+    return tasks.filter((t) => t.type === 'PHASE' || (!t.parentId && tasks.some((c) => c.parentId === t.id)));
   }, [tasks]);
 
-  const myTasksCount = useMemo(() => {
-    return currentUserId ? tasks.filter((t) => t.assignments.some((a) => a.user.id === currentUserId)).length : 0;
-  }, [tasks, currentUserId]);
+  const leafTasks = useMemo(() => {
+    return tasks.filter((t) => t.type !== 'PHASE' && !tasks.some((c) => c.parentId === t.id));
+  }, [tasks]);
 
-  const rows = useMemo(() => {
-    let baseList = tasks;
-    if (filterMode === 'mine' && currentUserId) {
-      baseList = tasks.filter((t) => t.assignments.some((a) => a.user.id === currentUserId));
-    }
-
-    if (sortField) {
-      const sorted = [...baseList];
-      sorted.sort((a, b) => {
-        let cmp = 0;
-        if (sortField === 'task') {
-          cmp = a.title.localeCompare(b.title);
-        } else if (sortField === 'assignee') {
-          const nameA = a.assignments[0]?.user.fullName || '';
-          const nameB = b.assignments[0]?.user.fullName || '';
-          cmp = nameA.localeCompare(nameB);
-        } else if (sortField === 'progress') {
-          cmp = a.rolledUpPercent - b.rolledUpPercent;
-        } else if (sortField === 'status') {
-          cmp = a.status.localeCompare(b.status);
-        }
-        return sortDir === 'asc' ? cmp : -cmp;
-      });
-      return sorted.map((task) => ({ task, depth: 0 }));
-    }
-
-    // Default hierarchy walk
-    const result: Array<{ task: WbsTask; depth: number }> = [];
-    if (filterMode === 'mine' && currentUserId) {
-      for (const task of baseList) {
-        result.push({ task, depth: 0 });
+  const filteredLeafTasks = useMemo(() => {
+    return leafTasks.filter((t) => {
+      if (filterMode === 'open') return !['COMPLETED', 'CANCELLED'].includes(t.status);
+      if (filterMode === 'review') return t.status === 'IN_REVIEW';
+      if (filterMode === 'problems') return t.status === 'BLOCKED';
+      if (filterMode === 'mine' && currentUserId) {
+        return t.assignments.some((a) => a.user.id === currentUserId);
       }
-    } else {
-      const walk = (parentId: string | null, depth: number) => {
-        for (const task of childrenOf.get(parentId) ?? []) {
-          result.push({ task, depth });
-          walk(task.id, depth + 1);
-        }
-      };
-      walk(null, 0);
+      return true;
+    });
+  }, [leafTasks, filterMode, currentUserId]);
+
+  const units = useMemo(() => {
+    if (phases.length === 0) {
+      return [
+        {
+          id: 'default',
+          title: 'Project Deliverables',
+          progress: Math.round(
+            leafTasks.reduce((s, t) => s + (t.status === 'COMPLETED' ? 100 : t.percentComplete), 0) /
+              Math.max(leafTasks.length, 1)
+          ),
+          tasks: filteredLeafTasks,
+        },
+      ];
     }
-    return result;
-  }, [tasks, filterMode, currentUserId, sortField, sortDir, childrenOf]);
 
-  if (tasks.length === 0) {
-    return <p className="p-4 text-body-sm text-muted">No tasks yet. Break the project down below.</p>;
-  }
+    return phases.map((phase) => {
+      const unitTasks = filteredLeafTasks.filter((t) => t.parentId === phase.id);
+      const allUnitTasks = leafTasks.filter((t) => t.parentId === phase.id);
+      const unitProgress = Math.round(
+        allUnitTasks.reduce((s, t) => s + (t.status === 'COMPLETED' ? 100 : t.percentComplete), 0) /
+          Math.max(allUnitTasks.length, 1)
+      );
 
-  const renderSortArrow = (field: SortField) => {
-    if (sortField !== field) return <span className="text-muted/40 ml-1">⇅</span>;
-    return <span className="text-ink ml-1 font-bold">{sortDir === 'asc' ? '▲' : '▼'}</span>;
-  };
+      return {
+        id: phase.id,
+        title: phase.title,
+        progress: unitProgress,
+        tasks: unitTasks,
+      };
+    });
+  }, [phases, leafTasks, filteredLeafTasks]);
 
   return (
     <div>
-      {currentUserId ? (
-        <div className="flex items-center gap-2 border-b border-hairline bg-surface px-4 py-2 text-xs">
-          <button
-            type="button"
-            onClick={() => setFilterMode('all')}
-            className={clsx(
-              'rounded px-2.5 py-1 font-medium transition-colors',
-              filterMode === 'all'
-                ? 'bg-surface-strong text-ink font-semibold'
-                : 'text-muted hover:text-ink',
-            )}
-          >
-            All Tasks ({tasks.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterMode('mine')}
-            className={clsx(
-              'rounded px-2.5 py-1 font-medium transition-colors',
-              filterMode === 'mine'
-                ? 'bg-surface-strong text-ink font-semibold'
-                : 'text-muted hover:text-ink',
-            )}
-          >
-            My Tasks ({myTasksCount})
-          </button>
+      {/* Filter Chips Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline bg-surface px-4 py-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { key: 'all' as const, label: `All (${leafTasks.length})` },
+            { key: 'open' as const, label: `Open (${leafTasks.filter((t) => !['COMPLETED', 'CANCELLED'].includes(t.status)).length})` },
+            { key: 'review' as const, label: `In review (${leafTasks.filter((t) => t.status === 'IN_REVIEW').length})` },
+            { key: 'problems' as const, label: `Problems (${leafTasks.filter((t) => t.status === 'BLOCKED').length})` },
+            ...(currentUserId
+              ? [
+                  {
+                    key: 'mine' as const,
+                    label: `My tasks (${leafTasks.filter((t) => t.assignments.some((a) => a.user.id === currentUserId)).length})`,
+                  },
+                ]
+              : []),
+          ].map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              onClick={() => setFilterMode(chip.key)}
+              className={clsx(
+                'rounded-pill px-3 py-1 text-xs font-medium transition-colors',
+                filterMode === chip.key
+                  ? 'bg-ink text-canvas font-semibold'
+                  : 'bg-surface-strong text-muted hover:text-ink'
+              )}
+            >
+              {chip.label}
+            </button>
+          ))}
         </div>
-      ) : null}
+      </div>
 
-      <div className="overflow-x-auto">
-        <table className="table min-w-[640px]">
-          <thead>
-            <tr className="select-none">
-              <th onClick={() => handleSort('task')} className="w-[45%] cursor-pointer hover:text-ink">
-                Task {renderSortArrow('task')}
-              </th>
-              <th onClick={() => handleSort('assignee')} className="w-[25%] cursor-pointer hover:text-ink">
-                Assignee {renderSortArrow('assignee')}
-              </th>
-              <th onClick={() => handleSort('progress')} className="w-36 cursor-pointer hover:text-ink">
-                Progress {renderSortArrow('progress')}
-              </th>
-              <th onClick={() => handleSort('status')} className="w-28 cursor-pointer hover:text-ink">
-                Status {renderSortArrow('status')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="py-6 text-center text-body-sm text-muted">
-                  No tasks assigned to you in this project.
-                </td>
-              </tr>
-            ) : (
-              rows.map(({ task, depth }) => {
-                const isPhase = task.type === 'PHASE' || task._count.children > 0;
+      {/* Collapsible Units */}
+      <div className="divide-y divide-hairline">
+        {units.map((unit) => {
+          const isCollapsed = collapsedUnits.has(unit.id);
 
-                return (
-                  <tr key={task.id} className={clsx(isPhase && 'bg-canvas-soft')}>
-                    <td style={{ paddingLeft: 12 + depth * 18 }}>
-                      <Link
-                        href={`/pm/tasks/${task.id}`}
-                        className={clsx('hover:text-ink', isPhase ? 'font-semibold text-ink' : 'text-ink')}
-                      >
-                        {cleanTaskTitle(task.title)}
-                      </Link>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                        {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
-                        {critical.has(task.id) && !isPhase ? (
-                          <span className="badge bg-error/[0.06] text-error" title="Critical path item">
-                            critical
-                          </span>
-                        ) : null}
-                        {task._count.dependencies > 0 ? (
-                          <span className="badge bg-surface-strong text-muted" title="Depends on other tasks">
-                            {task._count.dependencies} dep
-                          </span>
-                        ) : null}
-                        {task._count.handovers > 0 ? (
-                          <span className="badge bg-surface-strong text-ink">handover</span>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td>
-                      {isPhase ? (
-                        <AvatarStack people={task.assignments.map((a) => a.user)} />
+          return (
+            <div key={unit.id} className="space-y-0">
+              {/* Unit Header Bar */}
+              <div
+                onClick={() => toggleUnit(unit.id)}
+                className="flex cursor-pointer items-center justify-between bg-canvas-soft px-4 py-3 hover:bg-surface-strong/40 transition-colors select-none"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-muted font-mono">{isCollapsed ? '+' : '−'}</span>
+                  <span className="text-title-sm font-semibold text-ink">{cleanTaskTitle(unit.title)}</span>
+                  <span className="badge bg-surface text-muted text-caption">{unit.tasks.length} steps</span>
+                </div>
+                <div className="flex items-center gap-3 w-44">
+                  <ProgressBar value={unit.progress} className="flex-1" />
+                  <span className="text-caption text-muted font-mono font-semibold w-10 text-right">
+                    {unit.progress}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Unit Task Table */}
+              {!isCollapsed && (
+                <div className="overflow-x-auto">
+                  <table className="table min-w-[700px]">
+                    <thead>
+                      <tr className="select-none text-caption text-muted border-b border-hairline">
+                        <th className="w-[45%]">Step & Title</th>
+                        <th className="w-[25%]">Assignee</th>
+                        <th className="w-32">Progress</th>
+                        <th className="text-right w-24">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unit.tasks.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="py-5 text-center text-body-sm text-muted">
+                            No steps match the selected filter.
+                          </td>
+                        </tr>
                       ) : (
-                        <AssigneeCell
-                          taskId={task.id}
-                          projectId={projectId}
-                          assignees={task.assignments.map((a) => a.user)}
-                          canAssign={canAssign}
-                          colleagues={colleagues}
-                        />
+                        unit.tasks.map((task, idx) => (
+                          <tr key={task.id} className="hover:bg-canvas-soft/40 transition-colors">
+                            <td>
+                              <div className="flex items-baseline gap-2">
+                                <span className="font-mono text-caption text-muted font-semibold">
+                                  {idx + 1}.
+                                </span>
+                                <Link
+                                  href={`/pm/tasks/${task.id}`}
+                                  className="font-medium text-ink hover:underline"
+                                >
+                                  {cleanTaskTitle(task.title)}
+                                </Link>
+                              </div>
+                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 pl-5">
+                                {task.type === 'ADHOC' ? (
+                                  <span className="badge bg-surface-strong text-ink">ad-hoc</span>
+                                ) : null}
+                                {critical.has(task.id) ? (
+                                  <span className="badge bg-error/[0.06] text-error" title="Critical path item">
+                                    critical
+                                  </span>
+                                ) : null}
+                                {task._count.dependencies > 0 ? (
+                                  <span className="badge bg-surface-strong text-muted" title="Depends on other tasks">
+                                    {task._count.dependencies} dep
+                                  </span>
+                                ) : null}
+                              </div>
+                            </td>
+                            <td>
+                              <AssigneeCell
+                                taskId={task.id}
+                                projectId={projectId}
+                                assignees={task.assignments.map((a) => a.user)}
+                                canAssign={canAssign}
+                                colleagues={colleagues}
+                              />
+                            </td>
+                            <td>
+                              <ProgressBar
+                                value={task.percentComplete}
+                                tone={
+                                  task.status === 'BLOCKED'
+                                    ? 'danger'
+                                    : task.status === 'COMPLETED'
+                                    ? 'success'
+                                    : 'default'
+                                }
+                              />
+                              <span className="mt-0.5 block text-caption text-muted font-mono">
+                                {task.percentComplete}%
+                              </span>
+                            </td>
+                            <td className="text-right">
+                              <StatusBadge status={task.status} />
+                            </td>
+                          </tr>
+                        ))
                       )}
-                    </td>
-                    <td>
-                      <ProgressBar
-                        value={task.rolledUpPercent}
-                        tone={task.status === 'BLOCKED' ? 'danger' : task.status === 'COMPLETED' ? 'success' : 'default'}
-                      />
-                      <span className="mt-1 block text-caption text-muted">{task.rolledUpPercent}%</span>
-                    </td>
-                    <td>
-                      <StatusBadge status={task.status} />
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
