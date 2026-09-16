@@ -513,6 +513,93 @@ export async function removeProjectMember(principal: Principal, projectId: strin
   });
 }
 
+/**
+ * Bulk reassign all tasks in a project from one member to another.
+ */
+export async function reassignAllMemberTasks(
+  principal: Principal,
+  projectId: string,
+  fromUserId: string,
+  toUserId: string,
+) {
+  if (fromUserId === toUserId) {
+    throw new DomainError('Cannot reassign tasks to the same member.');
+  }
+
+  await assertProjectPermission(principal, projectId, 'pm.project.member.manage');
+
+  const [toUser, fromUser] = await Promise.all([
+    prisma.user.findFirst({ where: { id: toUserId, companyId: principal.companyId, status: 'ACTIVE' } }),
+    prisma.user.findFirst({ where: { id: fromUserId, companyId: principal.companyId } }),
+  ]);
+
+  if (!toUser) throw new DomainError('Target colleague is not an active employee.');
+  if (!fromUser) throw new DomainError('Source member not found.');
+
+  const isMember = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId, userId: toUserId } },
+  });
+
+  return prisma.$transaction(async (tx) => {
+    if (!isMember) {
+      await tx.projectMember.create({
+        data: { projectId, userId: toUserId, role: 'ENGINEER', allocationPercent: 100 },
+      });
+    }
+
+    const assignments = await tx.taskAssignment.findMany({
+      where: {
+        userId: fromUserId,
+        task: { projectId },
+      },
+      select: { id: true, taskId: true, role: true },
+    });
+
+    let count = 0;
+    for (const assignment of assignments) {
+      const existing = await tx.taskAssignment.findFirst({
+        where: { taskId: assignment.taskId, userId: toUserId, role: assignment.role, status: 'ACTIVE' },
+      });
+
+      if (!existing) {
+        await tx.taskAssignment.update({
+          where: { id: assignment.id },
+          data: { userId: toUserId },
+        });
+      } else {
+        await tx.taskAssignment.delete({
+          where: { id: assignment.id },
+        });
+      }
+      count++;
+    }
+
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'pm',
+        action: 'project.tasks.bulk_reassigned',
+        entityType: 'Project',
+        entityId: projectId,
+        diff: { fromUserId, toUserId, taskCount: count },
+      },
+      tx,
+    );
+
+    await notify(
+      {
+        userIds: [toUserId],
+        title: 'Project tasks assigned',
+        body: `${principal.fullName} reassigned ${count} task(s) on this project to you.`,
+        link: `/pm/projects/${projectId}`,
+      },
+      tx,
+    );
+
+    return { reassignedCount: count };
+  });
+}
+
 function gradeToRoleKey(grade: string): string {
   switch (grade) {
     case 'TRAINEE':

@@ -64,6 +64,7 @@ export async function getPMTeamData(companyId: string) {
     where: {
       companyId,
       status: 'ACTIVE',
+      department: { code: { in: ['TECH', 'DESIGN', 'DIR'] } },
       OR: [
         { fullName: { contains: 'Parth' } },
         { fullName: { contains: 'Paras' } },
@@ -86,6 +87,7 @@ export async function getPMTeamData(companyId: string) {
     where: {
       companyId,
       status: 'ACTIVE',
+      department: { code: { in: ['TECH', 'DESIGN', 'DIR'] } },
       grade: { in: ['SENIOR_ENGINEER', 'ENGINEER', 'JUNIOR_ENGINEER', 'TRAINEE'] },
       NOT: [
         { designation: { contains: 'Project Manager' } },
@@ -104,7 +106,6 @@ export async function getPMTeamData(companyId: string) {
   });
 
   return { managers, teamsByPM, allEngineers };
-
 }
 
 export async function createAutomationProject(principal: Principal, input: CreateAutomationProjectInput) {

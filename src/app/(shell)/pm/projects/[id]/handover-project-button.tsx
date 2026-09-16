@@ -23,7 +23,7 @@ export function HandoverProjectButton({
 
   if (!show) {
     return (
-      <button onClick={() => setShow(true)} className="btn btn-secondary btn-sm">
+      <button onClick={() => setShow(true)} className="btn btn-secondary">
         Handover Project
       </button>
     );
@@ -31,7 +31,7 @@ export function HandoverProjectButton({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="card w-full max-w-md bg-surface shadow-2xl animate-in fade-in zoom-in-95">
+      <div className="card w-full max-w-md bg-surface border border-hairline animate-in fade-in zoom-in-95">
         <header className="card-header border-b border-hairline pb-3 flex justify-between">
           <h3 className="card-title text-base">Handover Project</h3>
           <button onClick={() => setShow(false)} className="text-muted hover:text-ink font-bold">&times;</button>

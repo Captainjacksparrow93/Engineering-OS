@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import clsx from 'clsx';
 import { formatDate } from '@/core/utils/dates';
-import { ProgressBar, PriorityBadge, StatusBadge, AvatarStack } from '@/components/ui';
+import { ProgressBar, StatusBadge, AvatarStack } from '@/components/ui';
 import { AssigneeCell } from '@/components/assignee-cell';
 
 interface WbsTask {
@@ -31,11 +31,7 @@ interface Colleague {
 }
 
 /**
- * The WBS rendered as an indented table.
- *
- * Two signals are called out because they are the ones managers act on: tasks on the
- * critical path (zero float - any slip moves the delivery date) and tasks that are
- * blocked by an unmet dependency.
+ * The checklist tasks rendered as a clean, focused table.
  */
 export function WbsTable({
   tasks,
@@ -72,13 +68,12 @@ export function WbsTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="table min-w-[820px]">
+      <table className="table min-w-[760px]">
         <thead>
           <tr>
-            <th className="w-[38%]">Task</th>
-            <th>Owner</th>
-            <th>Planned</th>
-            <th>Effort</th>
+            <th className="w-[42%]">Task</th>
+            <th>Assignee</th>
+            <th>Timeline</th>
             <th className="w-32">Progress</th>
             <th>Status</th>
           </tr>
@@ -97,11 +92,10 @@ export function WbsTable({
                     {task.title}
                   </Link>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                    
                     {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
                     {critical.has(task.id) && !isPhase ? (
-                      <span className="badge bg-error/[0.06] text-error" title="Zero float - any slip moves the delivery date">
-                        critical path
+                      <span className="badge bg-error/[0.06] text-error" title="Critical path item">
+                        critical
                       </span>
                     ) : null}
                     {task._count.dependencies > 0 ? (
@@ -112,7 +106,6 @@ export function WbsTable({
                     {task._count.handovers > 0 ? (
                       <span className="badge bg-surface-strong text-ink">handover</span>
                     ) : null}
-                    {!isPhase ? <PriorityBadge priority={task.priority} /> : null}
                   </div>
                 </td>
                 <td>
@@ -132,12 +125,6 @@ export function WbsTable({
                   <span className={overdue ? 'font-medium text-error' : 'text-body'}>
                     {formatDate(task.plannedStart)} → {formatDate(task.plannedEnd)}
                   </span>
-                  {task.schedule && task.schedule.floatDays > 0 ? (
-                    <span className="block text-caption text-muted-soft">{task.schedule.floatDays}d float</span>
-                  ) : null}
-                </td>
-                <td className="whitespace-nowrap text-caption text-body">
-                  {isPhase ? '-' : `${Math.round(task.actualHours)}/${Math.round(task.estimatedHours)}h`}
                 </td>
                 <td>
                   <ProgressBar

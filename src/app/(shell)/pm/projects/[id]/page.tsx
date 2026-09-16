@@ -3,18 +3,19 @@ import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
 import { getProjectWorkspace } from '@/modules/project-management/services/project.service';
 import { formatDate, daysUntil } from '@/core/utils/dates';
-import { Alert, Card, PageHeader, PriorityBadge, ProgressBar, Stat } from '@/components/ui';
+import { Alert, Card, PageHeader, ProgressBar, Stat } from '@/components/ui';
 import { WbsTable } from './wbs-table';
 import { AddTaskForm } from './add-task-form';
 import { TeamPanel } from './team-panel';
 import { CompleteProjectButton } from './complete-project-button';
 import { HandoverProjectButton } from './handover-project-button';
 import { ProjectStatusSelector } from './project-status-selector';
+import { ProjectPrioritySelector } from './project-priority-selector';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * The project workspace: the WBS, the dependency-aware schedule and the team, on one
+ * The project workspace: the checklist tasks, the schedule and the team, on one
  * screen. This is where a manager spends their day.
  */
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -25,7 +26,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
   const colleagues = permissions.canAssign || permissions.canManageMembers || permissions.canEditProject
     ? await prisma.user.findMany({
-        where: { companyId: principal.companyId, status: 'ACTIVE', id: { not: project.managerId } },
+        where: {
+          companyId: principal.companyId,
+          status: 'ACTIVE',
+          id: { not: project.managerId },
+          department: { code: { in: ['TECH', 'DESIGN', 'DIR'] } },
+        },
         select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true, skills: true },
         orderBy: { fullName: 'asc' },
       })
@@ -50,7 +56,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               </>
             ) : null}
             <ProjectStatusSelector projectId={project.id} currentStatus={project.status} canEdit={permissions.canEditProject} />
-            <PriorityBadge priority={project.priority} />
+            <ProjectPrioritySelector projectId={project.id} currentPriority={project.priority} canEdit={permissions.canEditProject} />
           </span>
         }
         actions={
@@ -102,7 +108,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       ) : null}
 
       <div className="mb-5 grid gap-3 lg:grid-cols-4">
-        <Card className="lg:col-span-3" title="Work breakdown structure" bodyClassName="p-0">
+        <Card className="lg:col-span-3" title="Project Tasks & Checklist" bodyClassName="p-0">
           <WbsTable
             tasks={tasks}
             criticalTaskIds={criticalTaskIds}

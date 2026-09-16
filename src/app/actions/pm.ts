@@ -477,3 +477,38 @@ export async function updateProjectStatusAction(projectId: string, status: strin
   }
 }
 
+export async function updateProjectPriorityAction(projectId: string, priority: string) {
+  const principal = await requirePrincipal();
+  const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+  if (!validPriorities.includes(priority)) {
+    return { success: false, error: 'Invalid project priority.' };
+  }
+  try {
+    const { updateProject } = await import('@/modules/project-management/services/project.service');
+    await updateProject(principal, projectId, { priority: priority as never });
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to update project priority.' };
+  }
+}
+
+export async function reassignMemberTasksAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const projectId = String(form.get('projectId'));
+  const fromUserId = String(form.get('fromUserId'));
+  const toUserId = String(form.get('toUserId'));
+
+  const state = await run(async () => {
+    const { reassignAllMemberTasks } = await import('@/modules/project-management/services/project.service');
+    return reassignAllMemberTasks(principal, projectId, fromUserId, toUserId);
+  });
+
+  revalidatePath(`/pm/projects/${projectId}`);
+  revalidatePath(`/pm/resources`);
+  revalidatePath(`/dashboard`);
+  return state;
+}
+

@@ -50,7 +50,6 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
 
   const { task, blockers, downstreamCount, permissions } = detail;
 
-
   const [candidates, peers, projectTasks, assignableUsers] = await Promise.all([
     permissions.canHandover ? handoverCandidates(principal, task.id) : Promise.resolve([]),
     permissions.canHandover ? peersForHandover(principal, task.id) : Promise.resolve([]),
@@ -63,7 +62,11 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       : Promise.resolve([]),
     permissions.canAssign
       ? prisma.user.findMany({
-          where: { companyId: principal.companyId, status: 'ACTIVE' },
+          where: {
+            companyId: principal.companyId,
+            status: 'ACTIVE',
+            department: { code: { in: ['TECH', 'DESIGN', 'DIR'] } },
+          },
           select: { id: true, fullName: true, designation: true },
           orderBy: { fullName: 'asc' },
         })

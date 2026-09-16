@@ -4,12 +4,9 @@ import Link from 'next/link';
 import { Avatar } from '@/components/ui';
 import { signOut } from '@/app/actions/auth';
 import type { Principal } from '@/core/rbac/types';
-import { useShell } from './shell-context';
 import { formatName } from '@/core/utils/strings';
 
 export function Topbar({ principal, unread }: { principal: Principal; unread: number }) {
-  const { isCollapsed, toggleCollapsed } = useShell();
-
   const displayName = formatName(principal.fullName);
 
   // Format role to clean title (e.g. SUPER_ADMIN / DIRECTOR -> Director)
@@ -32,19 +29,6 @@ export function Topbar({ principal, unread }: { principal: Principal; unread: nu
         <Link href="/modules" className="text-nav-link text-ink md:hidden">
           Menu
         </Link>
-
-        {/* Desktop sidebar toggle button */}
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          title={isCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
-          className="hidden md:inline-flex items-center justify-center h-8 w-8 rounded-md border border-hairline text-muted hover:text-ink hover:bg-canvas-soft transition-colors"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-            <rect width="18" height="18" x="3" y="3" rx="2" />
-            <path d="M9 3v18" />
-          </svg>
-        </button>
 
         {/* User identification: First Name + Last Name and clean Role Title */}
         <div className="flex items-center gap-2">
