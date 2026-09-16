@@ -1,5 +1,5 @@
 import { prisma } from '@/core/db/prisma';
-import { can } from '@/core/rbac/engine';
+import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
 import type { Principal } from '@/core/rbac/types';
 import { addDays, startOfDay } from '@/core/utils/dates';
 import { projectVisibilityWhere } from './access';
@@ -106,8 +106,20 @@ export async function getDashboard(
   principal: Principal,
   period: 'week' | 'month' = 'week'
 ): Promise<UnifiedDashboardResult> {
-  const hasOversight = can(principal, 'pm.oversight');
-  const hasReportRead = can(principal, 'pm.report.read');
+  const isDirectorOrAdmin =
+    hasPermissionAnywhere(principal, 'pm.project.read.all') ||
+    principal.roleKeys.includes('DIRECTOR') ||
+    principal.roleKeys.includes('SUPER_ADMIN') ||
+    principal.roleKeys.includes('DEPARTMENT_HEAD') ||
+    principal.roleKeys.includes('TECHNICAL_HEAD');
+  const hasOversight =
+    isDirectorOrAdmin ||
+    can(principal, 'pm.oversight') ||
+    hasPermissionAnywhere(principal, 'pm.oversight');
+  const hasReportRead =
+    isDirectorOrAdmin ||
+    can(principal, 'pm.report.read') ||
+    hasPermissionAnywhere(principal, 'pm.report.read');
 
   if (!hasOversight && !hasReportRead) {
     return { kind: 'engineer' };

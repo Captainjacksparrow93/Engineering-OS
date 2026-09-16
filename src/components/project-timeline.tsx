@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { formatDate, formatRelativeDate, startOfDay } from '@/core/utils/dates';
+import { formatDate, startOfDay } from '@/core/utils/dates';
 import { cleanTaskTitle, formatName } from '@/core/utils/strings';
 
 export interface TimelineStep {
@@ -56,12 +56,7 @@ export function ProjectTimeline({
 
   const start = startOfDay(new Date(data.startDate ?? new Date())).getTime();
   const targetEnd = startOfDay(new Date(data.targetEndDate ?? new Date())).getTime();
-  const forecastEnd = data.forecastEndDate
-    ? startOfDay(new Date(data.forecastEndDate)).getTime()
-    : targetEnd;
-  const maxEnd = Math.max(targetEnd, forecastEnd);
-
-  const totalDurationMs = Math.max(maxEnd - start, 86400000 * 7); // At least 7 days
+  const totalDurationMs = Math.max(targetEnd - start, 86400000 * 7); // At least 7 days
   const todayMs = startOfDay(new Date()).getTime();
 
   // Helper to map timestamp to % along the timeline
@@ -73,7 +68,6 @@ export function ProjectTimeline({
   };
 
   const todayX = getXPercent(new Date());
-  const isForecastLate = forecastEnd > targetEnd;
 
   // Generate intermediate date ticks (approx 5 ticks)
   const ticks: Date[] = [];
@@ -122,21 +116,14 @@ export function ProjectTimeline({
           {/* Axis Header with dates */}
           <div className="relative h-6 text-caption text-muted border-b border-hairline-strong">
             <span className="absolute left-0 font-medium text-ink">
-              {formatDate(data.startDate)}
+              Start: {formatDate(data.startDate)}
             </span>
-            <span
-              className={clsx(
-                'absolute right-0 font-medium',
-                isForecastLate ? 'text-error' : 'text-ink'
-              )}
-            >
-              {isForecastLate
-                ? `Forecast: ${formatDate(data.forecastEndDate)} (+${Math.round((forecastEnd - targetEnd) / 86400000)}d)`
-                : `Target: ${formatDate(data.targetEndDate)}`}
+            <span className="absolute right-0 font-medium text-ink">
+              Target: {formatDate(data.targetEndDate)}
             </span>
 
             {/* Today marker label */}
-            {todayMs >= start && todayMs <= maxEnd ? (
+            {todayMs >= start && todayMs <= targetEnd ? (
               <span
                 className="absolute -top-1 -translate-x-1/2 text-caption font-semibold text-ink bg-surface-strong px-1.5 py-0.5 rounded"
                 style={{ left: `${todayX}%` }}
@@ -160,47 +147,41 @@ export function ProjectTimeline({
                 <div className="absolute inset-x-0 h-0.5 bg-hairline-strong" />
 
                 {/* Today vertical guideline */}
-                {todayMs >= start && todayMs <= maxEnd ? (
+                {todayMs >= start && todayMs <= targetEnd ? (
                   <div
                     className="absolute inset-y-0 w-px border-r border-dashed border-ink/40 pointer-events-none z-10"
                     style={{ left: `${todayX}%` }}
                   />
                 ) : null}
 
-                {/* Milestone Step Markers */}
-                {lane.steps.map((step) => {
-                  const isCompleted = step.status === 'COMPLETED';
-                  const dateToUse = isCompleted
-                    ? step.completedAt ?? step.submittedAt ?? step.plannedEnd
-                    : step.plannedEnd ?? step.plannedStart;
-                  const xPct = getXPercent(dateToUse);
+                {/* Milestone Step Markers (Completed only) */}
+                {lane.steps
+                  .filter((step) => step.status === 'COMPLETED')
+                  .map((step) => {
+                    const completionDate = step.completedAt ?? step.submittedAt ?? step.plannedEnd;
+                    const xPct = getXPercent(completionDate);
 
-                  const plannedEndMs = step.plannedEnd ? startOfDay(new Date(step.plannedEnd)).getTime() : null;
-                  const isOverdue = !isCompleted && plannedEndMs !== null && plannedEndMs < todayMs;
+                    const tooltipText = `Step ${step.stepNumber}: ${cleanTaskTitle(step.title)}\nStatus: Completed\nCompleted: ${formatDate(completionDate)}${step.completedBy ? ` by ${formatName(step.completedBy.fullName)}` : ''}`;
 
-                  return (
-                    <div
-                      key={step.taskId}
-                      className="absolute -translate-x-1/2 cursor-pointer z-20 group"
-                      style={{ left: `${xPct}%` }}
-                      onClick={() => setActiveStep(step)}
-                      onMouseEnter={() => setActiveStep(step)}
-                    >
-                      <button
-                        type="button"
-                        aria-label={`Step ${step.stepNumber}: ${step.title}`}
-                        className={clsx(
-                          'flex h-6 w-6 items-center justify-center rounded-pill text-caption font-semibold transition-transform group-hover:scale-110 focus:outline-none ring-2 ring-surface',
-                          isCompleted && 'bg-ink text-canvas font-mono',
-                          !isCompleted && !isOverdue && 'border-2 border-hairline-strong bg-surface text-muted font-mono hover:border-ink',
-                          isOverdue && 'border-2 border-error bg-surface text-error font-mono'
-                        )}
+                    return (
+                      <div
+                        key={step.taskId}
+                        className="absolute -translate-x-1/2 cursor-pointer z-20 group"
+                        style={{ left: `${xPct}%` }}
+                        onClick={() => setActiveStep(step)}
+                        onMouseEnter={() => setActiveStep(step)}
+                        title={tooltipText}
                       >
-                        {step.stepNumber}
-                      </button>
-                    </div>
-                  );
-                })}
+                        <button
+                          type="button"
+                          aria-label={`Step ${step.stepNumber}: ${step.title}`}
+                          className="flex h-6 w-6 items-center justify-center rounded-pill text-caption font-semibold transition-transform group-hover:scale-110 focus:outline-none ring-2 ring-surface bg-ink text-canvas font-mono"
+                        >
+                          {step.stepNumber}
+                        </button>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           ))}
@@ -223,8 +204,8 @@ export function ProjectTimeline({
         </div>
       </div>
 
-      {/* Popover / Details of Active Step */}
-      {activeStep ? (
+      {/* Popover / Details of Completed Active Step */}
+      {activeStep && activeStep.status === 'COMPLETED' ? (
         <div className="mt-3 rounded-lg border border-hairline bg-surface-strong/40 p-3 flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-150">
           <div className="space-y-0.5">
             <div className="flex items-center gap-2">
@@ -234,18 +215,11 @@ export function ProjectTimeline({
               <span className="code-chip text-caption">{activeStep.code}</span>
             </div>
             <p className="text-caption text-muted">
-              {activeStep.status === 'COMPLETED' ? (
-                <>
-                  Approved {formatDate(activeStep.completedAt)}
-                  {activeStep.completedBy ? ` by ${formatName(activeStep.completedBy.fullName)}` : ''}
-                  {activeStep.submittedAt ? ` · Submitted ${formatDate(activeStep.submittedAt)}` : ''}
-                </>
-              ) : (
-                <>
-                  Due {formatDate(activeStep.plannedEnd)} ({formatRelativeDate(activeStep.plannedEnd)})
-                  {activeStep.assignee ? ` · Held by ${formatName(activeStep.assignee.fullName)}` : ''}
-                </>
-              )}
+              <span className="inline-flex items-center gap-1.5 text-ink font-medium">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-600" />
+                Completed on {formatDate(activeStep.completedAt ?? activeStep.submittedAt ?? activeStep.plannedEnd)}
+                {activeStep.completedBy ? ` · Approved by ${formatName(activeStep.completedBy.fullName)}` : ''}
+              </span>
             </p>
           </div>
           <Link
@@ -262,12 +236,6 @@ export function ProjectTimeline({
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-3 w-3 rounded-pill bg-ink" /> Completed step
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block h-3 w-3 rounded-pill border-2 border-hairline-strong bg-surface" /> Upcoming step
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block h-3 w-3 rounded-pill border-2 border-error bg-surface" /> Overdue step
           </span>
         </div>
       </footer>

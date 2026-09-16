@@ -945,11 +945,11 @@ async function main() {
       name: 'Dhrupin Vithalbhai Vaghasiya',
       email: 'dhrupin.vaghasiya@acsengitech.com',
       designation: 'Asst. Manager',
-      grade: 'MANAGER',
+      grade: 'SENIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0061',
+      manager: 'ACS-0063',
       skills: ['project coordination', 'vendor follow up', 'scheduling'],
-      roles: [{ key: 'PROJECT_MANAGER', scopeType: 'GLOBAL' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
     },
     {
       code: 'ACS-0071',
@@ -1000,11 +1000,11 @@ async function main() {
       name: 'Munaf Anavarbhai Multani',
       email: 'munaf.multani@acsengitech.com',
       designation: 'Asst. Manager',
-      grade: 'MANAGER',
+      grade: 'SENIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0061',
+      manager: 'ACS-0074',
       skills: ['site management', 'resource planning'],
-      roles: [{ key: 'PROJECT_MANAGER', scopeType: 'GLOBAL' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
     },
     {
       code: 'ACS-0076',
@@ -1295,20 +1295,16 @@ async function main() {
     await prisma.department.update({ where: { id: departmentId.get('STORES')! }, data: { headId: userId.get('ACS-0024') } });
   }
 
-  // Grant role assignments
+  // Grant role assignments cleanly
+  await prisma.roleAssignment.deleteMany({});
   for (const person of people) {
     for (const grant of person.roles) {
       const rid = roleId.get(grant.key);
       if (!rid) continue;
       const scopeId = grant.scope ? departmentId.get(grant.scope) ?? null : null;
-      const existing = await prisma.roleAssignment.findFirst({
-        where: { userId: userId.get(person.code)!, roleId: rid, scopeType: grant.scopeType, scopeId },
+      await prisma.roleAssignment.create({
+        data: { userId: userId.get(person.code)!, roleId: rid, scopeType: grant.scopeType, scopeId },
       });
-      if (!existing) {
-        await prisma.roleAssignment.create({
-          data: { userId: userId.get(person.code)!, roleId: rid, scopeType: grant.scopeType, scopeId },
-        });
-      }
     }
   }
 
@@ -1316,53 +1312,102 @@ async function main() {
   const projectSeeds = [
     {
       code: 'PRJ-2026-001',
-      name: 'Tata Chemicals - MCC & PCC Panels',
+      name: 'Tata Chemicals - PLC Automation',
       clientName: 'Tata Chemicals Ltd',
       poNumber: 'TCL/PO/2026/0781',
       orderValue: 12_400_000,
-      panelType: 'MCC + PCC, IP54, IEC 61439',
+      panelType: 'PLC Programming & Simulation',
       panelCount: 14,
       priority: 'HIGH' as const,
       status: 'IN_PROGRESS' as const,
-      startDate: day(-30),
-      targetEndDate: day(45),
+      startDate: day(-20),
+      targetEndDate: day(40),
       manager: 'ACS-0063', // Parth Dasharathbhai Nagar
       sponsor: 'ACS-0002', // Satishkumar Mohanbhai Nagar
       department: 'TECH',
     },
     {
       code: 'PRJ-2026-002',
-      name: 'Sunrise Cement - APFC & Feeder Pillars',
+      name: 'Sunrise Cement - SCADA Automation',
       clientName: 'Sunrise Cement Industries',
       poNumber: 'SCI/PO/26/114',
       orderValue: 5_600_000,
-      panelType: 'APFC 400kVAr + Feeder Pillar',
+      panelType: 'SCADA Programming & Simulation',
       panelCount: 6,
       priority: 'MEDIUM' as const,
       status: 'IN_PROGRESS' as const,
       startDate: day(-12),
-      targetEndDate: day(60),
+      targetEndDate: day(45),
       manager: 'ACS-0074', // Paras Rajendrakumar Prajapati
       sponsor: 'ACS-0003', // Bhavesh Ishwarbhai Prajapati
       department: 'TECH',
     },
     {
       code: 'PRJ-2026-003',
-      name: 'Godrej Foods - PLC Automation Panels',
+      name: 'Godrej Foods - HMI Automation',
       clientName: 'Godrej Foods Pvt Ltd',
       poNumber: 'GF/PO/2026/0034',
       orderValue: 8_900_000,
-      panelType: 'PLC control panels with SCADA',
+      panelType: 'HMI Programming & Simulation',
       panelCount: 9,
       priority: 'CRITICAL' as const,
-      status: 'PLANNING' as const,
-      startDate: day(-4),
-      targetEndDate: day(75),
-      manager: 'ACS-0070', // Dhrupin Vithalbhai Vaghasiya
+      status: 'IN_PROGRESS' as const,
+      startDate: day(-6),
+      targetEndDate: day(50),
+      manager: 'ACS-0063', // Parth Dasharathbhai Nagar
       sponsor: 'ACS-0004', // Shaktikumar Vasava
       department: 'TECH',
     },
   ];
+
+  // Purge any old mock/test projects not in the standard set
+  const standardCodes = projectSeeds.map((p) => p.code);
+  const oldProjects = await prisma.project.findMany({
+    where: { code: { notIn: standardCodes } },
+    select: { id: true },
+  });
+  if (oldProjects.length > 0) {
+    const oldIds = oldProjects.map((p) => p.id);
+    await prisma.taskProgressLog.deleteMany({ where: { task: { projectId: { in: oldIds } } } });
+    await prisma.taskHandover.deleteMany({ where: { task: { projectId: { in: oldIds } } } });
+    await prisma.projectHandover.deleteMany({ where: { projectId: { in: oldIds } } });
+    await prisma.taskAssignment.deleteMany({ where: { task: { projectId: { in: oldIds } } } });
+    await prisma.taskDependency.deleteMany({
+      where: {
+        OR: [
+          { predecessor: { projectId: { in: oldIds } } },
+          { successor: { projectId: { in: oldIds } } },
+        ],
+      },
+    });
+    await prisma.task.deleteMany({ where: { projectId: { in: oldIds } } });
+    await prisma.projectMember.deleteMany({ where: { projectId: { in: oldIds } } });
+    await prisma.roleAssignment.deleteMany({ where: { scopeType: 'PROJECT', scopeId: { in: oldIds } } });
+    await prisma.project.deleteMany({ where: { id: { in: oldIds } } });
+  }
+
+  // Also clean up tasks, dependencies, assignments, logs for standard projects to refresh to exact 13 steps
+  const existingStandardProjects = await prisma.project.findMany({
+    where: { code: { in: standardCodes } },
+    select: { id: true },
+  });
+  if (existingStandardProjects.length > 0) {
+    const stdIds = existingStandardProjects.map((p) => p.id);
+    await prisma.taskProgressLog.deleteMany({ where: { task: { projectId: { in: stdIds } } } });
+    await prisma.taskHandover.deleteMany({ where: { task: { projectId: { in: stdIds } } } });
+    await prisma.projectHandover.deleteMany({ where: { projectId: { in: stdIds } } });
+    await prisma.taskAssignment.deleteMany({ where: { task: { projectId: { in: stdIds } } } });
+    await prisma.taskDependency.deleteMany({
+      where: {
+        OR: [
+          { predecessor: { projectId: { in: stdIds } } },
+          { successor: { projectId: { in: stdIds } } },
+        ],
+      },
+    });
+    await prisma.task.deleteMany({ where: { projectId: { in: stdIds } } });
+    await prisma.projectMember.deleteMany({ where: { projectId: { in: stdIds } } });
+  }
 
   const projectId = new Map<string, string>();
   for (const seed of projectSeeds) {
@@ -1387,6 +1432,17 @@ async function main() {
         departmentId: departmentId.get(seed.department),
       },
       update: {
+        name: seed.name,
+        clientName: seed.clientName,
+        description: `Design, manufacture, test and dispatch of ${seed.panelType}.`,
+        poNumber: seed.poNumber,
+        orderValue: seed.orderValue,
+        panelType: seed.panelType,
+        panelCount: seed.panelCount,
+        priority: seed.priority,
+        status: seed.status,
+        startDate: seed.startDate,
+        targetEndDate: seed.targetEndDate,
         managerId: userId.get(seed.manager)!,
         sponsorId: userId.get(seed.sponsor)!,
         departmentId: departmentId.get(seed.department),
@@ -1418,10 +1474,7 @@ async function main() {
     key: string;
     project: string;
     title: string;
-    parent?: string;
-    type?: 'PROJECT' | 'ADHOC' | 'PHASE';
     hours: number;
-    priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
     start: number;
     end: number;
     skills?: string[];
@@ -1432,126 +1485,315 @@ async function main() {
   }
 
   const taskSeeds: TaskSeed[] = [
-    // ---- PRJ-2026-001 (Tata Chemicals) --------------------------------------
-    { key: 'P1-PH1', project: 'PRJ-2026-001', title: 'Engineering & Design', type: 'PHASE', hours: 0, start: -30, end: 5 },
+    // =========================================================================
+    // PRJ-2026-001: Tata Chemicals — PLC Automation (13 standard checklist steps)
+    // PM: Parth Dasharathbhai Nagar (ACS-0063)
+    // =========================================================================
     {
-      key: 'P1-T1', project: 'PRJ-2026-001', parent: 'P1-PH1', title: 'General arrangement (GA) drawings for MCC',
-      hours: 32, start: -30, end: -22, skills: ['GA drawing', 'AutoCAD'], assignee: 'ACS-0028', percent: 100, status: 'COMPLETED',
+      key: 'PRJ-001-T01', project: 'PRJ-2026-001',
+      title: 'Review Control Philosophy / Functional Requirements',
+      hours: 16, start: -20, end: -18, skills: ['PLC automation', 'control philosophy'],
+      assignee: 'ACS-0064', percent: 100, status: 'COMPLETED',
     },
     {
-      key: 'P1-T2', project: 'PRJ-2026-001', parent: 'P1-PH1', title: 'Power & control schematics - MCC feeders',
-      hours: 48, start: -21, end: -10, skills: ['schematics', 'EPLAN'], assignee: 'ACS-0029', percent: 100, status: 'COMPLETED',
-      dependsOn: [{ on: 'P1-T1' }],
+      key: 'PRJ-001-T02', project: 'PRJ-2026-001',
+      title: 'Verify I/O List and Tag List as per Approved Documents',
+      hours: 16, start: -18, end: -16, skills: ['I/O list', 'tag list'],
+      assignee: 'ACS-0065', percent: 100, status: 'COMPLETED',
+      dependsOn: [{ on: 'PRJ-001-T01' }],
     },
     {
-      key: 'P1-T3', project: 'PRJ-2026-001', parent: 'P1-PH1', title: 'Busbar sizing and short-circuit calculations',
-      hours: 24, start: -15, end: -6, skills: ['busbar calculation'], assignee: 'ACS-0030', percent: 100, status: 'COMPLETED',
-      dependsOn: [{ on: 'P1-T2', type: 'START_TO_START', lag: 5 }],
+      key: 'PRJ-001-T03', project: 'PRJ-2026-001',
+      title: 'Verify PLC Hardware Configuration as per Electrical Dwg',
+      hours: 8, start: -16, end: -15, skills: ['hardware configuration'],
+      assignee: 'ACS-0066', percent: 100, status: 'COMPLETED',
+      dependsOn: [{ on: 'PRJ-001-T02' }],
     },
     {
-      key: 'P1-T4', project: 'PRJ-2026-001', parent: 'P1-PH1', title: 'Bill of Materials (BOM) & switchgear release',
-      hours: 20, start: -9, end: -2, skills: ['BOM generation'], assignee: 'ACS-0031', percent: 100, status: 'COMPLETED',
-      dependsOn: [{ on: 'P1-T2' }, { on: 'P1-T3' }],
+      key: 'PRJ-001-T04', project: 'PRJ-2026-001',
+      title: 'Verify PLC CPU, Comm Modules & Network Configuration',
+      hours: 8, start: -15, end: -14, skills: ['CPU config', 'Profinet'],
+      assignee: 'ACS-0068', percent: 100, status: 'COMPLETED',
+      dependsOn: [{ on: 'PRJ-001-T03' }],
     },
     {
-      key: 'P1-T5', project: 'PRJ-2026-001', parent: 'P1-PH1', title: 'Customer drawing approval & revision clearance',
-      hours: 8, start: -3, end: 5, skills: ['project management'], assignee: 'ACS-0063', percent: 80, status: 'IN_PROGRESS',
-      dependsOn: [{ on: 'P1-T4' }],
+      key: 'PRJ-001-T05', project: 'PRJ-2026-001',
+      title: 'DI Mapping',
+      hours: 16, start: -14, end: -12, skills: ['DI mapping', 'logic programming'],
+      assignee: 'ACS-0067', percent: 100, status: 'COMPLETED',
+      dependsOn: [{ on: 'PRJ-001-T04' }],
+    },
+    {
+      key: 'PRJ-001-T06', project: 'PRJ-2026-001',
+      title: 'DQ Mapping',
+      hours: 16, start: -12, end: -10, skills: ['DQ mapping', 'logic programming'],
+      assignee: 'ACS-0069', percent: 60, status: 'IN_PROGRESS',
+      dependsOn: [{ on: 'PRJ-001-T05' }],
+    },
+    {
+      key: 'PRJ-001-T07', project: 'PRJ-2026-001',
+      title: 'Analog Input Scaling, Engineering Units & Range Settings',
+      hours: 16, start: -10, end: -8, skills: ['analog scaling', 'sensor scaling'],
+      assignee: 'ACS-0071', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-001-T06' }],
+    },
+    {
+      key: 'PRJ-001-T08', project: 'PRJ-2026-001',
+      title: 'Analog Output / PID Control Logic',
+      hours: 24, start: -8, end: -5, skills: ['PID control', 'loop tuning'],
+      assignee: 'ACS-0072', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-001-T07' }],
+    },
+    {
+      key: 'PRJ-001-T09', project: 'PRJ-2026-001',
+      title: 'Motor Control Logic, Faceplate, Alarms & Animation',
+      hours: 24, start: -5, end: -2, skills: ['motor control', 'alarms logic'],
+      assignee: 'ACS-0064', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-001-T08' }],
+    },
+    {
+      key: 'PRJ-001-T10', project: 'PRJ-2026-001',
+      title: 'Valve Control Logic, Faceplate, Alarms & Animation',
+      hours: 16, start: -2, end: 0, skills: ['valve control', 'interlocks'],
+      assignee: 'ACS-0068', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-001-T09' }],
+    },
+    {
+      key: 'PRJ-001-T11', project: 'PRJ-2026-001',
+      title: 'Auto Sequence Complete',
+      hours: 32, start: 0, end: 4, skills: ['auto sequence', 'interlocking logic'],
+      assignee: 'ACS-0069', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-001-T10' }],
+    },
+    {
+      key: 'PRJ-001-T12', project: 'PRJ-2026-001',
+      title: 'Simulation Trial of Manual Function',
+      hours: 16, start: 4, end: 6, skills: ['simulation', 'manual testing'],
+      assignee: 'ACS-0067', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-001-T11' }],
+    },
+    {
+      key: 'PRJ-001-T13', project: 'PRJ-2026-001',
+      title: 'Simulation with Auto sequence trial and SCADA/HMI',
+      hours: 24, start: 6, end: 9, skills: ['full simulation', 'FAT signoff'],
+      assignee: 'ACS-0064', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-001-T12' }],
     },
 
-    { key: 'P1-PH2', project: 'PRJ-2026-001', title: 'Fabrication & Assembly', type: 'PHASE', hours: 0, start: -8, end: 28 },
+    // =========================================================================
+    // PRJ-2026-002: Sunrise Cement — SCADA Automation (13 standard checklist steps)
+    // PM: Paras Rajendrakumar Prajapati (ACS-0074)
+    // =========================================================================
     {
-      key: 'P1-T6', project: 'PRJ-2026-001', parent: 'P1-PH2', title: 'Enclosure sheet metal fabrication & 7-tank powder coating',
-      hours: 64, start: -8, end: 12, skills: ['sheet metal', 'SolidWorks'], assignee: 'ACS-0032', percent: 70, status: 'IN_PROGRESS',
-      dependsOn: [{ on: 'P1-T4' }],
+      key: 'PRJ-002-T01', project: 'PRJ-2026-002',
+      title: 'Review P&ID and requirement',
+      hours: 16, start: -12, end: -10, skills: ['SCADA', 'P&ID review'],
+      assignee: 'ACS-0076', percent: 100, status: 'COMPLETED',
     },
     {
-      key: 'P1-T7', project: 'PRJ-2026-001', parent: 'P1-PH2', title: 'Copper busbar cutting, bending and heat-shrink sleeving',
-      hours: 40, start: 6, end: 18, skills: ['busbar fabrication'], assignee: 'ACS-0035', percent: 25, status: 'IN_PROGRESS',
-      dependsOn: [{ on: 'P1-T6', type: 'START_TO_START', lag: 10 }, { on: 'P1-T3' }],
+      key: 'PRJ-002-T02', project: 'PRJ-2026-002',
+      title: 'Diagnostic Screen of DI',
+      hours: 8, start: -10, end: -9, skills: ['SCADA graphics', 'diagnostic screens'],
+      assignee: 'ACS-0077', percent: 100, status: 'COMPLETED',
+      dependsOn: [{ on: 'PRJ-002-T01' }],
     },
     {
-      key: 'P1-T8', project: 'PRJ-2026-001', parent: 'P1-PH2', title: 'Switchgear component mounting & chassis fitting',
-      hours: 56, start: 13, end: 25, skills: ['enclosure assembly', 'switchgear mounting'], assignee: 'ACS-0041', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'P1-T6' }],
+      key: 'PRJ-002-T03', project: 'PRJ-2026-002',
+      title: 'Diagnostic Screen of DQ',
+      hours: 8, start: -9, end: -8, skills: ['SCADA graphics', 'diagnostic screens'],
+      assignee: 'ACS-0078', percent: 100, status: 'COMPLETED',
+      dependsOn: [{ on: 'PRJ-002-T02' }],
     },
     {
-      key: 'P1-T9', project: 'PRJ-2026-001', parent: 'P1-PH2', title: 'Power and control wiring with ferrule labeling',
-      hours: 80, start: 19, end: 32, skills: ['power wiring', 'control wiring'], assignee: 'ACS-0044', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'P1-T7' }, { on: 'P1-T8' }],
+      key: 'PRJ-002-T04', project: 'PRJ-2026-002',
+      title: 'Diagnostic Screen of AI',
+      hours: 8, start: -8, end: -7, skills: ['analog diagnostics', 'SCADA screens'],
+      assignee: 'ACS-0079', percent: 50, status: 'IN_PROGRESS',
+      dependsOn: [{ on: 'PRJ-002-T03' }],
+    },
+    {
+      key: 'PRJ-002-T05', project: 'PRJ-2026-002',
+      title: 'Diagnostic Screen of AQ',
+      hours: 8, start: -7, end: -6, skills: ['SCADA screens'],
+      assignee: 'ACS-0080', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-002-T04' }],
+    },
+    {
+      key: 'PRJ-002-T06', project: 'PRJ-2026-002',
+      title: 'Scaling Screen of Analog parameter',
+      hours: 16, start: -6, end: -4, skills: ['parameter scaling', 'SCADA'],
+      assignee: 'ACS-0081', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-002-T05' }],
+    },
+    {
+      key: 'PRJ-002-T07', project: 'PRJ-2026-002',
+      title: 'Faceplate Development',
+      hours: 24, start: -4, end: -1, skills: ['faceplates', 'custom popups'],
+      assignee: 'ACS-0076', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-002-T06' }],
+    },
+    {
+      key: 'PRJ-002-T08', project: 'PRJ-2026-002',
+      title: 'Alarm + History development',
+      hours: 16, start: -1, end: 1, skills: ['alarm logging', 'historian'],
+      assignee: 'ACS-0077', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-002-T07' }],
+    },
+    {
+      key: 'PRJ-002-T09', project: 'PRJ-2026-002',
+      title: 'Trend development',
+      hours: 16, start: 1, end: 3, skills: ['real-time trends', 'historical trends'],
+      assignee: 'ACS-0078', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-002-T08' }],
+    },
+    {
+      key: 'PRJ-002-T10', project: 'PRJ-2026-002',
+      title: 'P&ID Developed without tag',
+      hours: 24, start: 3, end: 6, skills: ['mimic graphics', 'P&ID drawing'],
+      assignee: 'ACS-0080', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-002-T09' }],
+    },
+    {
+      key: 'PRJ-002-T11', project: 'PRJ-2026-002',
+      title: 'P&ID developed with Tag Complete',
+      hours: 24, start: 6, end: 9, skills: ['tag animation', 'PLC tag linking'],
+      assignee: 'ACS-0079', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-002-T10' }],
+    },
+    {
+      key: 'PRJ-002-T12', project: 'PRJ-2026-002',
+      title: 'Communication Architect',
+      hours: 16, start: 9, end: 11, skills: ['OPC UA', 'industrial networks'],
+      assignee: 'ACS-0081', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-002-T11' }],
+    },
+    {
+      key: 'PRJ-002-T13', project: 'PRJ-2026-002',
+      title: 'Simulation Trial',
+      hours: 24, start: 11, end: 14, skills: ['SCADA simulation', 'FAT signoff'],
+      assignee: 'ACS-0076', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-002-T12' }],
     },
 
-    { key: 'P1-PH3', project: 'PRJ-2026-001', title: 'Testing, Inspection & Dispatch', type: 'PHASE', hours: 0, start: 30, end: 45 },
+    // =========================================================================
+    // PRJ-2026-003: Godrej Foods — HMI Automation (13 standard checklist steps)
+    // PM: Parth Dasharathbhai Nagar (ACS-0063)
+    // =========================================================================
     {
-      key: 'P1-T10', project: 'PRJ-2026-001', parent: 'P1-PH3', title: 'Internal routine testing: HV, megger, trip interlocks',
-      hours: 24, start: 33, end: 38, skills: ['routine testing', 'HV testing'], assignee: 'ACS-0058', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'P1-T9' }],
+      key: 'PRJ-003-T01', project: 'PRJ-2026-003',
+      title: 'Review P&ID and HMI screen requirements',
+      hours: 16, start: -6, end: -4, skills: ['HMI screens', 'P&ID review'],
+      assignee: 'ACS-0070', percent: 100, status: 'COMPLETED',
     },
     {
-      key: 'P1-T11', project: 'PRJ-2026-001', parent: 'P1-PH3', title: 'Client Factory Acceptance Test (FAT) & Dispatch clearance',
-      hours: 16, start: 39, end: 45, skills: ['FAT coordination'], assignee: 'ACS-0057', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'P1-T10' }],
-    },
-
-    // ---- PRJ-2026-002 (Sunrise Cement) --------------------------------------
-    { key: 'P2-PH1', project: 'PRJ-2026-002', title: 'Engineering & Fabrication', type: 'PHASE', hours: 0, start: -12, end: 35 },
-    {
-      key: 'P2-T1', project: 'PRJ-2026-002', parent: 'P2-PH1', title: 'APFC capacitor sizing and harmonic study verification',
-      hours: 24, start: -12, end: -4, skills: ['APFC panel design'], assignee: 'ACS-0033', percent: 100, status: 'COMPLETED',
+      key: 'PRJ-003-T02', project: 'PRJ-2026-003',
+      title: 'Diagnostic Screen of DI',
+      hours: 8, start: -4, end: -3, skills: ['HMI graphics', 'diagnostics'],
+      assignee: 'ACS-0065', percent: 100, status: 'COMPLETED',
+      dependsOn: [{ on: 'PRJ-003-T01' }],
     },
     {
-      key: 'P2-T2', project: 'PRJ-2026-002', parent: 'P2-PH1', title: 'APFC schematic & stage controller drawing',
-      hours: 32, start: -3, end: 8, skills: ['schematics'], assignee: 'ACS-0034', percent: 65, status: 'IN_PROGRESS',
-      dependsOn: [{ on: 'P2-T1' }],
+      key: 'PRJ-003-T03', project: 'PRJ-2026-003',
+      title: 'Diagnostic Screen of DQ',
+      hours: 8, start: -3, end: -2, skills: ['HMI graphics', 'diagnostics'],
+      assignee: 'ACS-0066', percent: 30, status: 'IN_PROGRESS',
+      dependsOn: [{ on: 'PRJ-003-T02' }],
     },
     {
-      key: 'P2-T3', project: 'PRJ-2026-002', parent: 'P2-PH1', title: 'Feeder pillar enclosure fabrication & louvers',
-      hours: 48, start: 2, end: 18, skills: ['sheet metal'], assignee: 'ACS-0042', percent: 20, status: 'IN_PROGRESS',
-      dependsOn: [{ on: 'P2-T1' }],
+      key: 'PRJ-003-T04', project: 'PRJ-2026-003',
+      title: 'Diagnostic Screen of AI',
+      hours: 8, start: -2, end: -1, skills: ['analog diagnostics', 'HMI'],
+      assignee: 'ACS-0067', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-003-T03' }],
     },
     {
-      key: 'P2-T4', project: 'PRJ-2026-002', parent: 'P2-PH1', title: 'Capacitor bank mounting, detuned reactors & wiring',
-      hours: 56, start: 19, end: 34, skills: ['power wiring'], assignee: 'ACS-0045', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'P2-T2' }, { on: 'P2-T3' }],
+      key: 'PRJ-003-T05', project: 'PRJ-2026-003',
+      title: 'Diagnostic Screen of AQ',
+      hours: 8, start: -1, end: 0, skills: ['HMI diagnostics'],
+      assignee: 'ACS-0072', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-003-T04' }],
     },
     {
-      key: 'P2-T5', project: 'PRJ-2026-002', parent: 'P2-PH1', title: 'PF controller calibration, step switching test & dispatch',
-      hours: 20, start: 35, end: 42, skills: ['routine testing reports'], assignee: 'ACS-0059', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'P2-T4' }],
-    },
-
-    // ---- PRJ-2026-003 (Godrej Foods) ---------------------------------------
-    { key: 'P3-PH1', project: 'PRJ-2026-003', title: 'Automation Architecture', type: 'PHASE', hours: 0, start: -4, end: 30 },
-    {
-      key: 'P3-T1', project: 'PRJ-2026-003', parent: 'P3-PH1', title: 'PLC I/O allocation list and network architecture (Profinet)',
-      hours: 40, start: -4, end: 10, skills: ['PLC automation', 'SCADA'], assignee: 'ACS-0064', percent: 45, status: 'IN_PROGRESS',
+      key: 'PRJ-003-T06', project: 'PRJ-2026-003',
+      title: 'Scaling Screen of Analog parameter',
+      hours: 16, start: 0, end: 2, skills: ['analog scaling', 'HMI touch'],
+      assignee: 'ACS-0073', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-003-T05' }],
     },
     {
-      key: 'P3-T2', project: 'PRJ-2026-003', parent: 'P3-PH1', title: 'SCADA screen design, alarm tags and recipe manager',
-      hours: 60, start: 11, end: 28, skills: ['SCADA', 'PLC automation'], assignee: 'ACS-0068', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'P3-T1' }],
+      key: 'PRJ-003-T07', project: 'PRJ-2026-003',
+      title: 'Faceplate Development',
+      hours: 24, start: 2, end: 5, skills: ['faceplate templates', 'popups'],
+      assignee: 'ACS-0068', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-003-T06' }],
     },
     {
-      key: 'P3-T3', project: 'PRJ-2026-003', parent: 'P3-PH1', title: 'VFD drive configuration and Profinet communication setup',
-      hours: 32, start: 8, end: 22, skills: ['drives commissioning'], assignee: 'ACS-0069', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'P3-T1', type: 'START_TO_START', lag: 8 }],
+      key: 'PRJ-003-T08', project: 'PRJ-2026-003',
+      title: 'Alarm + History development',
+      hours: 16, start: 5, end: 7, skills: ['alarm banners', 'history tables'],
+      assignee: 'ACS-0069', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-003-T07' }],
+    },
+    {
+      key: 'PRJ-003-T09', project: 'PRJ-2026-003',
+      title: 'Trend development',
+      hours: 16, start: 7, end: 9, skills: ['HMI trend displays'],
+      assignee: 'ACS-0071', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-003-T08' }],
+    },
+    {
+      key: 'PRJ-003-T10', project: 'PRJ-2026-003',
+      title: 'Screen Navigation & Layouts',
+      hours: 16, start: 9, end: 11, skills: ['navigation hierarchy', 'header/footer'],
+      assignee: 'ACS-0070', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-003-T09' }],
+    },
+    {
+      key: 'PRJ-003-T11', project: 'PRJ-2026-003',
+      title: 'HMI Tag Linking with PLC DBs',
+      hours: 24, start: 11, end: 14, skills: ['tag linking', 'PLC DB integration'],
+      assignee: 'ACS-0064', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-003-T10' }],
+    },
+    {
+      key: 'PRJ-003-T12', project: 'PRJ-2026-003',
+      title: 'Communication Configuration & Drivers',
+      hours: 8, start: 14, end: 15, skills: ['Ethernet IP', 'driver setup'],
+      assignee: 'ACS-0068', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-003-T11' }],
+    },
+    {
+      key: 'PRJ-003-T13', project: 'PRJ-2026-003',
+      title: 'Simulation Trial',
+      hours: 16, start: 15, end: 17, skills: ['HMI runtime simulation', 'FAT signoff'],
+      assignee: 'ACS-0064', percent: 0, status: 'TODO',
+      dependsOn: [{ on: 'PRJ-003-T12' }],
     },
   ];
 
   const taskId = new Map<string, string>();
   for (const seed of taskSeeds) {
     const pid = projectId.get(seed.project)!;
+    const isCompleted = seed.status === 'COMPLETED';
+    const isInProgress = seed.status === 'IN_PROGRESS';
+    const taskAssigneeId = seed.assignee ? userId.get(seed.assignee) : undefined;
+
     const task = await prisma.task.upsert({
       where: { projectId_code: { projectId: pid, code: seed.key } },
       create: {
         projectId: pid,
         code: seed.key,
         title: seed.title,
-        type: seed.type ?? 'PROJECT',
+        type: 'PROJECT',
         estimatedHours: seed.hours,
         plannedStart: day(seed.start),
         plannedEnd: day(seed.end),
-        priority: seed.priority ?? 'MEDIUM',
+        actualStart: isCompleted || isInProgress ? day(seed.start) : null,
+        actualEnd: isCompleted ? day(seed.end) : null,
+        submittedAt: isCompleted ? day(seed.end) : null,
+        completedAt: isCompleted ? day(seed.end) : null,
+        completedById: isCompleted ? (taskAssigneeId ?? userId.get('ACS-0063')!) : null,
+        priority: 'MEDIUM',
         status: seed.status ?? 'TODO',
         percentComplete: seed.percent ?? 0,
         requiredSkills: seed.skills ?? [],
@@ -1560,20 +1802,18 @@ async function main() {
       update: {
         title: seed.title,
         estimatedHours: seed.hours,
+        plannedStart: day(seed.start),
+        plannedEnd: day(seed.end),
+        actualStart: isCompleted || isInProgress ? day(seed.start) : null,
+        actualEnd: isCompleted ? day(seed.end) : null,
+        submittedAt: isCompleted ? day(seed.end) : null,
+        completedAt: isCompleted ? day(seed.end) : null,
+        completedById: isCompleted ? (taskAssigneeId ?? userId.get('ACS-0063')!) : null,
         percentComplete: seed.percent ?? 0,
         status: seed.status ?? 'TODO',
       },
     });
     taskId.set(seed.key, task.id);
-  }
-
-  // Set parent pointers
-  for (const seed of taskSeeds) {
-    if (!seed.parent) continue;
-    await prisma.task.update({
-      where: { id: taskId.get(seed.key)! },
-      data: { parentId: taskId.get(seed.parent)! },
-    });
   }
 
   // Set task assignments
@@ -1639,10 +1879,10 @@ async function main() {
   }
 
   // Handover seed
-  const handoverTask = taskId.get('P1-T6');
+  const handoverTask = taskId.get('PRJ-001-T06');
   if (handoverTask) {
-    const from = userId.get('ACS-0032')!; // Darshan Upendrabhai Prajapati
-    const to = userId.get('ACS-0030')!;   // Aniq Istiyak Farooqui
+    const from = userId.get('ACS-0069')!; // Dixit Prajapati
+    const to = userId.get('ACS-0067')!;   // Het Patel
     const already = await prisma.taskHandover.findFirst({ where: { taskId: handoverTask, status: 'PENDING' } });
     if (!already) {
       await prisma.taskHandover.create({
@@ -1650,9 +1890,9 @@ async function main() {
           taskId: handoverTask,
           fromUserId: from,
           toUserId: to,
-          reason: 'Site visit for Tata Chemicals plant survey - handing over enclosure revision.',
-          remainingPercent: 30,
-          remainingHours: 19.2,
+          reason: 'Site visit for Tata Chemicals plant survey - handing over DQ mapping completion.',
+          remainingPercent: 40,
+          remainingHours: 6.4,
         },
       });
     }
@@ -1660,11 +1900,12 @@ async function main() {
 
   // Leaves
   const leaveSeeds = [
-    { user: 'ACS-0028', from: 3, to: 5, reason: 'Family function' },
-    { user: 'ACS-0058', from: 1, to: 2, reason: 'Certification exam' },
+    { user: 'ACS-0065', from: 3, to: 5, reason: 'Family function' },
+    { user: 'ACS-0078', from: 2, to: 4, reason: 'Certification exam' },
   ];
   for (const seed of leaveSeeds) {
-    const uid = userId.get(seed.user)!;
+    const uid = userId.get(seed.user);
+    if (!uid) continue;
     const already = await prisma.leave.findFirst({ where: { userId: uid, startDate: day(seed.from) } });
     if (already) continue;
     await prisma.leave.create({
@@ -1673,7 +1914,7 @@ async function main() {
   }
 
   console.log(`Successfully seeded ${people.length} people across ${departmentTree.length} departments!`);
-  console.log(`3 live switchgear projects seeded with full WBS, dependencies, assignments and handovers.`);
+  console.log(`3 live automation projects seeded with 13 standard checklist tasks each, dependencies, assignments and handovers.`);
   console.log(`Primary Super Admin: admin@acsengitech.com / <SEED_PASSWORD>`);
 }
 

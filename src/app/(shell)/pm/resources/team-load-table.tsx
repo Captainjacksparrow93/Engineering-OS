@@ -151,7 +151,6 @@ export function TeamLoadTable({ workloads }: { workloads: Workload[] }) {
                   <th className="px-4 py-3 text-right">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-hairline bg-canvas">
                 {sorted.map((workload) => {
                   const isExpanded = expandedPersonIds.has(workload.person.id);
                   const freeDays = Math.max(0, Math.round((workload.freeHours / 8) * 10) / 10);
@@ -159,19 +158,18 @@ export function TeamLoadTable({ workloads }: { workloads: Workload[] }) {
                   const totalDays = workload.workingDays;
 
                   return (
-                    <tr key={workload.person.id} className="group transition-colors">
-                      <td colSpan={6} className="p-0">
-                        {/* Summary Row */}
-                        <div
-                          onClick={() => toggleExpand(workload.person.id)}
-                          className={clsx(
-                            'flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-surface-strong/50 transition-colors',
-                            isExpanded ? 'bg-surface-strong/30' : ''
-                          )}
-                        >
-                          {/* Person Info */}
-                          <div className="flex items-center gap-3 w-64 shrink-0 min-w-0">
-                            <span className="text-caption text-muted w-3 text-center">
+                    <tbody key={workload.person.id} className="divide-y divide-hairline">
+                      <tr
+                        onClick={() => toggleExpand(workload.person.id)}
+                        className={clsx(
+                          'group cursor-pointer transition-colors hover:bg-surface-strong/50',
+                          isExpanded ? 'bg-surface-strong/30' : ''
+                        )}
+                      >
+                        {/* Person Info */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-caption text-muted w-3 text-center shrink-0">
                               {isExpanded ? '▼' : '▶'}
                             </span>
                             <Avatar
@@ -188,9 +186,11 @@ export function TeamLoadTable({ workloads }: { workloads: Workload[] }) {
                               </p>
                             </div>
                           </div>
+                        </td>
 
-                          {/* Load Bar */}
-                          <div className="w-48 shrink-0 px-4">
+                        {/* Load Bar */}
+                        <td className="px-4 py-3 w-48">
+                          <div className="w-full">
                             <div className="flex items-center justify-between text-caption text-muted mb-1 font-mono">
                               <span>{commDays}d of {totalDays}d</span>
                               <span
@@ -214,18 +214,20 @@ export function TeamLoadTable({ workloads }: { workloads: Workload[] }) {
                               }
                             />
                           </div>
+                        </td>
 
-                          {/* Free Capacity in Days */}
-                          <div className="w-24 shrink-0 px-4 text-body-sm">
-                            {freeDays > 0 ? (
-                              <span className="font-medium text-ink">{freeDays} days</span>
-                            ) : (
-                              <span className="text-muted">0 days</span>
-                            )}
-                          </div>
+                        {/* Free Capacity in Days */}
+                        <td className="px-4 py-3 text-body-sm whitespace-nowrap">
+                          {freeDays > 0 ? (
+                            <span className="font-medium text-ink">{freeDays} days</span>
+                          ) : (
+                            <span className="text-muted">0 days</span>
+                          )}
+                        </td>
 
-                          {/* Open Steps */}
-                          <div className="w-32 shrink-0 px-4 text-body-sm flex items-center gap-2">
+                        {/* Open Steps */}
+                        <td className="px-4 py-3 text-body-sm whitespace-nowrap">
+                          <div className="flex items-center gap-2">
                             <span>{workload.openTaskCount} steps</span>
                             {workload.overdueTaskCount > 0 ? (
                               <span className="badge bg-error/[0.08] text-error text-[10px] font-bold">
@@ -233,59 +235,62 @@ export function TeamLoadTable({ workloads }: { workloads: Workload[] }) {
                               </span>
                             ) : null}
                           </div>
+                        </td>
 
-                          {/* Leave Days */}
-                          <div className="w-24 shrink-0 px-4 text-caption text-muted">
-                            {workload.leaveDays > 0 ? `${workload.leaveDays}d leave` : '—'}
-                          </div>
+                        {/* Leave Days */}
+                        <td className="px-4 py-3 text-caption text-muted whitespace-nowrap">
+                          {workload.leaveDays > 0 ? `${workload.leaveDays}d leave` : '—'}
+                        </td>
 
-                          {/* Status Pill */}
-                          <div className="shrink-0 text-right">
-                            <StatusBadge status={workload.status} />
-                          </div>
-                        </div>
+                        {/* Status Pill */}
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <StatusBadge status={workload.status} />
+                        </td>
+                      </tr>
 
-                        {/* Expanded Tasks Drawer */}
-                        {isExpanded ? (
-                          <div className="border-t border-hairline bg-surface px-6 py-3 space-y-2">
-                            <p className="text-caption font-semibold text-muted uppercase tracking-wider">
-                              Assigned Steps ({workload.assignments.length})
-                            </p>
-                            {workload.assignments.length === 0 ? (
-                              <p className="text-caption text-success py-1">
-                                No open tasks assigned in this window — available immediately.
+                      {/* Expanded Tasks Drawer */}
+                      {isExpanded ? (
+                        <tr className="bg-surface">
+                          <td colSpan={6} className="px-6 py-3 border-t border-hairline">
+                            <div className="space-y-2">
+                              <p className="text-caption font-semibold text-muted uppercase tracking-wider">
+                                Assigned Steps ({workload.assignments.length})
                               </p>
-                            ) : (
-                              <div className="divide-y divide-hairline rounded border border-hairline bg-canvas">
-                                {workload.assignments.map((a) => (
-                                  <div
-                                    key={a.taskId}
-                                    className="flex items-center justify-between gap-3 px-3 py-2 text-body-sm hover:bg-surface transition-colors"
-                                  >
-                                    <div className="min-w-0 flex-1">
-                                      <Link
-                                        href={`/pm/tasks/${a.taskId}`}
-                                        className="font-medium text-ink hover:underline truncate block"
-                                      >
-                                        {cleanTaskTitle(a.taskTitle)}
-                                      </Link>
-                                      <p className="text-caption text-muted font-mono">
-                                        {a.projectName || a.projectCode}
-                                        {a.plannedEnd ? ` · Due ${formatDate(a.plannedEnd)}` : ''}
-                                      </p>
+                              {workload.assignments.length === 0 ? (
+                                <p className="text-caption text-success py-1">
+                                  No open tasks assigned in this window — available immediately.
+                                </p>
+                              ) : (
+                                <div className="divide-y divide-hairline rounded border border-hairline bg-canvas">
+                                  {workload.assignments.map((a) => (
+                                    <div
+                                      key={a.taskId}
+                                      className="flex items-center justify-between gap-3 px-3 py-2 text-body-sm hover:bg-surface transition-colors"
+                                    >
+                                      <div className="min-w-0 flex-1">
+                                        <Link
+                                          href={`/pm/tasks/${a.taskId}`}
+                                          className="font-medium text-ink hover:underline truncate block"
+                                        >
+                                          {cleanTaskTitle(a.taskTitle)}
+                                        </Link>
+                                        <p className="text-caption text-muted font-mono">
+                                          {a.projectName || a.projectCode}
+                                          {a.plannedEnd ? ` · Due ${formatDate(a.plannedEnd)}` : ''}
+                                        </p>
+                                      </div>
+                                      <StatusBadge status={a.status} />
                                     </div>
-                                    <StatusBadge status={a.status} />
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ) : null}
-                      </td>
-                    </tr>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
                   );
                 })}
-              </tbody>
             </table>
           </div>
 
