@@ -142,22 +142,46 @@ export async function addTemplateItem(
 export async function deleteTemplateItem(principal: Principal, itemId: string) {
   assertTemplateAdmin(principal);
 
-  const item = await prisma.checklistTemplateItem.findUniqueOrThrow({ where: { id: itemId } });
+  const item = await prisma.checklistTemplateItem.findUniqueOrThrow({
+    where: { id: itemId },
+    include: { template: { select: { code: true } } },
+  });
 
   await prisma.$transaction(async (tx) => {
     await tx.checklistTemplateItem.delete({ where: { id: itemId } });
 
-    // Re-number remaining items in the template
+    // Re-number remaining items in the template and remap dependencies
     const remaining = await tx.checklistTemplateItem.findMany({
       where: { templateId: item.templateId },
       orderBy: { stepNumber: 'asc' },
     });
 
+    const oldToNew = new Map<number, number>();
     for (let i = 0; i < remaining.length; i++) {
+      oldToNew.set(remaining[i]!.stepNumber, i + 1);
+    }
+
+    for (let i = 0; i < remaining.length; i++) {
+      const current = remaining[i]!;
       const step = i + 1;
+      const code = `${item.template.code}_STEP_${String(step).padStart(2, '0')}`;
+
+      let newDependsOn: number | null = null;
+      if (current.dependsOnStep === item.stepNumber) {
+        // Pointed at the deleted step: bridge to deleted item's predecessor if valid
+        newDependsOn = item.dependsOnStep ? (oldToNew.get(item.dependsOnStep) ?? null) : null;
+      } else if (current.dependsOnStep) {
+        newDependsOn = oldToNew.get(current.dependsOnStep) ?? null;
+      }
+
       await tx.checklistTemplateItem.update({
-        where: { id: remaining[i].id },
-        data: { stepNumber: step, sortOrder: step },
+        where: { id: current.id },
+        data: {
+          stepNumber: step,
+          sortOrder: step,
+          code,
+          dependsOnStep: newDependsOn,
+        },
       });
     }
 

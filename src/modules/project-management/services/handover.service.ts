@@ -45,6 +45,14 @@ export async function requestHandover(
     throw new ForbiddenError('You can only hand over a task you currently hold.');
   }
 
+  const ownerAssignment = assignment ?? (await prisma.taskAssignment.findFirst({
+    where: { taskId: input.taskId, role: 'OWNER', status: 'ACTIVE' },
+  }));
+  if (!ownerAssignment) {
+    throw new DomainError('Cannot request a handover on a task without an active owner.');
+  }
+  const fromUserId = ownerAssignment.userId;
+
   const target = await prisma.user.findFirst({
     where: { id: input.toUserId, companyId: principal.companyId, status: 'ACTIVE' },
     select: { id: true, fullName: true },
@@ -62,14 +70,14 @@ export async function requestHandover(
   if (pending) throw new DomainError('A handover on this task is already awaiting a decision.');
 
   const remainingPercent = Math.max(0, 100 - task.percentComplete);
-  const allocated = assignment?.allocatedHours ?? task.estimatedHours;
+  const allocated = ownerAssignment.allocatedHours ?? task.estimatedHours;
   const remainingHours = Math.round(allocated * (remainingPercent / 100) * 10) / 10;
 
   const handover = await prisma.$transaction(async (tx) => {
     const created = await tx.taskHandover.create({
       data: {
         taskId: input.taskId,
-        fromUserId: principal.userId,
+        fromUserId,
         toUserId: input.toUserId,
         reason: input.reason,
         remainingPercent,
@@ -159,32 +167,31 @@ export async function decideHandover(
     projectId: handover.task.projectId,
     departmentId: handover.task.project.departmentId,
   });
-  const canDecide =
-    (isReceiver && can(principal, 'pm.handover.decide', {
-      projectId: handover.task.projectId,
-      departmentId: handover.task.project.departmentId,
-    })) ||
-    isReceiver ||
-    canOverride;
+  const canDecide = isReceiver || canOverride;
   if (!canDecide) throw new ForbiddenError('Only the receiving engineer or a manager can decide this handover.');
 
+  const now = new Date();
+
   return prisma.$transaction(async (tx) => {
-    const updated = await tx.taskHandover.update({
-      where: { id: handoverId },
+    const updated = await tx.taskHandover.updateMany({
+      where: { id: handoverId, status: 'PENDING' },
       data: {
         status: decision,
         decidedById: principal.userId,
-        decidedAt: new Date(),
+        decidedAt: now,
         decisionNote: note,
       },
     });
+    if (updated.count === 0) {
+      throw new DomainError('This handover has already been decided.');
+    }
 
     if (decision === 'ACCEPTED') {
       // The outgoing assignment is retired, not deleted: the hours already burned stay
-      // attributed to the engineer who burned them.
+      // attributed to the engineer who burned them. Release all existing active OWNER assignments.
       await tx.taskAssignment.updateMany({
-        where: { taskId: handover.taskId, userId: handover.fromUserId, status: 'ACTIVE' },
-        data: { status: 'HANDED_OVER', releasedAt: new Date() },
+        where: { taskId: handover.taskId, role: 'OWNER', status: 'ACTIVE' },
+        data: { status: 'HANDED_OVER', releasedAt: now },
       });
 
       await tx.taskAssignment.create({
@@ -411,8 +418,8 @@ export async function decideProjectHandover(
   }
 
   return prisma.$transaction(async (tx) => {
-    const updated = await tx.projectHandover.update({
-      where: { id: handoverId },
+    const updated = await tx.projectHandover.updateMany({
+      where: { id: handoverId, status: 'PENDING' },
       data: {
         status: decision,
         decidedById: principal.userId,
@@ -420,6 +427,9 @@ export async function decideProjectHandover(
         decisionNote: note ?? null,
       },
     });
+    if (updated.count === 0) {
+      throw new DomainError('This project handover has already been decided.');
+    }
 
     if (decision === 'ACCEPTED') {
       // 1. Update project managerId

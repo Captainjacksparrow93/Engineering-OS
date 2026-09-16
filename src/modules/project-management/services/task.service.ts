@@ -729,6 +729,8 @@ export async function disapproveTaskReview(principal: Principal, taskId: string,
  * Roadblock Flagging: Engineer flags an active task with a handwritten explanation.
  */
 export async function flagRoadblock(principal: Principal, taskId: string, comment: string) {
+  await assertTaskPermission(principal, taskId, 'pm.progress.log');
+
   const trimmed = comment.trim();
   if (trimmed.length < 5) {
     throw new DomainError('Please enter a specific explanation of the roadblock (at least 5 characters).');
@@ -740,6 +742,10 @@ export async function flagRoadblock(principal: Principal, taskId: string, commen
       project: { select: { id: true, managerId: true, sponsorId: true, code: true, name: true } },
     },
   });
+
+  if (task.status === 'COMPLETED' || task.status === 'CANCELLED') {
+    throw new DomainError('Cannot flag a roadblock on a completed or cancelled task.');
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.taskProgressLog.create({

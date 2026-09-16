@@ -14,3 +14,7 @@ coverage/
 next-env.d.ts
 *.tsbuildinfo
 prisma/*.db
+.code-review-graph/
+.token-savior-cache.json
+*Vertex*.json
+*vertex*.json

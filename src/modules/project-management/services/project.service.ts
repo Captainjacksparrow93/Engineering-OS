@@ -674,8 +674,7 @@ export async function completeAutomationProject(principal: Principal, projectId:
         companyId: principal.companyId,
         status: 'ACTIVE',
         OR: [
-          { id: project.sponsorId ?? undefined },
-          { grade: 'HEAD' },
+          ...(project.sponsorId ? [{ id: project.sponsorId }] : []),
           { roleAssignments: { some: { role: { key: 'DEPARTMENT_HEAD' } } } },
         ],
       },

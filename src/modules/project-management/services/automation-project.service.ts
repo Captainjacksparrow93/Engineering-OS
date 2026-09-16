@@ -245,12 +245,13 @@ export async function createAutomationProject(principal: Principal, input: Creat
 
         // Map stepNumber -> created task id for dependency wiring
         const stepTaskIdMap = new Map<number, string>();
-        const unitTasks = input.tasks.filter(
-          (t) => t.templateCode === scope.templateCode && (t.unitIndex === u || t.unitIndex === 1 || !t.unitIndex)
-        );
-
         for (const item of tpl.items) {
-          const draft = unitTasks.find((d) => d.stepNumber === item.stepNumber);
+          const draft = input.tasks.find(
+            (d) =>
+              d.templateCode === scope.templateCode &&
+              (d.unitIndex ?? 1) === u &&
+              d.stepNumber === item.stepNumber,
+          );
 
           const taskCode = `${project.code}-T${String(globalTaskCounter++).padStart(3, '0')}`;
           const hasBlocker = Boolean(item.dependsOnStep);
