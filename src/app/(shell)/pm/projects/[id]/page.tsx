@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
 import { getProjectWorkspace } from '@/modules/project-management/services/project.service';
@@ -21,7 +22,12 @@ export const dynamic = 'force-dynamic';
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const principal = await requirePrincipal();
   const { id } = await params;
-  const workspace = await getProjectWorkspace(principal, id);
+  let workspace;
+  try {
+    workspace = await getProjectWorkspace(principal, id);
+  } catch {
+    notFound();
+  }
   const { project, tasks, summary, permissions, criticalTaskIds } = workspace;
 
   const colleagues = permissions.canAssign || permissions.canManageMembers || permissions.canEditProject

@@ -1,10 +1,11 @@
 import { formatName, cleanTaskTitle } from '@/core/utils/strings';
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
 import { getTaskDetail } from '@/modules/project-management/services/task.service';
 import { handoverCandidates, peersForHandover } from '@/modules/project-management/services/availability.service';
-import { formatDate, daysUntil } from '@/core/utils/dates';
+import { formatDate, formatDateRange, daysUntil } from '@/core/utils/dates';
 import { Alert, Avatar, Card, PageHeader, PriorityBadge, ProgressBar, StatusBadge } from '@/components/ui';
 import { ProgressForm } from './progress-form';
 import { HandoverForm } from './handover-form';
@@ -22,30 +23,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   let detail;
   try {
     detail = await getTaskDetail(principal, id);
-  } catch (err) {
-    return (
-      <div className="mx-auto max-w-md py-16 text-center">
-        <div className="card p-8 space-y-4 border-hairline bg-surface">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface-strong text-ink text-xl font-bold">
-            !
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-ink">Task Not Found</h1>
-            <p className="mt-1 text-xs text-muted">
-              You don&apos;t have access to this task, or it no longer exists.
-            </p>
-          </div>
-          <div className="pt-2 flex items-center justify-center gap-2">
-            <Link href="/pm/my-work" className="btn btn-primary btn-sm">
-              My work
-            </Link>
-            <Link href="/dashboard" className="btn btn-secondary btn-sm">
-              Dashboard
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
+  } catch {
+    notFound();
   }
 
   const { task, blockers, downstreamCount, permissions } = detail;
@@ -148,7 +127,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
               <div>
                 <p className="label">Planned</p>
                 <p className={`text-body-sm ${due !== null && due < 0 ? 'font-medium text-error' : 'text-ink'}`}>
-                  {formatDate(task.plannedStart)} → {formatDate(task.plannedEnd)}
+                  {formatDateRange(task.plannedStart, task.plannedEnd)}
                 </p>
               </div>
               <div>

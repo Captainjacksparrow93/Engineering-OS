@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ShellProvider } from './shell-context';
+import { ToastProvider } from '@/components/toast';
 
 export function ShellContainer({
   sidebar,
@@ -13,7 +14,8 @@ export function ShellContainer({
   children: React.ReactNode;
 }) {
   return (
-    <ShellProvider>
+    <ToastProvider>
+      <ShellProvider>
       <div className="flex h-screen w-screen overflow-hidden bg-canvas text-ink">
         {/* Sidebar slot (width managed dynamically inside Sidebar) */}
         {sidebar}
@@ -32,5 +34,6 @@ export function ShellContainer({
         </div>
       </div>
     </ShellProvider>
+    </ToastProvider>
   );
 }

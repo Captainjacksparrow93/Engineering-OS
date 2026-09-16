@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
@@ -35,36 +35,38 @@ interface ApprovalItem {
   }>;
 }
 
+import { useToast } from '@/components/toast';
+
 export function ApprovalsTable({ items }: { items: ApprovalItem[] }) {
   const router = useRouter();
+  const toast = useToast();
   const [isPending, startTransition] = useTransition();
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState('');
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleApprove = (taskId: string) => {
-    setErrorMsg(null);
+  const handleApprove = (taskId: string, taskTitle: string) => {
     startTransition(async () => {
       const res = await approveTaskReviewAction(taskId);
       if (!res.success) {
-        setErrorMsg(res.error || 'Failed to approve step.');
+        toast.error(res.error || 'Failed to approve step.');
       } else {
+        toast.success(`Approved "${taskTitle}" — next step unlocked`);
         router.refresh();
       }
     });
   };
 
-  const handleReject = (taskId: string) => {
+  const handleReject = (taskId: string, taskTitle: string) => {
     if (!feedback.trim()) {
-      setErrorMsg('Please provide feedback before sending back.');
+      toast.error('Please provide feedback before sending back.');
       return;
     }
-    setErrorMsg(null);
     startTransition(async () => {
       const res = await disapproveTaskReviewAction(taskId, feedback.trim());
       if (!res.success) {
-        setErrorMsg(res.error || 'Failed to send back step.');
+        toast.error(res.error || 'Failed to send back step.');
       } else {
+        toast.success(`Sent back "${taskTitle}" for rework`);
         setRejectingTaskId(null);
         setFeedback('');
         router.refresh();
@@ -85,12 +87,6 @@ export function ApprovalsTable({ items }: { items: ApprovalItem[] }) {
 
   return (
     <div className="space-y-base">
-      {errorMsg ? (
-        <div className="rounded-md border border-error/30 bg-error/[0.06] p-sm text-body-sm text-error">
-          {errorMsg}
-        </div>
-      ) : null}
-
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-body-sm">
@@ -184,7 +180,7 @@ export function ApprovalsTable({ items }: { items: ApprovalItem[] }) {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleReject(task.id)}
+                              onClick={() => handleReject(task.id, task.title)}
                               disabled={isPending || !feedback.trim()}
                               className="btn btn-danger btn-sm"
                             >
@@ -207,7 +203,7 @@ export function ApprovalsTable({ items }: { items: ApprovalItem[] }) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleApprove(task.id)}
+                            onClick={() => handleApprove(task.id, task.title)}
                             disabled={isPending}
                             className="btn btn-primary btn-sm"
                           >

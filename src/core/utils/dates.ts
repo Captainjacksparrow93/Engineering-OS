@@ -62,15 +62,84 @@ export function overlapDays(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date):
   return workingDaysBetween(start, end);
 }
 
-export function formatDate(date: Date | string | null | undefined): string {
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'] as const;
+
+export function formatDate(
+  date: Date | string | null | undefined,
+  options?: { forceYear?: boolean }
+): string {
   if (!date) return '-';
   const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  if (isNaN(d.getTime())) return '-';
+
+  const day = d.getUTCDate();
+  const month = MONTHS[d.getUTCMonth()];
+  const year = d.getUTCFullYear();
+  const currentYear = new Date().getUTCFullYear();
+
+  if (options?.forceYear || year !== currentYear) {
+    return `${day} ${month} ${year}`;
+  }
+  return `${day} ${month}`;
+}
+
+export function formatRelativeDate(
+  date: Date | string | null | undefined,
+  baseDate: Date = new Date()
+): string {
+  if (!date) return '-';
+  const target = startOfDay(typeof date === 'string' ? new Date(date) : date);
+  if (isNaN(target.getTime())) return '-';
+  const base = startOfDay(baseDate);
+  const days = Math.round((target.getTime() - base.getTime()) / 86_400_000);
+
+  if (days === 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  if (days === -1) return 'yesterday';
+  if (days > 1) return `in ${days} days`;
+  return `${Math.abs(days)} days late`;
+}
+
+export function formatDateRange(
+  from: Date | string | null | undefined,
+  to: Date | string | null | undefined
+): string {
+  if (!from && !to) return '-';
+  if (!from) return formatDate(to);
+  if (!to) return formatDate(from);
+
+  const f = typeof from === 'string' ? new Date(from) : from;
+  const t = typeof to === 'string' ? new Date(to) : to;
+  if (isNaN(f.getTime()) || isNaN(t.getTime())) return '-';
+
+  const fDay = f.getUTCDate();
+  const fMonth = MONTHS[f.getUTCMonth()];
+  const fYear = f.getUTCFullYear();
+
+  const tDay = t.getUTCDate();
+  const tMonth = MONTHS[t.getUTCMonth()];
+  const tYear = t.getUTCFullYear();
+
+  const currentYear = new Date().getUTCFullYear();
+
+  if (fYear === tYear) {
+    const showYear = fYear !== currentYear;
+    if (fMonth === tMonth) {
+      if (fDay === tDay) return formatDate(f);
+      return showYear ? `${fDay}–${tDay} ${fMonth} ${fYear}` : `${fDay}–${tDay} ${fMonth}`;
+    }
+    return showYear
+      ? `${fDay} ${fMonth} – ${tDay} ${tMonth} ${fYear}`
+      : `${fDay} ${fMonth} – ${tDay} ${tMonth}`;
+  }
+
+  return `${fDay} ${fMonth} ${fYear} – ${tDay} ${tMonth} ${tYear}`;
 }
 
 export function daysUntil(date: Date | string | null | undefined): number | null {
   if (!date) return null;
   const d = startOfDay(typeof date === 'string' ? new Date(date) : date);
+  if (isNaN(d.getTime())) return null;
   const today = startOfDay(new Date());
   return Math.round((d.getTime() - today.getTime()) / 86_400_000);
 }

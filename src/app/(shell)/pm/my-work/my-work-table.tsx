@@ -3,10 +3,11 @@
 import { useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { formatDate, daysUntil } from '@/core/utils/dates';
+import { formatDate, formatRelativeDate } from '@/core/utils/dates';
 import { PriorityBadge, ProgressBar, StatusBadge } from '@/components/ui';
 import { cleanTaskTitle } from '@/core/utils/strings';
 import { changeTaskStatusAction } from '@/app/actions/pm';
+import { useToast } from '@/components/toast';
 
 export interface MyWorkRow {
   task: {
@@ -36,14 +37,24 @@ export interface MyWorkRow {
 
 export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
   const router = useRouter();
+  const toast = useToast();
   const [isPending, startTransition] = useTransition();
 
-  const handleQuickStatus = (taskId: string, newStatus: 'IN_PROGRESS' | 'IN_REVIEW') => {
+  const handleQuickStatus = (taskId: string, newStatus: 'IN_PROGRESS' | 'IN_REVIEW', title: string) => {
     startTransition(async () => {
       const formData = new FormData();
       formData.set('taskId', taskId);
       formData.set('status', newStatus);
-      await changeTaskStatusAction({}, formData);
+      const res = await changeTaskStatusAction({}, formData);
+      if (res?.error) {
+        toast.error(res.error);
+      } else {
+        if (newStatus === 'IN_PROGRESS') {
+          toast.success(`Started work on ${cleanTaskTitle(title)}`);
+        } else {
+          toast.success(`Submitted ${cleanTaskTitle(title)} for review`);
+        }
+      }
       router.refresh();
     });
   };
@@ -91,8 +102,8 @@ export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
             </thead>
             <tbody>
               {items.map(({ task, assignment, unmetDependencies }) => {
-                const due = daysUntil(task.plannedEnd ? new Date(task.plannedEnd) : null);
-                const isOverdue = due !== null && due < 0 && task.status !== 'COMPLETED';
+                const relative = formatRelativeDate(task.plannedEnd);
+                const isOverdue = relative.includes('late') && task.status !== 'COMPLETED';
                 const parentTitle = task.parent?.title ? cleanTaskTitle(task.parent.title) : null;
 
                 return (
@@ -124,7 +135,7 @@ export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
                             {formatDate(task.plannedEnd)}
                           </span>
                           <span className="block text-caption text-muted-soft">
-                            {due !== null ? (due < 0 ? `${-due}d late` : due === 0 ? 'today' : `in ${due}d`) : ''}
+                            {relative}
                           </span>
                         </>
                       ) : (
@@ -143,7 +154,7 @@ export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
                         <button
                           type="button"
                           disabled={isPending}
-                          onClick={() => handleQuickStatus(task.id, 'IN_PROGRESS')}
+                          onClick={() => handleQuickStatus(task.id, 'IN_PROGRESS', task.title)}
                           className="btn btn-primary btn-sm py-1 px-2.5 text-xs"
                         >
                           Start
@@ -152,7 +163,7 @@ export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
                         <button
                           type="button"
                           disabled={isPending}
-                          onClick={() => handleQuickStatus(task.id, 'IN_REVIEW')}
+                          onClick={() => handleQuickStatus(task.id, 'IN_REVIEW', task.title)}
                           className="btn btn-secondary btn-sm py-1 px-2.5 text-xs font-medium"
                         >
                           Submit

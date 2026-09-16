@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { updateTemplateItemAction, addTemplateItemAction, deleteTemplateItemAction } from '@/app/actions/template';
+import { useToast } from '@/components/toast';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 
 interface Item {
   id: string;
@@ -43,9 +45,10 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
   const [newSeniority, setNewSeniority] = useState('JUNIOR');
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [deletingItem, setDeletingItem] = useState<{ id: string; title: string; stepNumber: number } | null>(null);
 
   const [isPending, startTransition] = useTransition();
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const toast = useToast();
 
   const activeTemplate = templates.find((t) => t.code === activeCode) ?? templates[0];
 
@@ -67,23 +70,22 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
       });
       if (res.success) {
         setEditingId(null);
-        setFeedback('Task updated successfully.');
-        setTimeout(() => setFeedback(null), 3000);
+        toast.success('Step updated successfully.');
       } else {
-        setFeedback(res.error ?? 'Failed to update');
+        toast.error(res.error ?? 'Failed to update step');
       }
     });
   };
 
-  const handleDelete = (itemId: string, title: string) => {
-    if (!confirm(`Are you sure you want to delete step: "${title}"?`)) return;
+  const handleConfirmDelete = () => {
+    if (!deletingItem) return;
     startTransition(async () => {
-      const res = await deleteTemplateItemAction(itemId);
+      const res = await deleteTemplateItemAction(deletingItem.id);
       if (res.success) {
-        setFeedback('Task deleted successfully.');
-        setTimeout(() => setFeedback(null), 3000);
+        toast.success(`Step ${deletingItem.stepNumber} deleted successfully.`);
+        setDeletingItem(null);
       } else {
-        setFeedback(res.error ?? 'Failed to delete');
+        toast.error(res.error ?? 'Failed to delete step');
       }
     });
   };
@@ -99,22 +101,15 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
       if (res.success) {
         setShowAddModal(false);
         setNewTitle('');
-        setFeedback('New subtask added.');
-        setTimeout(() => setFeedback(null), 3000);
+        toast.success('New step added to checklist.');
       } else {
-        setFeedback(res.error ?? 'Failed to add');
+        toast.error(res.error ?? 'Failed to add step');
       }
     });
   };
 
   return (
     <div className="space-y-6">
-      {feedback && (
-        <div className="rounded-lg bg-teal-50 border border-teal-200 p-3 text-sm text-teal-800 flex items-center justify-between">
-          <span>{feedback}</span>
-          <button onClick={() => setFeedback(null)} className="text-teal-600 hover:text-teal-900 font-bold">&times;</button>
-        </div>
-      )}
 
       {/* Package Tabs */}
       <div className="flex border-b border-hairline gap-2">
@@ -262,7 +257,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
                           </button>
                           <span className="text-muted-soft">|</span>
                           <button
-                            onClick={() => handleDelete(item.id, item.title)}
+                            onClick={() => setDeletingItem({ id: item.id, title: item.title, stepNumber: item.stepNumber })}
                             className="text-xs text-error hover:underline font-medium"
                           >
                             Delete
@@ -338,6 +333,17 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={Boolean(deletingItem)}
+        title={deletingItem ? `Delete step ${deletingItem.stepNumber}?` : 'Delete step?'}
+        description={`Are you sure you want to delete "${deletingItem?.title}"? Later steps will be automatically renumbered and dependencies remapped.`}
+        confirmLabel="Delete step"
+        tone="danger"
+        isPending={isPending}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeletingItem(null)}
+      />
     </div>
   );
 }
