@@ -323,12 +323,12 @@ export function scoreForStep(
   const rank = GRADE_RANK[candidate.grade] ?? 2;
   const target = TARGET_RANK[step.recommendedSeniority] ?? 2;
 
-  // M — Grade fit (40%, asymmetric)
+  // M — Grade fit (40%): exact match is 100, higher qualified (e.g. Senior doing Junior task) is 95
   let M = 0;
-  if (rank < target) {
-    M = 100 * Math.max(0, 1 - (target - rank) / 2);
+  if (rank >= target) {
+    M = rank === target ? 100 : 95;
   } else {
-    M = 100 * Math.max(0, 1 - (rank - target) / 4);
+    M = 100 * Math.max(0, 1 - (target - rank) / 2);
   }
 
   // A — Availability (30%)
@@ -373,19 +373,14 @@ function buildDeterministicRationale(
   breakdown: { M: number; A: number; C: number; Q: number },
   inSquad: boolean,
 ): string {
-  const parts: string[] = [];
-  if (breakdown.M >= 90) parts.push('exact grade match');
-  else if (breakdown.M >= 70) parts.push('grade qualified');
+  const rank = GRADE_RANK[candidate.grade] ?? 2;
+  const target = TARGET_RANK[step.recommendedSeniority] ?? 2;
+  const gradeText = rank === target ? 'exact grade match' : rank > target ? 'senior qualified' : 'grade floor match';
+  const hoursPerDay = (candidate.freeHours / Math.max(1, candidate.workingDays)).toFixed(1);
+  const squadText = inSquad ? "in PM's squad" : 'cross-squad';
+  const contText = breakdown.C > 0 ? ', continues adjacent step' : '';
 
-  if (candidate.freeHours > 0) {
-    const dailyFree = candidate.workingDays > 0 ? (candidate.freeHours / candidate.workingDays).toFixed(1) : candidate.freeHours;
-    parts.push(`${dailyFree}h/day free`);
-  }
-
-  if (breakdown.C >= 90) parts.push('continues adjacent step');
-  if (inSquad) parts.push("in PM's squad");
-
-  return `${score}% · ${parts.join(', ')}`;
+  return `${score}% · ${gradeText}, ${hoursPerDay}h/day free${contText}, ${squadText}`;
 }
 
 /**
@@ -445,7 +440,11 @@ export function allocateTeamForSteps(
       continue;
     }
 
-    const scored = eligible.map((candidate) => {
+    // Prioritize candidates within the PM's squad first if any are eligible
+    const squadEligible = eligible.filter((c) => pmSquadUserIds.has(c.id));
+    const pool = squadEligible.length > 0 ? squadEligible : eligible;
+
+    const scored = pool.map((candidate) => {
       const { score, breakdown } = scoreForStep(candidate, step, {
         pmSquadUserIds,
         assignedSteps,

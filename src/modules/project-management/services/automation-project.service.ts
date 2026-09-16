@@ -102,8 +102,7 @@ export async function getPMTeamData(companyId: string) {
     where: {
       companyId,
       status: 'ACTIVE',
-      department: { code: { in: ['TECH', 'DESIGN'] } },
-      grade: { in: ['SENIOR_ENGINEER', 'ENGINEER', 'JUNIOR_ENGINEER', 'TRAINEE'] },
+      grade: { notIn: ['MANAGER', 'HEAD', 'DIRECTOR'] },
       NOT: [
         { designation: { contains: 'Project Manager' } },
         { designation: { contains: 'Director', mode: 'insensitive' } },

@@ -178,11 +178,12 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
                         />
                       ) : (
                         <div>
-                          <p className="font-medium text-ink text-sm">{item.title}</p>
-                          <span className="code text-caption text-muted-soft">{item.code}</span>
-                          {item.isSimulationSignoff && (
-                            <span className="badge ml-2 bg-purple-100 text-purple-800 text-xs">Sign-off Gate</span>
-                          )}
+                          <p className="font-medium text-ink text-sm inline-flex items-center gap-2">
+                            <span>{item.title}</span>
+                            {item.isSimulationSignoff && (
+                              <span className="badge bg-purple-100 text-purple-800 text-xs">Sign-off Gate</span>
+                            )}
+                          </p>
                         </div>
                       )}
                     </td>
