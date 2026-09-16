@@ -437,18 +437,25 @@ export async function deleteTask(principal: Principal, taskId: string) {
 export async function recomputeTaskDerivedState(projectId: string, tx: Tx = prisma): Promise<void> {
   const graph = await loadProjectGraph(projectId, tx);
   const rollup = rollUpProgress(graph.tasks);
+  const parentIds = new Set(graph.tasks.map((t) => t.parentId).filter(Boolean));
+
+  // Single batch query for latest roadblock logs across all tasks in the project
+  const latestLogs = await tx.taskProgressLog.findMany({
+    where: { task: { projectId } },
+    orderBy: { createdAt: 'desc' },
+    distinct: ['taskId'],
+    select: { taskId: true, blocker: true },
+  });
+  const roadblockMap = new Map(
+    latestLogs.map((l) => [l.taskId, Boolean(l.blocker && l.blocker.trim().length > 0)]),
+  );
 
   for (const task of graph.tasks) {
     const updates: Record<string, unknown> = {};
 
     if (task.status === 'TODO' || task.status === 'BLOCKED') {
       const blockers = blockingReasons(task.id, graph);
-      const latestLog = await tx.taskProgressLog.findFirst({
-        where: { taskId: task.id },
-        orderBy: { createdAt: 'desc' },
-        select: { blocker: true },
-      });
-      const hasRoadblock = Boolean(latestLog?.blocker);
+      const hasRoadblock = roadblockMap.get(task.id) ?? false;
       const shouldBe = blockers.length > 0 || hasRoadblock
         ? 'BLOCKED'
         : task.actualStart || task.percentComplete > 0
@@ -458,7 +465,7 @@ export async function recomputeTaskDerivedState(projectId: string, tx: Tx = pris
     }
 
     const rolled = rollup.get(task.id);
-    const isParent = graph.tasks.some((t) => t.parentId === task.id);
+    const isParent = parentIds.has(task.id);
     if (isParent && rolled !== undefined && rolled !== task.percentComplete) {
       updates.percentComplete = rolled;
     }
@@ -468,6 +475,7 @@ export async function recomputeTaskDerivedState(projectId: string, tx: Tx = pris
     }
   }
 }
+
 
 export async function loadProjectGraph(projectId: string, tx: Tx = prisma): Promise<Graph> {
   const tasks = await tx.task.findMany({

@@ -44,3 +44,14 @@ export class ValidationError extends Error {
     this.issues = issues;
   }
 }
+
+export function isClientSafeError(error: unknown): boolean {
+  return (
+    error instanceof ForbiddenError ||
+    error instanceof UnauthorizedError ||
+    error instanceof NotFoundError ||
+    error instanceof DomainError ||
+    error instanceof ValidationError
+  );
+}
+

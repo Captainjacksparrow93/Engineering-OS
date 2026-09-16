@@ -7,7 +7,7 @@ import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
 import { formatName } from '@/core/utils/strings';
-import { assertTaskPermission, loadTaskContext } from './access';
+import { assertTaskPermission } from './access';
 
 /**
  * Peer handover.
@@ -676,7 +676,5 @@ const projectHandoverInclude = {
   toUser: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
 } as const;
 
-export async function getTaskContextForHandover(taskId: string) {
-  return loadTaskContext(taskId);
-}
+
 

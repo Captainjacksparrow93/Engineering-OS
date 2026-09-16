@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { drainOutbox } from '@/core/events/bus';
+import { isClientSafeError } from '@/core/rbac/errors';
 import {
   assignTaskSchema,
   autoAssignTeamSchema,
@@ -16,11 +17,35 @@ import {
   progressSchema,
   updateProjectSchema,
 } from '@/modules/project-management/validation/schemas';
-import { addProjectMember, completeAutomationProject, createProject, removeProjectMember, updateProject } from '@/modules/project-management/services/project.service';
-import { addComment, approveTaskReview, assignTask, changeTaskStatus, createTask, deleteTask, disapproveTaskReview, flagRoadblock } from '@/modules/project-management/services/task.service';
+import {
+  addProjectMember,
+  completeAutomationProject,
+  createProject,
+  reassignAllMemberTasks,
+  removeProjectMember,
+  updateProject,
+} from '@/modules/project-management/services/project.service';
+import {
+  addComment,
+  approveTaskReview,
+  assignTask,
+  changeTaskStatus,
+  createTask,
+  deleteTask,
+  disapproveTaskReview,
+  flagRoadblock,
+} from '@/modules/project-management/services/task.service';
 import { addDependency, removeDependency } from '@/modules/project-management/services/dependency.service';
 import { logProgress } from '@/modules/project-management/services/progress.service';
-import { cancelHandover, decideHandover, requestHandover } from '@/modules/project-management/services/handover.service';
+import {
+  cancelHandover,
+  cancelProjectHandover,
+  decideHandover,
+  decideProjectHandover,
+  requestHandover,
+  requestProjectHandover,
+} from '@/modules/project-management/services/handover.service';
+import { autoAssignAutomationTeam } from '@/modules/project-management/services/automation-project.service';
 import { markAllRead, markRead } from '@/core/notifications/notify';
 
 /**
@@ -54,7 +79,7 @@ function isRedirectError(error: unknown): boolean {
     (error as { digest: string }).digest.startsWith('NEXT_REDIRECT');
 }
 
-function toState(error: unknown): ActionState {
+export function toState(error: unknown): ActionState {
   if (error && typeof error === 'object' && 'issues' in error && Array.isArray((error as { issues: unknown[] }).issues)) {
     const zodError = error as { issues: Array<{ path: (string | number)[]; message: string }> };
     const fieldErrors: Record<string, string[]> = {};
@@ -64,8 +89,13 @@ function toState(error: unknown): ActionState {
     }
     return { error: zodError.issues[0]?.message ?? 'Please check the form.', fieldErrors };
   }
-  return { error: error instanceof Error ? error.message : 'Something went wrong.' };
+  if (isClientSafeError(error) && error instanceof Error) {
+    return { error: error.message };
+  }
+  console.error('Unhandled action error:', error);
+  return { error: 'Something went wrong.' };
 }
+
 
 const value = (form: FormData, key: string) => {
   const raw = form.get(key);
@@ -360,7 +390,7 @@ export async function approveTaskReviewAction(taskId: string) {
     revalidatePath('/dashboard');
     return { success: true, allTasksCompleted: result.allTasksCompleted, projectId: result.projectId, projectName: result.projectName };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to approve task.' };
+    return { success: false, error: toState(error).error ?? 'Failed to approve task.' };
   }
 }
 
@@ -374,7 +404,7 @@ export async function disapproveTaskReviewAction(taskId: string, feedback: strin
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to disapprove task.' };
+    return { success: false, error: toState(error).error ?? 'Failed to disapprove task.' };
   }
 }
 
@@ -387,7 +417,7 @@ export async function flagRoadblockAction(taskId: string, comment: string) {
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to flag roadblock.' };
+    return { success: false, error: toState(error).error ?? 'Failed to flag roadblock.' };
   }
 }
 
@@ -400,7 +430,7 @@ export async function completeAutomationProjectAction(projectId: string) {
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to complete project.' };
+    return { success: false, error: toState(error).error ?? 'Failed to complete project.' };
   }
 }
 
@@ -415,7 +445,6 @@ export async function handoverProjectAction(_prev: ActionState, form: FormData):
   }
 
   const state = await run(async () => {
-    const { requestProjectHandover } = await import('@/modules/project-management/services/handover.service');
     await requestProjectHandover(principal, { projectId, toUserId: newManagerId, reason });
     return 'Project handover request sent for acceptance.';
   });
@@ -439,7 +468,6 @@ export async function decideProjectHandoverAction(_prev: ActionState, form: Form
   }
 
   const state = await run(async () => {
-    const { decideProjectHandover } = await import('@/modules/project-management/services/handover.service');
     await decideProjectHandover(principal, handoverId, decision, note);
     return decision === 'ACCEPTED' ? 'Project handover accepted.' : 'Project handover rejected.';
   });
@@ -456,7 +484,6 @@ export async function cancelProjectHandoverAction(_prev: ActionState, form: Form
   if (!handoverId) return { error: 'Missing handover ID' };
 
   const state = await run(async () => {
-    const { cancelProjectHandover } = await import('@/modules/project-management/services/handover.service');
     await cancelProjectHandover(principal, handoverId);
     return 'Project handover request cancelled.';
   });
@@ -473,14 +500,13 @@ export async function updateProjectStatusAction(projectId: string, status: strin
     return { success: false, error: 'Invalid project status.' };
   }
   try {
-    const { updateProject } = await import('@/modules/project-management/services/project.service');
     await updateProject(principal, projectId, { status: status as never });
     revalidatePath(`/pm/projects/${projectId}`);
     revalidatePath('/pm/projects');
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to update project status.' };
+    return { success: false, error: toState(error).error ?? 'Failed to update project status.' };
   }
 }
 
@@ -491,14 +517,13 @@ export async function updateProjectPriorityAction(projectId: string, priority: s
     return { success: false, error: 'Invalid project priority.' };
   }
   try {
-    const { updateProject } = await import('@/modules/project-management/services/project.service');
     await updateProject(principal, projectId, { priority: priority as never });
     revalidatePath(`/pm/projects/${projectId}`);
     revalidatePath('/pm/projects');
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to update project priority.' };
+    return { success: false, error: toState(error).error ?? 'Failed to update project priority.' };
   }
 }
 
@@ -509,7 +534,6 @@ export async function reassignMemberTasksAction(_prev: ActionState, form: FormDa
   const toUserId = String(form.get('toUserId'));
 
   const state = await run(async () => {
-    const { reassignAllMemberTasks } = await import('@/modules/project-management/services/project.service');
     return reassignAllMemberTasks(principal, projectId, fromUserId, toUserId);
   });
 
@@ -523,11 +547,11 @@ export async function autoAssignAutomationTeamAction(rawInput: unknown) {
   const principal = await requirePrincipal();
   try {
     const input = autoAssignTeamSchema.parse(rawInput);
-    const { autoAssignAutomationTeam } = await import('@/modules/project-management/services/automation-project.service');
     const result = await autoAssignAutomationTeam(principal, input);
     return { success: true, assignments: result.assignments };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Auto-assignment failed.' };
+    return { success: false, error: toState(error).error ?? 'Auto-assignment failed.' };
   }
 }
+
 

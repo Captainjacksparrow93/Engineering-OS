@@ -6,6 +6,7 @@ import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
 import { addDays, addWorkingDays, startOfDay } from '@/core/utils/dates';
 import { recomputeTaskDerivedState } from './task.service';
+import { nextProjectCode } from './project.service';
 import {
   allocateTeamForSteps,
   computeWorkload,
@@ -49,27 +50,44 @@ export interface CreateAutomationProjectInput {
   tasks: TaskAssignmentDraft[];
 }
 
-/** Get all descendants of a manager in the org chart */
-async function getDescendantUserIds(managerId: string): Promise<string[]> {
+/** In-memory BFS to find all descendants of a manager given a map of direct reports */
+function getDescendantUserIdsFromMap(managerId: string, reportsByManager: Map<string, string[]>): string[] {
   const result: string[] = [];
   const queue = [managerId];
+  const visited = new Set<string>([managerId]);
 
   while (queue.length > 0) {
     const current = queue.shift()!;
-    const directReports = await prisma.user.findMany({
-      where: { managerId: current, status: 'ACTIVE' },
-      select: { id: true },
-    });
-    for (const r of directReports) {
-      if (!result.includes(r.id)) {
-        result.push(r.id);
-        queue.push(r.id);
+    const directReports = reportsByManager.get(current) ?? [];
+    for (const reportId of directReports) {
+      if (!visited.has(reportId)) {
+        visited.add(reportId);
+        result.push(reportId);
+        queue.push(reportId);
       }
     }
   }
 
   return result;
 }
+
+/** Get all descendants of a manager in the org chart using a single company-level query */
+export async function getDescendantUserIds(companyId: string, managerId: string): Promise<string[]> {
+  const activeCompanyUsers = await prisma.user.findMany({
+    where: { companyId, status: 'ACTIVE' },
+    select: { id: true, managerId: true },
+  });
+  const reportsByManager = new Map<string, string[]>();
+  for (const u of activeCompanyUsers) {
+    if (u.managerId) {
+      const list = reportsByManager.get(u.managerId) ?? [];
+      list.push(u.id);
+      reportsByManager.set(u.managerId, list);
+    }
+  }
+  return getDescendantUserIdsFromMap(managerId, reportsByManager);
+}
+
 
 export async function getPMTeamData(companyId: string) {
   // Find PMs
@@ -93,10 +111,24 @@ export async function getPMTeamData(companyId: string) {
     orderBy: { fullName: 'asc' },
   });
 
-  // Map each PM to their team members
+  // Fetch all active company users once to build direct report hierarchy
+  const activeCompanyUsers = await prisma.user.findMany({
+    where: { companyId, status: 'ACTIVE' },
+    select: { id: true, managerId: true },
+  });
+  const reportsByManager = new Map<string, string[]>();
+  for (const u of activeCompanyUsers) {
+    if (u.managerId) {
+      const list = reportsByManager.get(u.managerId) ?? [];
+      list.push(u.id);
+      reportsByManager.set(u.managerId, list);
+    }
+  }
+
+  // Map each PM to their team members via in-memory BFS
   const teamsByPM: Record<string, string[]> = {};
   for (const m of managers) {
-    teamsByPM[m.id] = await getDescendantUserIds(m.id);
+    teamsByPM[m.id] = getDescendantUserIdsFromMap(m.id, reportsByManager);
   }
 
   // All technical engineers grouped by seniority (strictly excluding Project Managers and Directors)
@@ -161,9 +193,9 @@ export async function createAutomationProject(principal: Principal, input: Creat
   // Generate code if missing or sanitize provided code
   let code = input.code?.trim().toUpperCase();
   if (!code) {
-    const count = await prisma.project.count({ where: { companyId: principal.companyId } });
-    code = `ACS-PRJ-${String(count + 1).padStart(3, '0')}`;
+    code = await nextProjectCode(principal.companyId, 'ACS-PRJ-');
   }
+
 
   const existing = await prisma.project.findUnique({ where: { code } });
   if (existing) throw new DomainError(`Project code ${code} is already in use.`);
@@ -389,8 +421,8 @@ export async function autoAssignAutomationTeam(
   }
 
   // 1. Fetch PM Squad hierarchy
-  const descendantIds = input.managerId ? await getDescendantUserIds(input.managerId) : [];
-  const squadSet = new Set(descendantIds);
+  const descendantIds = input.managerId ? await getDescendantUserIds(principal.companyId, input.managerId) : [];
+  const squadSet = new Set<string>(descendantIds);
 
   // 2. Determine capacity window
   const windowStart = input.startDate ? startOfDay(new Date(input.startDate)) : startOfDay(new Date());

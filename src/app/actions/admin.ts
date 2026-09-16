@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requirePrincipal } from '@/core/auth/session';
 import { assignRole, createUser, revokeRole, setRolePermissions, setUserStatus } from '@/modules/admin/services/admin.service';
-import type { ActionState } from './pm';
+import { toState, type ActionState } from './pm';
 import type { ScopeType } from '@prisma/client';
 
 const value = (form: FormData, key: string) => {
@@ -19,9 +19,10 @@ async function run(fn: () => Promise<unknown>, paths: string[]): Promise<ActionS
     for (const path of paths) revalidatePath(path);
     return { success: 'Saved.' };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Something went wrong.' };
+    return toState(error);
   }
 }
+
 
 export async function createUserAction(_prev: ActionState, form: FormData): Promise<ActionState> {
   const principal = await requirePrincipal();

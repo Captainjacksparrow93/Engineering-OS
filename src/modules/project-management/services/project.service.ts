@@ -130,10 +130,10 @@ export async function createProject(principal: Principal, input: CreateProjectIn
   return project;
 }
 
-/** Generates PRJ-YYYY-NNN, scoped per company per year. */
-async function nextProjectCode(companyId: string): Promise<string> {
+/** Generates PRJ-YYYY-NNN or customPrefix-NNN, scoped per company. */
+export async function nextProjectCode(companyId: string, customPrefix?: string): Promise<string> {
   const year = new Date().getUTCFullYear();
-  const prefix = `PRJ-${year}-`;
+  const prefix = customPrefix ?? `PRJ-${year}-`;
   const last = await prisma.project.findFirst({
     where: { companyId, code: { startsWith: prefix } },
     orderBy: { code: 'desc' },
@@ -142,6 +142,7 @@ async function nextProjectCode(companyId: string): Promise<string> {
   const sequence = last ? Number.parseInt(last.code.slice(prefix.length), 10) + 1 : 1;
   return `${prefix}${String(sequence).padStart(3, '0')}`;
 }
+
 
 export async function updateProject(
   principal: Principal,
@@ -676,103 +677,4 @@ export async function completeAutomationProject(principal: Principal, projectId:
   return updated;
 }
 
-export async function handoverProject(
-  principal: Principal,
-  projectId: string,
-  newManagerId: string,
-) {
-  await assertProjectPermission(principal, projectId, 'pm.project.update');
 
-  const newManager = await prisma.user.findFirst({
-    where: { id: newManagerId, companyId: principal.companyId, status: 'ACTIVE' },
-  });
-  if (!newManager) throw new DomainError('Target manager is not active.');
-
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) throw new NotFoundError('Project not found');
-
-  const oldManagerId = project.managerId;
-  if (oldManagerId === newManagerId) return;
-
-  const managerRole = await prisma.role.findUnique({ where: { key: 'PROJECT_MANAGER' } });
-
-  await prisma.$transaction(async (tx) => {
-    // 1. Update project managerId
-    await tx.project.update({
-      where: { id: projectId },
-      data: { managerId: newManagerId },
-    });
-
-    // 2. Assign new manager to project members
-    await tx.projectMember.upsert({
-      where: { projectId_userId: { projectId, userId: newManagerId } },
-      create: { projectId, userId: newManagerId, role: 'MANAGER', allocationPercent: 100 },
-      update: { role: 'MANAGER' },
-    });
-
-    // 3. Grant RBAC Role to new manager
-    if (managerRole) {
-      await tx.roleAssignment.upsert({
-        where: {
-          userId_roleId_scopeType_scopeId: { userId: newManagerId, roleId: managerRole.id, scopeType: 'PROJECT', scopeId: projectId },
-        },
-        create: { userId: newManagerId, roleId: managerRole.id, scopeType: 'PROJECT', scopeId: projectId, grantedBy: principal.userId },
-        update: {},
-      });
-    }
-
-    // 4. Revoke old manager's RBAC role
-    if (managerRole) {
-      await tx.roleAssignment.deleteMany({
-        where: { userId: oldManagerId, roleId: managerRole.id, scopeType: 'PROJECT', scopeId: projectId },
-      });
-    }
-    await tx.projectMember.updateMany({
-      where: { projectId, userId: oldManagerId, role: 'MANAGER' },
-      data: { role: 'OBSERVER' },
-    });
-
-    // 5. Bulk reassign all open task assignments from old PM to new PM
-    const openAssignments = await tx.taskAssignment.findMany({
-      where: {
-        userId: oldManagerId,
-        status: 'ACTIVE',
-        task: { projectId, status: { notIn: ['COMPLETED', 'CANCELLED'] } }
-      },
-      select: { id: true, taskId: true }
-    });
-
-    if (openAssignments.length > 0) {
-      await tx.taskAssignment.updateMany({
-        where: { id: { in: openAssignments.map(a => a.id) } },
-        data: { userId: newManagerId },
-      });
-
-      for (const a of openAssignments) {
-        await audit(
-          {
-            actorId: principal.userId,
-            module: 'pm',
-            action: 'task.reassigned',
-            entityType: 'Task',
-            entityId: a.taskId,
-            diff: { assigneeId: { old: oldManagerId, new: newManagerId }, bulkHandover: true },
-          },
-          tx,
-        );
-      }
-    }
-
-    await audit(
-      {
-        actorId: principal.userId,
-        module: 'pm',
-        action: 'project.manager.handover',
-        entityType: 'Project',
-        entityId: projectId,
-        diff: { managerId: { old: oldManagerId, new: newManagerId }, tasksMoved: openAssignments.length },
-      },
-      tx,
-    );
-  });
-}
