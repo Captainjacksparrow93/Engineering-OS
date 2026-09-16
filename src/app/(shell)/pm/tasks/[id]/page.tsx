@@ -30,16 +30,9 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
 
   const { task, blockers, downstreamCount, permissions } = detail;
 
-  const [candidates, peers, projectTasks, assignableUsers] = await Promise.all([
+  const [candidates, peers, assignableUsers] = await Promise.all([
     permissions.canHandover ? handoverCandidates(principal, task.id) : Promise.resolve([]),
     permissions.canHandover ? peersForHandover(principal, task.id) : Promise.resolve([]),
-    permissions.canManageDependencies
-      ? prisma.task.findMany({
-          where: { projectId: task.projectId, id: { not: task.id } },
-          select: { id: true, code: true, title: true },
-          orderBy: { code: 'asc' },
-        })
-      : Promise.resolve([]),
     permissions.canAssign
       ? prisma.user.findMany({
           where: {
@@ -62,6 +55,14 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   const pendingHandover = task.handovers.find((h) => h.status === 'PENDING');
   const due = daysUntil(task.plannedEnd);
 
+  // Status pill is derived from the same blockers list the banner uses
+  const displayStatus =
+    (task.status === 'TODO' || task.status === 'BLOCKED') && blockers.length > 0
+      ? 'BLOCKED'
+      : task.status;
+
+  const assignedNames = activeAssignments.map((a) => formatName(a.user.fullName)).join(', ');
+
   return (
     <>
       <PageHeader
@@ -72,16 +73,25 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         ]}
         title={cleanTaskTitle(task.title)}
         subtitle={
-          <span className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={task.status} />
-            {task.priority !== 'MEDIUM' ? <PriorityBadge priority={task.priority} /> : null}
-            {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
-            {task.parent ? (
-              <Link href={`/pm/tasks/${task.parent.id}`} className="text-caption text-ink hover:underline">
-                under {cleanTaskTitle(task.parent.title)}
-              </Link>
-            ) : null}
-          </span>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={displayStatus} />
+              {task.priority !== 'MEDIUM' ? <PriorityBadge priority={task.priority} /> : null}
+              {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
+              {task.parent ? (
+                <Link href={`/pm/tasks/${task.parent.id}`} className="text-caption text-ink hover:underline">
+                  under {cleanTaskTitle(task.parent.title)}
+                </Link>
+              ) : null}
+            </div>
+            {assignedNames ? (
+              <p className="text-caption text-muted">
+                Assigned to <span className="font-medium text-ink">{assignedNames}</span>
+              </p>
+            ) : (
+              <p className="text-caption text-muted-soft">Unassigned</p>
+            )}
+          </div>
         }
       />
 
@@ -106,10 +116,10 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       {pendingHandover ? (
         <div className="mb-4">
           <Alert tone="warning">
-            Handover pending: <strong>{formatName(pendingHandover.fromUser.fullName)}</strong> →{' '}
+            Reassign request pending: <strong>{formatName(pendingHandover.fromUser.fullName)}</strong> →{' '}
             <strong>{formatName(pendingHandover.toUser.fullName)}</strong> ({pendingHandover.remainingPercent}% remaining).{' '}
-            <Link href="/pm/handovers" className="underline">
-              Open handovers
+            <Link href="/pm/handovers" className="underline font-semibold">
+              View in Requests
             </Link>
           </Alert>
         </div>
@@ -155,7 +165,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                 <span>Progress</span>
                 <span className="font-medium text-ink">{task.percentComplete}%</span>
               </div>
-              <ProgressBar value={task.percentComplete} tone={task.status === 'BLOCKED' ? 'danger' : undefined} />
+              <ProgressBar value={task.percentComplete} tone={displayStatus === 'BLOCKED' ? 'danger' : undefined} />
             </div>
           </Card>
 
@@ -224,40 +234,42 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             assignableUsers={assignableUsers}
           />
 
-          <Card title="Who is on this">
-            {activeAssignments.length === 0 ? (
-              <p className="muted">Nobody is holding this task.</p>
-            ) : (
-              <ul className="space-y-2">
-                {activeAssignments.map((assignment) => (
-                  <li key={assignment.id} className="flex items-center gap-2">
-                    <Avatar name={formatName(assignment.user.fullName)} color={assignment.user.avatarColor} size={26} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-body-sm font-medium text-ink">{formatName(assignment.user.fullName)}</p>
-                      <p className="truncate text-caption text-muted">
-                        {assignment.role.toLowerCase()} · {Math.round(assignment.allocatedHours)}h allocated
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {pastAssignments.length > 0 ? (
-              <div className="mt-3 border-t border-hairline pt-3">
-                <p className="label">Previously</p>
-                <ul className="space-y-1.5">
-                  {pastAssignments.map((assignment) => (
-                    <li key={assignment.id} className="flex items-center gap-2 text-caption text-muted">
-                      <Avatar name={formatName(assignment.user.fullName)} color={assignment.user.avatarColor} size={18} />
-                      <span className="flex-1 truncate">{formatName(assignment.user.fullName)}</span>
-                      <StatusBadge status={assignment.status} />
+          {permissions.canReviewOrManage ? (
+            <Card title="Who is on this">
+              {activeAssignments.length === 0 ? (
+                <p className="muted">Nobody is holding this task.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {activeAssignments.map((assignment) => (
+                    <li key={assignment.id} className="flex items-center gap-2">
+                      <Avatar name={formatName(assignment.user.fullName)} color={assignment.user.avatarColor} size={26} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-body-sm font-medium text-ink">{formatName(assignment.user.fullName)}</p>
+                        <p className="truncate text-caption text-muted">
+                          {assignment.role.toLowerCase()} · {Math.round(assignment.allocatedHours)}h allocated
+                        </p>
+                      </div>
                     </li>
                   ))}
                 </ul>
-              </div>
-            ) : null}
-          </Card>
+              )}
+
+              {pastAssignments.length > 0 ? (
+                <div className="mt-3 border-t border-hairline pt-3">
+                  <p className="label">Previously</p>
+                  <ul className="space-y-1.5">
+                    {pastAssignments.map((assignment) => (
+                      <li key={assignment.id} className="flex items-center gap-2 text-caption text-muted">
+                        <Avatar name={formatName(assignment.user.fullName)} color={assignment.user.avatarColor} size={18} />
+                        <span className="flex-1 truncate">{formatName(assignment.user.fullName)}</span>
+                        <StatusBadge status={assignment.status} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
 
           {permissions.canHandover && !permissions.canAssign && !pendingHandover && !['COMPLETED', 'CANCELLED'].includes(task.status) ? (
             <HandoverForm
@@ -278,14 +290,12 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
 
           <DependencyPanel
             taskId={task.id}
-            canManage={permissions.canManageDependencies}
             dependencies={task.dependencies}
             dependents={task.dependents}
-            projectTasks={projectTasks}
           />
 
           {task.handovers.length > 0 ? (
-            <Card title="Handover history">
+            <Card title="Reassign history">
               <ul className="space-y-2">
                 {task.handovers.map((handover) => (
                   <li key={handover.id} className="rounded-md border border-hairline p-2">

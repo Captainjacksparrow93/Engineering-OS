@@ -106,18 +106,10 @@ export async function getDashboard(
   principal: Principal,
   period: 'week' | 'month' = 'week'
 ): Promise<UnifiedDashboardResult> {
-  const isDirectorOrAdmin =
-    hasPermissionAnywhere(principal, 'pm.project.read.all') ||
-    principal.roleKeys.includes('DIRECTOR') ||
-    principal.roleKeys.includes('SUPER_ADMIN') ||
-    principal.roleKeys.includes('DEPARTMENT_HEAD') ||
-    principal.roleKeys.includes('TECHNICAL_HEAD');
   const hasOversight =
-    isDirectorOrAdmin ||
     can(principal, 'pm.oversight') ||
     hasPermissionAnywhere(principal, 'pm.oversight');
   const hasReportRead =
-    isDirectorOrAdmin ||
     can(principal, 'pm.report.read') ||
     hasPermissionAnywhere(principal, 'pm.report.read');
 

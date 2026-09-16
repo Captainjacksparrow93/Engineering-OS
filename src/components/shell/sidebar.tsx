@@ -100,10 +100,10 @@ const Icons = {
 };
 
 const WORKSPACE_NAV: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: Icons.Dashboard },
-  { label: 'My work', href: '/pm/my-work', icon: Icons.MyWork },
+  { label: 'Dashboard', href: '/dashboard', requires: 'pm.report.read', icon: Icons.Dashboard },
+  { label: 'My work', href: '/pm/my-work', requires: 'pm.handover.request', icon: Icons.MyWork },
   { label: 'Approvals', href: '/pm/approvals', requires: 'pm.progress.review', icon: Icons.Audit },
-  { label: 'Handovers', href: '/pm/handovers', icon: Icons.Handovers },
+  { label: 'Requests', href: '/pm/handovers', requires: 'pm.handover.request', icon: Icons.Handovers },
   { label: 'Urgent task', href: '/pm/adhoc', requires: 'pm.task.adhoc.create', icon: Icons.AdHoc },
 ];
 
@@ -131,11 +131,10 @@ export function Sidebar({
   const { isCollapsed, toggleCollapsed } = useShell();
 
   const visible = (item: NavItem) => {
-    if (item.href === '/pm/approvals') {
-      return hasPermissionAnywhere(principal, 'pm.progress.review') || principal.memberProjectIds.length > 0;
-    }
     return !item.requires || hasPermissionAnywhere(principal, item.requires);
   };
+  const workspaceItems = WORKSPACE_NAV.filter(visible);
+  const managementItems = MANAGEMENT_NAV.filter(visible);
   const adminItems = ADMIN_NAV.filter(visible);
 
   return (
@@ -179,14 +178,14 @@ export function Sidebar({
       {/* Navigation List (Independent scroll container) */}
       <nav className="flex-1 overflow-y-auto px-2 py-md space-y-1">
         {/* Workspace Group */}
-        {WORKSPACE_NAV.filter(visible).length > 0 && (
+        {workspaceItems.length > 0 && (
           <div key="workspace-section">
             {!isCollapsed ? (
               <p className="px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Workspace</p>
             ) : (
               <div className="my-1 border-t border-hairline-soft" />
             )}
-            {WORKSPACE_NAV.filter(visible).map((item) => (
+            {workspaceItems.map((item) => (
               <NavLink
                 key={item.href}
                 href={item.href}
@@ -206,14 +205,14 @@ export function Sidebar({
         )}
 
         {/* Management Group */}
-        {MANAGEMENT_NAV.filter(visible).length > 0 && (
+        {managementItems.length > 0 && (
           <div key="management-section">
             {!isCollapsed ? (
               <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Management</p>
             ) : (
               <div className="my-2 border-t border-hairline-soft" />
             )}
-            {MANAGEMENT_NAV.filter(visible).map((item) => (
+            {managementItems.map((item) => (
               <NavLink
                 key={item.href}
                 href={item.href}

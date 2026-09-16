@@ -58,29 +58,42 @@ export function AvatarStack({ people }: { people: Array<{ id: string; fullName: 
       ))}
       {people.length > 4 ? (
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-pill border border-hairline bg-surface-strong text-caption font-medium text-ink ring-2 ring-surface">
-          +{people.length - 4}
+          +${people.length - 4}
         </span>
       ) : null}
     </span>
   );
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  IN_REVIEW: 'Waiting for approval',
+  TODO: 'To do',
+  IN_PROGRESS: 'In progress',
+  COMPLETED: 'Completed',
+  BLOCKED: 'Blocked',
+  CANCELLED: 'Cancelled',
+  ON_HOLD: 'On hold',
+  DRAFT: 'Draft',
+  PENDING: 'Pending',
+  ACCEPTED: 'Accepted',
+  DECLINED: 'Declined',
+  WITHDRAWN: 'Withdrawn',
+};
+
 /**
  * Work-stage pills.
  *
- * The five pastels mark stages of work in flight - the direct analogue of the agent
- * action timeline they were designed for. States that are not stages (blocked,
- * cancelled, on hold) deliberately fall through to semantic or neutral treatments so
- * the pastels keep meaning only one thing.
+ * Colour discipline per owner decision (Step 3 & 7):
+ * - Completed = green (bg-success text-on-primary)
+ * - To do = neutral (bg-surface-strong text-ink border border-hairline)
+ * - In progress & Waiting for approval = stage pastels
  */
 const STAGE_STYLES: Record<string, string> = {
-  // Project lifecycle
   PLANNING: 'bg-stage-thinking',
-  // Task lifecycle
-  TODO: 'bg-stage-grep',
+  TODO: 'bg-surface-strong text-ink border border-hairline',
   IN_PROGRESS: 'bg-stage-edit',
   IN_REVIEW: 'bg-stage-read',
-  COMPLETED: 'bg-stage-done text-on-primary',
+  COMPLETED: 'bg-success text-on-primary',
 };
 
 const STATE_STYLES: Record<string, string> = {
@@ -95,6 +108,8 @@ const STATE_STYLES: Record<string, string> = {
   PENDING: 'badge-outline',
   ACCEPTED: 'badge-success',
   REJECTED: 'badge-error',
+  DECLINED: 'badge-error',
+  WITHDRAWN: 'badge-neutral text-muted',
   HANDED_OVER: 'badge-neutral',
   RELEASED: 'badge-neutral text-muted',
   SUSPENDED: 'badge-error',
@@ -109,7 +124,7 @@ const STATE_STYLES: Record<string, string> = {
 };
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
-  const label = status.replaceAll('_', ' ');
+  const label = STATUS_LABELS[status] ?? status.replaceAll('_', ' ');
   const stage = STAGE_STYLES[status];
 
   if (stage) {
@@ -268,6 +283,3 @@ export function Alert({
 export function CodeRef({ children, className }: { children: React.ReactNode; className?: string }) {
   return <span className={clsx('code', className)}>{children}</span>;
 }
-
-
-

@@ -9,8 +9,6 @@ const PRESETS = [25, 50, 75, 100];
 export function ProgressForm({ taskId, currentPercent }: { taskId: string; currentPercent: number }) {
   const [state, action] = useActionState<ActionState, FormData>(logProgressAction, {});
   const [percent, setPercent] = useState(Math.max(currentPercent, 25));
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <section className="card border-hairline">
@@ -61,7 +59,7 @@ export function ProgressForm({ taskId, currentPercent }: { taskId: string; curre
               className="input text-xs w-24 py-1"
             />
           </div>
-          <p className="hint mt-1 text-caption text-muted">Progress cannot be reduced. If 100% is submitted, task moves to review.</p>
+          <p className="hint mt-1 text-caption text-muted">Progress cannot be reduced. If 100% is submitted, task moves to waiting for approval.</p>
         </div>
 
         <div className="field">
@@ -74,23 +72,6 @@ export function ProgressForm({ taskId, currentPercent }: { taskId: string; curre
             className="textarea w-full"
             placeholder="e.g. Completed wiring and verified I/O mapping."
           />
-        </div>
-
-        <div>
-          {!showDatePicker ? (
-            <button
-              type="button"
-              onClick={() => setShowDatePicker(true)}
-              className="text-caption text-muted hover:text-ink underline"
-            >
-              Log for a different day?
-            </button>
-          ) : (
-            <div className="field">
-              <label className="label" htmlFor="loggedFor">Date</label>
-              <input id="loggedFor" name="loggedFor" type="date" max={today} defaultValue={today} className="input text-xs" />
-            </div>
-          )}
         </div>
 
         <FormMessage state={state} />

@@ -1,9 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useState } from 'react';
-import { addDependencyAction, removeDependencyAction, type ActionState } from '@/app/actions/pm';
-import { FormMessage, SubmitButton } from '@/components/form';
 import { StatusBadge } from '@/components/ui';
 
 interface Edge {
@@ -14,66 +11,36 @@ interface Edge {
   successor?: { id: string; code: string; title: string; status: string };
 }
 
-const TYPE_LABEL: Record<string, string> = {
-  FINISH_TO_START: 'finish → start',
-  START_TO_START: 'start → start',
-  FINISH_TO_FINISH: 'finish → finish',
-  START_TO_FINISH: 'start → finish',
-};
-
 export function DependencyPanel({
-  taskId,
-  canManage,
   dependencies,
   dependents,
-  projectTasks,
 }: {
   taskId: string;
-  canManage: boolean;
+  canManage?: boolean;
   dependencies: Edge[];
   dependents: Edge[];
-  projectTasks: Array<{ id: string; code: string; title: string }>;
+  projectTasks?: Array<{ id: string; code: string; title: string }>;
 }) {
-  const [addState, addAction] = useActionState<ActionState, FormData>(addDependencyAction, {});
-  const [removeState, removeAction] = useActionState<ActionState, FormData>(removeDependencyAction, {});
-  const [adding, setAdding] = useState(false);
-
   return (
-    <section className="card">
-      <header className="card-header">
+    <section className="card border-hairline">
+      <header className="card-header bg-canvas-soft">
         <h2 className="card-title">Dependencies</h2>
-        {canManage ? (
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAdding((v) => !v)}>
-            {adding ? 'Cancel' : 'Add'}
-          </button>
-        ) : null}
       </header>
       <div className="card-body space-y-3">
         <div>
-          <p className="label">This task waits on</p>
+          <p className="label">Waiting on</p>
           {dependencies.length === 0 ? (
-            <p className="text-body-sm text-muted-soft">Nothing - it can start as soon as it is scheduled.</p>
+            <p className="text-body-sm text-muted-soft">Nothing — ready to start.</p>
           ) : (
             <ul className="space-y-1.5">
               {dependencies.map((edge) => (
                 <li key={edge.id} className="flex items-center gap-2 rounded border border-hairline px-2 py-1.5">
                   <div className="min-w-0 flex-1">
-                    <Link href={`/pm/tasks/${edge.predecessor!.id}`} className="block truncate text-body-sm text-ink hover:text-ink">
+                    <Link href={`/pm/tasks/${edge.predecessor!.id}`} className="block truncate text-body-sm text-ink hover:underline">
                       {edge.predecessor!.title}
                     </Link>
-                    <span className="text-caption text-muted-soft">
-                      {TYPE_LABEL[edge.type]}
-                      {edge.lagDays !== 0 ? ` · ${edge.lagDays > 0 ? '+' : ''}${edge.lagDays}d` : ''}
-                    </span>
                   </div>
                   <StatusBadge status={edge.predecessor!.status} />
-                  {canManage ? (
-                    <form action={removeAction}>
-                      <input type="hidden" name="dependencyId" value={edge.id} />
-                      <input type="hidden" name="taskId" value={taskId} />
-                      <SubmitButton variant="secondary" size="sm">✕</SubmitButton>
-                    </form>
-                  ) : null}
                 </li>
               ))}
             </ul>
@@ -81,59 +48,24 @@ export function DependencyPanel({
         </div>
 
         <div>
-          <p className="label">Waiting on this task</p>
+          <p className="label">Next step</p>
           {dependents.length === 0 ? (
             <p className="text-body-sm text-muted-soft">Nothing downstream.</p>
           ) : (
-            <ul className="space-y-1">
+            <ul className="space-y-1.5">
               {dependents.map((edge) => (
-                <li key={edge.id} className="flex items-center gap-2 text-body-sm">
-                  <Link href={`/pm/tasks/${edge.successor!.id}`} className="min-w-0 flex-1 truncate text-ink hover:text-ink">
-                    {edge.successor!.title}
-                  </Link>
+                <li key={edge.id} className="flex items-center gap-2 rounded border border-hairline px-2 py-1.5">
+                  <div className="min-w-0 flex-1">
+                    <Link href={`/pm/tasks/${edge.successor!.id}`} className="block truncate text-body-sm text-ink hover:underline">
+                      {edge.successor!.title}
+                    </Link>
+                  </div>
                   <StatusBadge status={edge.successor!.status} />
                 </li>
               ))}
             </ul>
           )}
         </div>
-
-        <FormMessage state={removeState} />
-
-        {adding ? (
-          <form action={addAction} className="border-t border-hairline pt-3">
-            <input type="hidden" name="successorId" value={taskId} />
-            <div className="field">
-              <label className="label" htmlFor="predecessorId">Must happen before this task</label>
-              <select id="predecessorId" name="predecessorId" required className="select" defaultValue="">
-                <option value="" disabled>Select a task</option>
-                {projectTasks.map((task) => (
-                  <option key={task.id} value={task.id}>
-                    {task.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="field">
-                <label className="label" htmlFor="type">Relationship</label>
-                <select id="type" name="type" className="select" defaultValue="FINISH_TO_START">
-                  {Object.entries(TYPE_LABEL).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label className="label" htmlFor="lagDays">Lag (days)</label>
-                <input id="lagDays" name="lagDays" type="number" defaultValue={0} className="input" />
-              </div>
-            </div>
-            <FormMessage state={addState} />
-            <div className="mt-2">
-              <SubmitButton size="sm" className="w-full">Add dependency</SubmitButton>
-            </div>
-          </form>
-        ) : null}
       </div>
     </section>
   );

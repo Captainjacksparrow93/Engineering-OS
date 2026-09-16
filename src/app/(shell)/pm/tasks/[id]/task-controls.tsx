@@ -28,6 +28,7 @@ export function TaskControls({
     canDelete: boolean;
     canStart?: boolean;
     canSubmit?: boolean;
+    canMarkCompleted?: boolean;
     canReview?: boolean;
     canCancel?: boolean;
     canReopen?: boolean;
@@ -73,7 +74,7 @@ export function TaskControls({
     });
   };
 
-  const handleSubmitForReview = () => {
+  const handleMarkCompleted = () => {
     startTransition(async () => {
       const formData = new FormData();
       formData.set('taskId', task.id);
@@ -82,7 +83,7 @@ export function TaskControls({
       if (res?.error) {
         toast.error(res.error);
       } else {
-        toast.success('Submitted task for review');
+        toast.success('Marked as completed — waiting for approval');
         router.refresh();
       }
     });
@@ -190,6 +191,8 @@ export function TaskControls({
     });
   };
 
+  const canMarkComplete = permissions.canMarkCompleted || permissions.canSubmit;
+
   return (
     <>
       <section className="card border-hairline">
@@ -209,14 +212,14 @@ export function TaskControls({
             </button>
           ) : null}
 
-          {permissions.canSubmit ? (
+          {canMarkComplete ? (
             <button
               type="button"
               disabled={isPending}
-              onClick={handleSubmitForReview}
+              onClick={handleMarkCompleted}
               className="btn btn-primary w-full bg-ink text-canvas font-medium hover:bg-ink/90"
             >
-              {isPending ? 'Submitting…' : 'Submit for review'}
+              {isPending ? 'Submitting…' : 'Mark as completed'}
             </button>
           ) : null}
 

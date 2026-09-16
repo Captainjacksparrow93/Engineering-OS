@@ -163,6 +163,8 @@ export async function changeTaskStatus(
     (task.status === 'COMPLETED' && status === 'IN_PROGRESS')
   ) {
     await assertTaskPermission(principal, taskId, 'pm.progress.review');
+  } else if (status === 'CANCELLED') {
+    await assertTaskPermission(principal, taskId, 'pm.task.cancel');
   } else {
     await assertTaskPermission(principal, taskId, 'pm.task.update');
   }
@@ -383,8 +385,16 @@ export async function assignTask(
   input: { userId: string; role?: 'OWNER' | 'COLLABORATOR' | 'REVIEWER'; allocatedHours?: number; note?: string },
 ) {
   await assertTaskPermission(principal, taskId, 'pm.task.assign');
-  const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId } });
+  const task = await prisma.task.findUniqueOrThrow({
+    where: { id: taskId },
+    include: { assignments: { where: { status: 'ACTIVE', role: 'OWNER' } } },
+  });
   const role = input.role ?? 'OWNER';
+
+  // Step 4.7: Direct assignment is only allowed when task has no active owner
+  if (role === 'OWNER' && task.assignments.length > 0) {
+    throw new DomainError('This task already has an owner. To reassign, submit a reassign request.');
+  }
 
   const assignee = await prisma.user.findFirst({
     where: { id: input.userId, companyId: principal.companyId, status: 'ACTIVE' },
@@ -664,6 +674,7 @@ export async function getTaskDetail(principal: Principal, taskId: string) {
   const graph = await loadProjectGraph(task.projectId);
   const blockers = blockingReasons(taskId, graph);
   const scope = { projectId: task.projectId, departmentId: task.project.departmentId };
+  const isManager = task.project.managerId === principal.userId;
   const isHolder = task.assignments.some((a) => a.status === 'ACTIVE' && a.userId === principal.userId);
   const isHolderOrLead =
     isHolder ||
@@ -672,16 +683,14 @@ export async function getTaskDetail(principal: Principal, taskId: string) {
         principal.reportIds.length > 0 &&
         task.assignments.some((a) => a.status === 'ACTIVE' && principal.reportIds.includes(a.userId)),
     );
-  const isManager = task.project.managerId === principal.userId;
-
   const canStart =
     (task.status === 'TODO' || task.status === 'BLOCKED') &&
     blockers.length === 0 &&
-    (isHolderOrLead || can(principal, 'pm.progress.log', scope) || isManager);
+    isHolderOrLead;
 
-  const canSubmit =
+  const canMarkCompleted =
     task.status === 'IN_PROGRESS' &&
-    (isHolderOrLead || can(principal, 'pm.progress.log', scope) || isManager);
+    isHolderOrLead;
 
   const canReview =
     task.status === 'IN_REVIEW' &&
@@ -689,7 +698,10 @@ export async function getTaskDetail(principal: Principal, taskId: string) {
 
   const canCancel =
     !['COMPLETED', 'CANCELLED'].includes(task.status) &&
-    (can(principal, 'pm.task.update', scope) || isManager);
+    can(principal, 'pm.task.cancel', scope);
+
+  const canDelete =
+    can(principal, 'pm.task.delete', scope);
 
   const canReopen =
     task.status === 'COMPLETED' &&
@@ -697,7 +709,20 @@ export async function getTaskDetail(principal: Principal, taskId: string) {
 
   const canReportProblem =
     !['COMPLETED', 'CANCELLED'].includes(task.status) &&
-    (isHolderOrLead || can(principal, 'pm.progress.log', scope) || isManager);
+    isHolderOrLead;
+
+  const canLogProgress =
+    !['COMPLETED', 'CANCELLED'].includes(task.status) &&
+    isHolderOrLead;
+
+  const canReviewOrManage =
+    can(principal, 'pm.progress.review', scope) || isManager;
+
+  const canRequestReassign =
+    isHolderOrLead ||
+    can(principal, 'pm.progress.review', scope) ||
+    isManager ||
+    can(principal, 'pm.task.cancel', scope);
 
   return {
     task,
@@ -705,17 +730,20 @@ export async function getTaskDetail(principal: Principal, taskId: string) {
     downstreamCount: downstreamTaskIds(taskId, graph.edges).length,
     permissions: {
       canEdit: can(principal, 'pm.task.update', scope) || isManager,
-      canAssign: can(principal, 'pm.task.assign', scope) || isManager,
-      canLogProgress: !['COMPLETED', 'CANCELLED'].includes(task.status) && (isHolderOrLead || can(principal, 'pm.progress.log', scope) || isManager),
-      canHandover: !['COMPLETED', 'CANCELLED'].includes(task.status) && (isHolderOrLead || can(principal, 'pm.handover.override', scope) || isManager),
-      canManageDependencies: can(principal, 'pm.task.dependency.manage', scope) || isManager,
-      canDelete: can(principal, 'pm.task.delete', scope) || isManager,
+      canAssign: (can(principal, 'pm.task.assign', scope) || isManager) && !task.assignments.some((a) => a.status === 'ACTIVE' && a.role === 'OWNER'),
+      canLogProgress,
+      canHandover: !['COMPLETED', 'CANCELLED'].includes(task.status) && canRequestReassign,
+      canManageDependencies: false,
+      canDelete,
       canStart,
-      canSubmit,
+      canSubmit: canMarkCompleted,
+      canMarkCompleted,
       canReview,
       canCancel,
       canReopen,
       canReportProblem,
+      canReviewOrManage,
+      canRequestReassign,
       isHolder,
       isHolderOrLead,
     },

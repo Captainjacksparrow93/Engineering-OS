@@ -27,10 +27,14 @@ export function projectVisibilityWhere(principal: Principal): Prisma.ProjectWher
 
   const clauses: Prisma.ProjectWhereInput[] = [
     { managerId: principal.userId },
-    { sponsorId: principal.userId },
     { members: { some: { userId: principal.userId } } },
     { tasks: { some: { assignments: { some: { userId: principal.userId } } } } },
   ];
+  if (principal.reportIds && principal.reportIds.length > 0) {
+    clauses.push({
+      tasks: { some: { assignments: { some: { userId: { in: principal.reportIds } } } } },
+    });
+  }
   if (projectIds.length) clauses.push({ id: { in: projectIds } });
   if (departmentIds.length) clauses.push({ departmentId: { in: departmentIds } });
 
@@ -99,12 +103,11 @@ const MANAGER_IMPLIED = new Set<PermissionKey>([
   'pm.task.read',
   'pm.task.create',
   'pm.task.update',
-  'pm.task.delete',
   'pm.task.assign',
   'pm.task.adhoc.create',
-  'pm.task.dependency.manage',
   'pm.progress.review',
-  'pm.handover.override',
+  'pm.handover.request',
+  'pm.handover.decide',
   'pm.resource.read',
   'pm.report.read',
 ]);
@@ -114,12 +117,18 @@ export async function assertProjectVisible(principal: Principal, projectId: stri
   if (project.companyId !== principal.companyId) throw new NotFoundError('Project not found.');
 
   if (can(principal, 'pm.project.read.all')) return project;
-  if (project.managerId === principal.userId || project.sponsorId === principal.userId) return project;
+  if (project.managerId === principal.userId) return project;
   if (principal.memberProjectIds.includes(project.id)) return project;
   if (project.departmentId && principal.coveredDepartmentIds.includes(project.departmentId)) return project;
 
+  const isMember = await prisma.projectMember.count({
+    where: { projectId, userId: principal.userId },
+  });
+  if (isMember > 0) return project;
+
+  const userIdsToCheck = [principal.userId, ...(principal.reportIds ?? [])];
   const assigned = await prisma.taskAssignment.count({
-    where: { userId: principal.userId, task: { projectId } },
+    where: { userId: { in: userIdsToCheck }, task: { projectId } },
   });
   if (assigned > 0) return project;
 

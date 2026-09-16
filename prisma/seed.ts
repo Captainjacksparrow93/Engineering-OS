@@ -213,7 +213,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['front desk', 'guest coordination'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
 
     // Purchase
@@ -237,7 +237,7 @@ async function main() {
       dept: 'PUR',
       manager: 'ACS-0007',
       skills: ['raw material purchase', 'copper busbar sourcing'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PUR' }],
+      roles: [],
     },
     {
       code: 'ACS-0009',
@@ -248,7 +248,7 @@ async function main() {
       dept: 'PUR',
       manager: 'ACS-0007',
       skills: ['switchgear components', 'relays sourcing'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PUR' }],
+      roles: [],
     },
 
     // Sales
@@ -272,7 +272,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0010',
       skills: ['industrial projects', 'client coordination'],
-      roles: [{ key: 'PROJECT_MANAGER', scopeType: 'DEPARTMENT', scope: 'SALES' }],
+      roles: [],
     },
     {
       code: 'ACS-0012',
@@ -283,7 +283,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0010',
       skills: ['tendering', 'technical proposal'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'SALES' }],
+      roles: [],
     },
     {
       code: 'ACS-0013',
@@ -294,7 +294,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0010',
       skills: ['panel estimation', 'BOM calculation', 'costing'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'SALES' }],
+      roles: [],
     },
     {
       code: 'ACS-0014',
@@ -305,7 +305,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0013',
       skills: ['cost estimation', 'feeder calculations'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'SALES' }],
+      roles: [],
     },
     {
       code: 'ACS-0015',
@@ -316,7 +316,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0010',
       skills: ['site business development', 'OEM sales'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'SALES' }],
+      roles: [],
     },
     {
       code: 'ACS-0016',
@@ -327,7 +327,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0013',
       skills: ['panel costing', 'estimation'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'SALES' }],
+      roles: [],
     },
 
     // Trading Sales
@@ -351,7 +351,7 @@ async function main() {
       dept: 'TRADING',
       manager: 'ACS-0017',
       skills: ['switchgear components trading', 'client orders'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TRADING' }],
+      roles: [],
     },
     {
       code: 'ACS-0019',
@@ -362,7 +362,7 @@ async function main() {
       dept: 'TRADING',
       manager: 'ACS-0017',
       skills: ['quotations', 'dispatch follow up'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TRADING' }],
+      roles: [],
     },
 
     // IT
@@ -399,7 +399,7 @@ async function main() {
       dept: 'ACC',
       manager: 'ACS-0021',
       skills: ['vouchers', 'ledger entry', 'invoicing'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ACC' }],
+      roles: [],
     },
     {
       code: 'ACS-0023',
@@ -410,7 +410,7 @@ async function main() {
       dept: 'ACC',
       manager: 'ACS-0021',
       skills: ['payroll reconciliation', 'banking'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ACC' }],
+      roles: [],
     },
 
     // Stores
@@ -434,7 +434,7 @@ async function main() {
       dept: 'STORES',
       manager: 'ACS-0024',
       skills: ['stock verification', 'dispatch stores'],
-      roles: [{ key: 'PROJECT_MANAGER', scopeType: 'DEPARTMENT', scope: 'STORES' }],
+      roles: [],
     },
     {
       code: 'ACS-0026',
@@ -445,7 +445,7 @@ async function main() {
       dept: 'STORES',
       manager: 'ACS-0024',
       skills: ['stock inward', 'bin tracking'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'STORES' }],
+      roles: [],
     },
     {
       code: 'ACS-0027',
@@ -456,7 +456,7 @@ async function main() {
       dept: 'STORES',
       manager: 'ACS-0024',
       skills: ['raw materials', 'hardware stores'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'STORES' }],
+      roles: [],
     },
 
     // Design
@@ -471,7 +471,7 @@ async function main() {
       skills: ['GA drawing', 'EPLAN', 'AutoCAD', 'LV switchgear', 'busbar calculation'],
       roles: [
         { key: 'DEPARTMENT_HEAD', scopeType: 'DEPARTMENT', scope: 'DESIGN' },
-        { key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'DESIGN' },
+        { key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' },
       ],
     },
     {
@@ -483,7 +483,7 @@ async function main() {
       dept: 'DESIGN',
       manager: 'ACS-0028',
       skills: ['schematics', 'EPLAN', 'MCC design', 'PCC design'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'DESIGN' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0030',
@@ -494,7 +494,7 @@ async function main() {
       dept: 'DESIGN',
       manager: 'ACS-0028',
       skills: ['AutoCAD electrical', 'busbar routing', 'panel layouts'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'DESIGN' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0031',
@@ -505,7 +505,7 @@ async function main() {
       dept: 'DESIGN',
       manager: 'ACS-0028',
       skills: ['BOM generation', 'control wiring design'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'DESIGN' }],
+      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0032',
@@ -516,7 +516,7 @@ async function main() {
       dept: 'DESIGN',
       manager: 'ACS-0028',
       skills: ['enclosure fabrication drawings', 'SolidWorks', 'sheet metal'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'DESIGN' }],
+      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0033',
@@ -527,7 +527,7 @@ async function main() {
       dept: 'DESIGN',
       manager: 'ACS-0028',
       skills: ['APFC panel design', 'feeder pillars'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'DESIGN' }],
+      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0034',
@@ -538,7 +538,7 @@ async function main() {
       dept: 'DESIGN',
       manager: 'ACS-0028',
       skills: ['terminal block diagrams', 'cable schedules'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'DESIGN' }],
+      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
 
     // Production - Supervisor
@@ -564,7 +564,7 @@ async function main() {
       dept: 'PROD_LOG',
       manager: 'ACS-0035',
       skills: ['material movement', 'panel packing', 'dispatch'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0037',
@@ -575,7 +575,7 @@ async function main() {
       dept: 'PROD_LOG',
       manager: 'ACS-0035',
       skills: ['transportation', 'loading'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0038',
@@ -586,7 +586,7 @@ async function main() {
       dept: 'PROD_LOG',
       manager: 'ACS-0035',
       skills: ['forklift', 'crate packing'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0039',
@@ -597,7 +597,7 @@ async function main() {
       dept: 'PROD_LOG',
       manager: 'ACS-0035',
       skills: ['dispatch documentation', 'handling'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0040',
@@ -608,7 +608,7 @@ async function main() {
       dept: 'PROD_LOG',
       manager: 'ACS-0035',
       skills: ['dispatch', 'packing'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
 
     // Production - Assembly
@@ -621,7 +621,7 @@ async function main() {
       dept: 'PROD_ASSY',
       manager: 'ACS-0035',
       skills: ['enclosure assembly', 'switchgear mounting', 'busbar fitting'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0042',
@@ -632,7 +632,7 @@ async function main() {
       dept: 'PROD_ASSY',
       manager: 'ACS-0035',
       skills: ['breaker mounting', 'door interlocks', 'busbar assembly'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0043',
@@ -643,7 +643,7 @@ async function main() {
       dept: 'PROD_ASSY',
       manager: 'ACS-0035',
       skills: ['mechanical assembly', 'hardware'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
 
     // Production - Wire Men
@@ -656,7 +656,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0035',
       skills: ['power wiring', 'control wiring', 'ferrule numbering', 'MCC wiring'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0045',
@@ -667,7 +667,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0035',
       skills: ['relay wiring', 'PLC wiring', 'panel dressing'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0046',
@@ -678,7 +678,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0044',
       skills: ['control wiring', 'crimping'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0047',
@@ -689,7 +689,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0044',
       skills: ['feeder wiring', 'bus wiring'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0048',
@@ -700,7 +700,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0044',
       skills: ['wiring', 'bunching', 'dressing'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0049',
@@ -711,7 +711,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0044',
       skills: ['wiring', 'crimping'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0050',
@@ -722,7 +722,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0044',
       skills: ['wiring', 'ferruling'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0051',
@@ -733,7 +733,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0044',
       skills: ['wiring', 'cable routing'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0052',
@@ -744,7 +744,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0044',
       skills: ['wiring', 'cable terminal connection'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0053',
@@ -755,7 +755,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0044',
       skills: ['wiring', 'earthing'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0054',
@@ -766,7 +766,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0044',
       skills: ['wiring', 'terminal marking'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0055',
@@ -777,7 +777,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0044',
       skills: ['panel labeling', 'mimic stickers', 'ferrule printing'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
     {
       code: 'ACS-0056',
@@ -788,7 +788,7 @@ async function main() {
       dept: 'PROD_WIRE',
       manager: 'ACS-0044',
       skills: ['sticker printing', 'legend plates'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'PROD' }],
+      roles: [],
     },
 
     // QC
@@ -812,7 +812,7 @@ async function main() {
       dept: 'QC',
       manager: 'ACS-0057',
       skills: ['breaker testing', 'relay testing', 'control circuit testing'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'QC' }],
+      roles: [],
     },
     {
       code: 'ACS-0059',
@@ -823,7 +823,7 @@ async function main() {
       dept: 'QC',
       manager: 'ACS-0057',
       skills: ['FAT coordination', 'CT/PT polarity', 'insulation test'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'QC' }],
+      roles: [],
     },
     {
       code: 'ACS-0060',
@@ -834,7 +834,7 @@ async function main() {
       dept: 'QC',
       manager: 'ACS-0058',
       skills: ['routine testing reports', 'continuity test'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'QC' }],
+      roles: [],
     },
 
     // Technical
@@ -848,8 +848,8 @@ async function main() {
       manager: 'ACS-0002',
       skills: ['technical leadership', 'project governance', 'engineering standards', 'WBS scheduling'],
       roles: [
-        { key: 'DEPARTMENT_HEAD', scopeType: 'DEPARTMENT', scope: 'TECH' },
-        { key: 'DEPARTMENT_HEAD', scopeType: 'DEPARTMENT', scope: 'DESIGN' },
+        { key: 'TECHNICAL_HEAD', scopeType: 'DEPARTMENT', scope: 'TECH' },
+        { key: 'TECHNICAL_HEAD', scopeType: 'DEPARTMENT', scope: 'DESIGN' },
       ],
     },
     {
@@ -861,7 +861,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0061',
       skills: ['site commissioning', 'client service', 'AMC support'],
-      roles: [{ key: 'DEPARTMENT_HEAD', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'TECHNICAL_HEAD', scopeType: 'DEPARTMENT', scope: 'TECH' }],
     },
     {
       code: 'ACS-0063',
@@ -872,7 +872,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0061',
       skills: ['project management', 'scheduling', 'MCC panels', 'client delivery', 'critical path'],
-      roles: [{ key: 'PROJECT_MANAGER', scopeType: 'GLOBAL' }],
+      roles: [{ key: 'PM_BASE', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0064',
@@ -883,7 +883,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0063',
       skills: ['PLC automation', 'SCADA', 'control panels'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0065',
@@ -892,9 +892,9 @@ async function main() {
       designation: 'Jr. Engineer',
       grade: 'JUNIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0064',
+      manager: 'ACS-0063',
       skills: ['automation testing', 'logic programming'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0066',
@@ -903,9 +903,9 @@ async function main() {
       designation: 'Jr. Engineer',
       grade: 'JUNIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0064',
+      manager: 'ACS-0063',
       skills: ['field wiring', 'commissioning'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0067',
@@ -914,9 +914,9 @@ async function main() {
       designation: 'Jr. Engineer',
       grade: 'JUNIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0064',
+      manager: 'ACS-0063',
       skills: ['PLC troubleshooting', 'drives commissioning'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0068',
@@ -927,7 +927,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0063',
       skills: ['protection schemes', 'switchboard engineering'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0069',
@@ -938,7 +938,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0063',
       skills: ['synchronizing panels', 'DG automation'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0070',
@@ -949,7 +949,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0063',
       skills: ['project coordination', 'vendor follow up', 'scheduling'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'PM_BASE', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0071',
@@ -960,7 +960,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0070',
       skills: ['site coordination', 'client FAT'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0072',
@@ -971,7 +971,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0071',
       skills: ['testing assist', 'drawing review'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0073',
@@ -982,7 +982,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0071',
       skills: ['panel documentation', 'trainee'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0074',
@@ -993,7 +993,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0061',
       skills: ['PCC panels', 'power distribution', 'project planning', 'client coordination'],
-      roles: [{ key: 'PROJECT_MANAGER', scopeType: 'GLOBAL' }],
+      roles: [{ key: 'PM_BASE', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0075',
@@ -1004,7 +1004,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0074',
       skills: ['site management', 'resource planning'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'PM_BASE', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0076',
@@ -1015,7 +1015,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0074',
       skills: ['busbar calculation', 'schematics verification'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0077',
@@ -1026,7 +1026,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0074',
       skills: ['control schematics', 'interlocking logic'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0078',
@@ -1037,7 +1037,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0074',
       skills: ['APFC calculation', 'harmonic filters'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0079',
@@ -1048,7 +1048,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0074',
       skills: ['protection coordination', 'breaker selection'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0080',
@@ -1059,7 +1059,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0078',
       skills: ['drawing assistance', 'site punch list'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0081',
@@ -1070,7 +1070,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0074',
       skills: ['testing support', 'client coordination'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0082',
@@ -1081,7 +1081,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0081',
       skills: ['trainee', 'testing support'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0083',
@@ -1092,7 +1092,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0081',
       skills: ['trainee', 'documentation'],
-      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
 
     // Others / Office Staff
@@ -1105,7 +1105,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['facility management'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
     {
       code: 'ACS-0085',
@@ -1116,7 +1116,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['office support'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
     {
       code: 'ACS-0086',
@@ -1127,7 +1127,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['office support'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
     {
       code: 'ACS-0087',
@@ -1138,7 +1138,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['office support'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
     {
       code: 'ACS-0088',
@@ -1149,7 +1149,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['pantry support'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
     {
       code: 'ACS-0089',
@@ -1160,7 +1160,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['gardening'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
     {
       code: 'ACS-0090',
@@ -1171,7 +1171,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['canteen services'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
     {
       code: 'ACS-0091',
@@ -1182,7 +1182,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['gate security', 'visitor logging'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
     {
       code: 'ACS-0092',
@@ -1193,7 +1193,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['factory security'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
     {
       code: 'ACS-0093',
@@ -1204,7 +1204,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['housekeeping'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
     {
       code: 'ACS-0094',
@@ -1215,7 +1215,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['housekeeping'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
     {
       code: 'ACS-0095',
@@ -1226,7 +1226,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['courier & transport support'],
-      roles: [{ key: 'VIEWER', scopeType: 'DEPARTMENT', scope: 'ADMIN' }],
+      roles: [],
     },
   ];
 
@@ -1295,15 +1295,37 @@ async function main() {
     await prisma.department.update({ where: { id: departmentId.get('STORES')! }, data: { headId: userId.get('ACS-0024') } });
   }
 
-  // Grant role assignments cleanly
-  await prisma.roleAssignment.deleteMany({});
+  // Reconcile role assignments cleanly
+  const seededUserIds = Array.from(userId.values());
+  await prisma.roleAssignment.deleteMany({
+    where: {
+      userId: { in: seededUserIds },
+      scopeType: { not: 'PROJECT' },
+    },
+  });
+
+  // Clean up any stale PROJECT-scoped PROJECT_MANAGER grants whose project's managerId isn't that user
+  const allExistingProjects = await prisma.project.findMany({ select: { id: true, managerId: true } });
+  const validProjectManagers = new Set(allExistingProjects.map((p) => `${p.id}:${p.managerId}`));
+  const projectRoleAssignments = await prisma.roleAssignment.findMany({
+    where: { scopeType: 'PROJECT' },
+    select: { id: true, scopeId: true, userId: true },
+  });
+  for (const ra of projectRoleAssignments) {
+    if (!ra.scopeId || !validProjectManagers.has(`${ra.scopeId}:${ra.userId}`)) {
+      await prisma.roleAssignment.delete({ where: { id: ra.id } });
+    }
+  }
+
   for (const person of people) {
+    const uid = userId.get(person.code);
+    if (!uid) continue;
     for (const grant of person.roles) {
       const rid = roleId.get(grant.key);
       if (!rid) continue;
       const scopeId = grant.scope ? departmentId.get(grant.scope) ?? null : null;
       await prisma.roleAssignment.create({
-        data: { userId: userId.get(person.code)!, roleId: rid, scopeType: grant.scopeType, scopeId },
+        data: { userId: uid, roleId: rid, scopeType: grant.scopeType, scopeId },
       });
     }
   }

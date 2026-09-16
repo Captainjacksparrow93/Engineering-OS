@@ -104,7 +104,7 @@ export const handoverRequestSchema = z.object({
 });
 
 export const handoverDecisionSchema = z.object({
-  decision: z.enum(['ACCEPTED', 'REJECTED']),
+  decision: z.enum(['ACCEPTED', 'DECLINED', 'REJECTED']),
   note: z.string().trim().max(1000).optional(),
 });
 

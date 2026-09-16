@@ -14,12 +14,12 @@ import {
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Handovers',
+  title: 'Requests',
 };
 
 /**
- * The handover inbox. Tracks both task handovers (peer engineer transfers) and
- * project handovers (manager transfers). Nothing moves until the receiver accepts.
+ * Reassign Requests & Project Handovers Inbox.
+ * Ownership only moves upon explicit acceptance by the recipient.
  */
 export default async function HandoversPage() {
   const principal = await requirePrincipal();
@@ -38,8 +38,8 @@ export default async function HandoversPage() {
   return (
     <>
       <PageHeader
-        title="Handovers"
-        subtitle="Work and projects passed between team members. Ownership only transfers upon explicit acceptance."
+        title="Requests"
+        subtitle="Reassignment and handover requests. Ownership transfers only upon explicit acceptance."
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -85,7 +85,7 @@ export default async function HandoversPage() {
                 </div>
               ) : null}
 
-              {/* Task Handovers */}
+              {/* Task Reassign Requests */}
               {incoming.length > 0 ? (
                 <ul className="space-y-3">
                   {incoming.map((handover) => (
@@ -94,7 +94,7 @@ export default async function HandoversPage() {
                         <Avatar name={formatName(handover.fromUser.fullName)} color={handover.fromUser.avatarColor} />
                         <div className="min-w-0 flex-1">
                           <p className="text-body-sm text-ink">
-                            <span className="font-medium">{formatName(handover.fromUser.fullName)}</span> wants to pass you task:{' '}
+                            <span className="font-medium">{formatName(handover.fromUser.fullName)}</span> wants to reassign task:{' '}
                             <Link href={`/pm/tasks/${handover.task.id}`} className="font-semibold text-ink hover:underline">
                               {handover.task.title}
                             </Link>
@@ -132,7 +132,7 @@ export default async function HandoversPage() {
         <div className="space-y-4">
           <Card title={`Raised by you (${totalOutgoing})`}>
             {totalOutgoing === 0 ? (
-              <EmptyState title="You have not handed anything over" hint="Task and project handovers you initiate appear here." />
+              <EmptyState title="No active requests raised" hint="Reassign requests you initiate appear here." />
             ) : (
               <ul className="space-y-2.5">
                 {/* Outgoing Project Handovers */}
@@ -155,7 +155,7 @@ export default async function HandoversPage() {
                   </li>
                 ))}
 
-                {/* Outgoing Task Handovers */}
+                {/* Outgoing Task Reassign Requests */}
                 {outgoing.map((handover) => (
                   <li key={handover.id} className="flex flex-wrap items-center gap-2 rounded border border-hairline p-2">
                     <Avatar name={formatName(handover.toUser.fullName)} color={handover.toUser.avatarColor} size={24} />
@@ -192,8 +192,8 @@ export default async function HandoversPage() {
                       <span>{formatName(handover.toUser.fullName)}</span>
                     </p>
                     {handover.reason ? <p className="mt-0.5 text-caption text-muted">{handover.reason}</p> : null}
-                    <div className="mt-2">
-                      <ProjectHandoverDecision handoverId={handover.id} asManager />
+                    <div className="mt-1">
+                      <span className="text-caption text-muted">Pending receiver acceptance</span>
                     </div>
                   </li>
                 ))}
@@ -204,13 +204,14 @@ export default async function HandoversPage() {
                       <span className="font-medium">{formatName(handover.fromUser.fullName)}</span>
                       <span className="text-muted-soft">→</span>
                       <span className="font-medium">{formatName(handover.toUser.fullName)}</span>
+                      <span className="text-muted-soft">|</span>
                       <Link href={`/pm/tasks/${handover.task.id}`} className="text-body-sm text-ink hover:underline font-medium">
                         {handover.task.title}
                       </Link>
                     </p>
-                    <p className="mt-0.5 text-caption text-muted">{handover.reason}</p>
-                    <div className="mt-2">
-                      <HandoverDecision handoverId={handover.id} asManager />
+                    {handover.reason ? <p className="mt-0.5 text-caption text-muted">{handover.reason}</p> : null}
+                    <div className="mt-1">
+                      <span className="text-caption text-muted">Waiting on {formatName(handover.toUser.fullName)} to accept</span>
                     </div>
                   </li>
                 ))}

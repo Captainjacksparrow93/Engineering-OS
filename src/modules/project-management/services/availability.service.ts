@@ -205,7 +205,7 @@ export async function suggestAssignees(
   });
 }
 
-/** Peers a person may hand work to: same department first, then anyone on the project. */
+/** Eligible engineers for reassign: active SENIOR_ENGINEER or JUNIOR_ENGINEER roles only. */
 export async function handoverCandidates(principal: Principal, taskId: string) {
   await assertTaskVisible(principal, taskId);
 
@@ -222,53 +222,148 @@ export async function handoverCandidates(principal: Principal, taskId: string) {
     },
   });
 
-  const remainingHours = task.estimatedHours * (1 - task.percentComplete / 100);
   const excludeUserIds = task.assignments.map((a) => a.userId);
 
-  const [projectPeers, departmentPeers] = await Promise.all([
-    safeSuggest(principal, {
-      projectId: task.projectId,
-      skills: task.requiredSkills,
-      requiredHours: remainingHours,
-      priority: task.priority,
-      excludeUserIds,
+  // Query strictly active engineering team members (SENIOR_ENGINEER / JUNIOR_ENGINEER)
+  // Exclude PMs (PM_BASE, PROJECT_MANAGER), Technical Heads, Directors, Super Admins
+  const engineers = await prisma.user.findMany({
+    where: {
+      companyId: principal.companyId,
+      status: 'ACTIVE',
+      roleAssignments: {
+        some: {
+          role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } },
+        },
+      },
+      NOT: {
+        roleAssignments: {
+          some: {
+            role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER'] } },
+          },
+        },
+      },
+      id: { notIn: excludeUserIds },
+    },
+    select: {
+      id: true,
+      fullName: true,
+      employeeCode: true,
+      grade: true,
+      designation: true,
+      departmentId: true,
+      skills: true,
+      dailyCapacityHours: true,
+      avatarColor: true,
+      department: { select: { name: true } },
+    },
+    orderBy: { fullName: 'asc' },
+  });
+
+  const userIds = engineers.map((e) => e.id);
+  if (userIds.length === 0) return [];
+
+  const window = defaultWindow();
+  const [assignments, leaves] = await Promise.all([
+    prisma.taskAssignment.findMany({
+      where: {
+        userId: { in: userIds },
+        status: 'ACTIVE',
+        task: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+      },
+      select: {
+        userId: true,
+        allocatedHours: true,
+        task: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            plannedStart: true,
+            plannedEnd: true,
+            estimatedHours: true,
+            percentComplete: true,
+            priority: true,
+            status: true,
+            project: { select: { id: true, code: true, name: true } },
+          },
+        },
+      },
     }),
-    safeSuggest(principal, {
-      departmentId: principal.departmentId ?? undefined,
-      skills: task.requiredSkills,
-      requiredHours: remainingHours,
-      priority: task.priority,
-      excludeUserIds,
+    prisma.leave.findMany({
+      where: {
+        userId: { in: userIds },
+        status: 'APPROVED',
+        startDate: { lte: window.to },
+        endDate: { gte: window.from },
+      },
+      select: { userId: true, startDate: true, endDate: true },
     }),
   ]);
 
-  const seen = new Set<string>();
-  const merged: AssignmentSuggestion[] = [];
-  for (const suggestion of [...projectPeers, ...departmentPeers]) {
-    if (seen.has(suggestion.workload.person.id)) continue;
-    seen.add(suggestion.workload.person.id);
-    merged.push(suggestion);
+  const assignmentsByUser = new Map<string, WorkloadAssignment[]>();
+  for (const a of assignments) {
+    const list = assignmentsByUser.get(a.userId) ?? [];
+    list.push({
+      taskId: a.task.id,
+      taskCode: a.task.code,
+      taskTitle: a.task.title,
+      projectId: a.task.project.id,
+      projectCode: a.task.project.code,
+      projectName: a.task.project.name,
+      plannedStart: a.task.plannedStart,
+      plannedEnd: a.task.plannedEnd,
+      allocatedHours: a.allocatedHours || 0,
+      percentComplete: a.task.percentComplete,
+      priority: a.task.priority,
+      status: a.task.status,
+    });
+    assignmentsByUser.set(a.userId, list);
   }
-  return merged.sort((a, b) => b.score - a.score);
+
+  const leavesByUser = new Map<string, Array<{ startDate: Date; endDate: Date }>>();
+  for (const l of leaves) {
+    const list = leavesByUser.get(l.userId) ?? [];
+    list.push({ startDate: l.startDate, endDate: l.endDate });
+    leavesByUser.set(l.userId, list);
+  }
+
+  const workloads = engineers.map((p) =>
+    computeWorkload(
+      {
+        id: p.id,
+        fullName: p.fullName,
+        employeeCode: p.employeeCode,
+        grade: p.grade,
+        designation: p.designation,
+        departmentId: p.departmentId,
+        departmentName: p.department?.name ?? null,
+        skills: p.skills,
+        dailyCapacityHours: p.dailyCapacityHours,
+        avatarColor: p.avatarColor,
+      },
+      assignmentsByUser.get(p.id) ?? [],
+      leavesByUser.get(p.id) ?? [],
+      window,
+    ),
+  );
+
+  const remainingHours = task.estimatedHours * (1 - task.percentComplete / 100);
+  const ranked = rankCandidates(workloads, {
+    requiredSkills: task.requiredSkills,
+    requiredHours: remainingHours,
+    priority: task.priority,
+  });
+
+  // Order by lowest current load first (highest freeHours)
+  return ranked.sort((a, b) => {
+    if (a.workload.freeHours !== b.workload.freeHours) {
+      return b.workload.freeHours - a.workload.freeHours;
+    }
+    return b.score - a.score;
+  });
 }
 
-/**
- * Junior engineers can raise a handover but do not hold `pm.resource.read`; they still
- * need to see who to pass work to, so a failed permission check degrades to an empty
- * list rather than breaking the page.
- */
-async function safeSuggest(
-  principal: Principal,
-  query: AvailabilityQuery & { excludeUserIds?: string[] },
-): Promise<AssignmentSuggestion[]> {
-  try {
-    return await suggestAssignees(principal, query);
-  } catch {
-    return [];
-  }
-}
-
-/** Peers visible to someone without resource-read rights: their own project team. */
+/** Fallback list of eligible engineers. */
 export async function peersForHandover(principal: Principal, taskId: string) {
   await assertTaskVisible(principal, taskId);
 
@@ -282,13 +377,19 @@ export async function peersForHandover(principal: Principal, taskId: string) {
     where: {
       companyId: principal.companyId,
       status: 'ACTIVE',
-      department: { code: { in: [...TECHNICAL_DEPARTMENT_CODES] } },
-      NOT: [{ designation: { contains: 'Director' } }, { grade: 'DIRECTOR' }],
-      id: { notIn: [...held, principal.userId] },
-      OR: [
-        { projectMembers: { some: { projectId: task.projectId } } },
-        ...(principal.departmentId ? [{ departmentId: principal.departmentId }] : []),
-      ],
+      roleAssignments: {
+        some: {
+          role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } },
+        },
+      },
+      NOT: {
+        roleAssignments: {
+          some: {
+            role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER'] } },
+          },
+        },
+      },
+      id: { notIn: held },
     },
     select: {
       id: true,

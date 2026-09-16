@@ -120,6 +120,7 @@ model User {
   progressLogs      TaskProgressLog[]
   handoversFrom     TaskHandover[]    @relation("HandoverFrom")
   handoversTo       TaskHandover[]    @relation("HandoverTo")
+  handoversRequested TaskHandover[]   @relation("HandoverRequestedBy")
   handoversDecided  TaskHandover[]    @relation("HandoverDecidedBy")
   projectHandoversFrom    ProjectHandover[] @relation("ProjectHandoverFrom")
   projectHandoversTo      ProjectHandover[] @relation("ProjectHandoverTo")
@@ -624,6 +625,8 @@ model TaskAssignment {
 enum HandoverStatus {
   PENDING
   ACCEPTED
+  DECLINED
+  WITHDRAWN
   REJECTED
   CANCELLED
 }
@@ -636,21 +639,23 @@ model TaskHandover {
   taskId           String
   fromUserId       String
   toUserId         String
+  requestedById    String?
   reason           String
   /// Percent of the task still to do at the moment of handover.
   remainingPercent Int
   remainingHours   Float
   status           HandoverStatus @default(PENDING)
-  /// Who accepted/rejected. Usually the receiver; a manager may force it through.
+  /// Who accepted/rejected/withdrew.
   decidedById      String?
   decidedAt        DateTime?
   decisionNote     String?
   createdAt        DateTime       @default(now())
 
-  task      Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  fromUser  User  @relation("HandoverFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  toUser    User  @relation("HandoverTo", fields: [toUserId], references: [id], onDelete: Cascade)
-  decidedBy User? @relation("HandoverDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  task        Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromUser    User  @relation("HandoverFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser      User  @relation("HandoverTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  requestedBy User? @relation("HandoverRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  decidedBy   User? @relation("HandoverDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
 
   @@index([taskId])
   @@index([toUserId, status])

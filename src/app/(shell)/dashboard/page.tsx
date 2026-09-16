@@ -15,19 +15,11 @@ export const metadata = {
 export default async function DashboardPage() {
   const principal = await requirePrincipal();
 
-  // Redirect engineers directly to My work per UX-1
-  const isDirectorOrAdmin =
-    hasPermissionAnywhere(principal, 'pm.project.read.all') ||
-    principal.roleKeys.includes('DIRECTOR') ||
-    principal.roleKeys.includes('SUPER_ADMIN') ||
-    principal.roleKeys.includes('DEPARTMENT_HEAD') ||
-    principal.roleKeys.includes('TECHNICAL_HEAD');
+  // Redirect users without report or oversight access directly to My work
   const hasOversight =
-    isDirectorOrAdmin ||
     can(principal, 'pm.oversight') ||
     hasPermissionAnywhere(principal, 'pm.oversight');
   const hasReportRead =
-    isDirectorOrAdmin ||
     can(principal, 'pm.report.read') ||
     hasPermissionAnywhere(principal, 'pm.report.read');
 
