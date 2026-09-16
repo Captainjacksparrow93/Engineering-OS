@@ -78,16 +78,15 @@ export function AutomationProjectWizard({
   const [targetEndDate, setTargetEndDate] = useState('');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // Scope selection
+  // Scope selection (no default package selected)
   const [selectedScopes, setSelectedScopes] = useState<Record<string, { enabled: boolean; qty: number }>>({
-    PLC: { enabled: true, qty: 1 },
+    PLC: { enabled: false, qty: 1 },
     SCADA: { enabled: false, qty: 1 },
     HMI: { enabled: false, qty: 1 },
   });
 
-  // PM selection
-  const defaultPM = managers.find((m) => m.fullName.includes('Parth')) ?? managers[0];
-  const [selectedPMId, setSelectedPMId] = useState<string>(defaultPM?.id ?? '');
+  // PM selection (no default PM selected)
+  const [selectedPMId, setSelectedPMId] = useState<string>('');
   const [filterPMTeamOnly, setFilterPMTeamOnly] = useState<boolean>(true);
 
   // Task assignments: key = `${templateCode}_${stepNumber}` -> assigneeId
@@ -108,7 +107,7 @@ export function AutomationProjectWizard({
   const technicalEngineers = allEngineers.filter(
     (e) => !managerIds.has(e.id) && e.grade !== 'MANAGER' && !e.designation?.toLowerCase().includes('project manager')
   );
-  const candidateEngineers = filterPMTeamOnly
+  const candidateEngineers = filterPMTeamOnly && selectedPMId
     ? technicalEngineers.filter((e) => pmTeamUserIds.includes(e.id))
     : technicalEngineers;
 
@@ -146,6 +145,14 @@ export function AutomationProjectWizard({
   };
 
   const handleAutoAssign = async () => {
+    if (!selectedPMId) {
+      setAutoAssignBanner({
+        type: 'error',
+        message: 'Please select a Project Manager in Step 3 before auto-assigning team.',
+      });
+      return;
+    }
+
     setIsAutoAssigning(true);
     setAutoAssignBanner(null);
 
@@ -382,8 +389,8 @@ export function AutomationProjectWizard({
             <input
               id="code"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className="input text-sm w-full"
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              className="input text-sm w-full font-mono uppercase"
               placeholder="Auto-generated (e.g. ACS-PRJ-004)"
             />
           </div>
@@ -536,6 +543,7 @@ export function AutomationProjectWizard({
               className="select text-sm w-full font-medium"
               required
             >
+              <option value="">Select Project Manager...</option>
               {managers.map((m) => (
                 <option key={m.id} value={m.id}>
                   {formatName(m.fullName)} {m.designation ? `(${m.designation})` : ''}
@@ -616,133 +624,135 @@ export function AutomationProjectWizard({
             </div>
           )}
 
-          {Object.entries(selectedScopes)
-            .filter(([_, val]) => val.enabled && val.qty > 0)
-            .map(([tplCode, scope]) => {
-              const tpl = templates.find((t) => t.code === tplCode);
-              if (!tpl) return null;
+          {Object.entries(selectedScopes).filter(([_, val]) => val.enabled && val.qty > 0).length === 0 ? (
+            <div className="rounded-lg border border-dashed border-hairline p-8 text-center bg-surface-subtle/40">
+              <p className="text-sm font-semibold text-ink">No automation packages selected yet</p>
+              <p className="text-caption text-muted mt-1">
+                Select one or more packages in <strong>Step 2 (PLC, SCADA, or HMI)</strong> above to configure and assign checklist tasks.
+              </p>
+            </div>
+          ) : (
+            Object.entries(selectedScopes)
+              .filter(([_, val]) => val.enabled && val.qty > 0)
+              .map(([tplCode, scope]) => {
+                const tpl = templates.find((t) => t.code === tplCode);
+                if (!tpl) return null;
 
-              return (
-                <div key={tplCode} className="rounded-lg border border-hairline overflow-hidden">
-                  <div className="bg-surface-subtle px-4 py-2.5 border-b border-hairline flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm text-ink">
-                        {tpl.name} (13 Steps)
-                      </span>
-                      {scope.qty > 1 && (
-                        <span className="badge bg-primary/10 text-primary font-bold text-xs">
-                          {scope.qty} Units
+                return (
+                  <div key={tplCode} className="rounded-lg border border-hairline overflow-hidden">
+                    <div className="bg-surface-subtle px-4 py-2.5 border-b border-hairline flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm text-ink">
+                          {tpl.name} (13 Steps)
                         </span>
-                      )}
+                        {scope.qty > 1 && (
+                          <span className="badge bg-primary/10 text-primary font-bold text-xs">
+                            {scope.qty} Units
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-caption text-muted font-medium">
+                        Standard Automation Checklist Pipeline
+                      </span>
                     </div>
-                    <span className="text-caption text-muted font-medium">
-                      Standard Automation Checklist Pipeline
-                    </span>
-                  </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="table w-full text-xs">
-                      <thead>
-                        <tr className="bg-surface text-muted text-left uppercase tracking-wider">
-                          <th className="w-12 text-center">Step</th>
-                          <th>Standard Checklist Task</th>
-                          <th className="w-32">Seniority</th>
-                          <th className="w-64 text-right">Assignee (Technical Pool)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-hairline">
-                        {tpl.items.map((item) => {
-                          const key = `${tplCode}_${item.stepNumber}`;
-                          const selectedUserId = taskAssignments[key] || '';
+                    <div className="overflow-x-auto">
+                      <table className="table w-full text-xs">
+                        <thead>
+                          <tr className="bg-surface text-muted text-left uppercase tracking-wider">
+                            <th className="w-12 text-center">Step</th>
+                            <th>Standard Checklist Task</th>
+                            <th className="w-32">Seniority</th>
+                            <th className="w-64 text-right">Assignee (Technical Pool)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-hairline">
+                          {tpl.items.map((item) => {
+                            const key = `${tplCode}_${item.stepNumber}`;
+                            const selectedUserId = taskAssignments[key] || '';
 
-                          return (
-                            <tr key={item.id} className="hover:bg-surface-subtle/50">
-                              <td className="text-center font-bold text-muted">{item.stepNumber}</td>
-                              <td>
-                                <p className="font-medium text-ink text-sm">{item.title}</p>
-                                {item.isSimulationSignoff && (
-                                  <span className="badge mt-0.5 bg-purple-100 text-purple-800 text-xs">
-                                    Sign-off Gate
-                                  </span>
-                                )}
-                              </td>
-                              <td>
-                                <span
-                                  className={`badge text-xs ${
-                                    item.recommendedSeniority === 'ASST_MANAGER'
-                                      ? 'bg-indigo-100 text-indigo-800'
+                            return (
+                              <tr key={item.id} className="hover:bg-surface-subtle/50">
+                                <td className="text-center font-bold text-muted">{item.stepNumber}</td>
+                                <td className="font-medium text-ink">{item.title}</td>
+                                <td>
+                                  <span
+                                    className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${
+                                      item.recommendedSeniority === 'ASST_MANAGER'
+                                        ? 'bg-indigo-100 text-indigo-800'
+                                        : item.recommendedSeniority === 'SENIOR'
+                                        ? 'bg-blue-100 text-blue-800'
+                                        : item.recommendedSeniority === 'JUNIOR'
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : 'bg-amber-100 text-amber-800'
+                                    }`}
+                                  >
+                                    {item.recommendedSeniority === 'ASST_MANAGER'
+                                      ? 'Asst. Mgr'
                                       : item.recommendedSeniority === 'SENIOR'
-                                      ? 'bg-blue-100 text-blue-800'
+                                      ? 'Sr. Eng'
                                       : item.recommendedSeniority === 'JUNIOR'
-                                      ? 'bg-emerald-100 text-emerald-800'
-                                      : 'bg-amber-100 text-amber-800'
-                                  }`}
-                                >
-                                  {item.recommendedSeniority === 'ASST_MANAGER'
-                                    ? 'Asst. Mgr'
-                                    : item.recommendedSeniority === 'SENIOR'
-                                    ? 'Sr. Eng'
-                                    : item.recommendedSeniority === 'JUNIOR'
-                                    ? 'Jr. Eng'
-                                    : 'Trainee'}
-                                </span>
-                              </td>
-                              <td className="text-right">
-                                <select
-                                  value={selectedUserId}
-                                  onChange={(e) =>
-                                    setTaskAssignee(tplCode, item.stepNumber, e.target.value)
-                                  }
-                                  className="select text-xs py-1 w-full"
-                                >
-                                  <option value="">[ Unassigned ]</option>
-                                  {filterPMTeamOnly ? (
-                                    candidateEngineers.map((eng) => (
-                                      <option key={eng.id} value={eng.id}>
-                                        {formatName(eng.fullName)} ({eng.designation || eng.grade})
-                                      </option>
-                                    ))
-                                  ) : (
-                                    <>
-                                      {[1, 2, 3, 4].map((lvl) => {
-                                        const group = groupedEngineers[lvl];
-                                        if (!group || group.length === 0) return null;
-                                        return (
-                                          <optgroup key={lvl} label={SENIORITY_SECTION_LABELS[lvl]}>
-                                            {group.map((eng) => (
-                                              <option key={eng.id} value={eng.id}>
-                                                {formatName(eng.fullName)} ({eng.designation || eng.grade})
-                                              </option>
-                                            ))}
-                                          </optgroup>
-                                        );
-                                      })}
-                                    </>
+                                      ? 'Jr. Eng'
+                                      : 'Trainee'}
+                                  </span>
+                                </td>
+                                <td className="text-right">
+                                  <select
+                                    value={selectedUserId}
+                                    onChange={(e) =>
+                                      setTaskAssignee(tplCode, item.stepNumber, e.target.value)
+                                    }
+                                    className="select text-xs py-1 w-full"
+                                  >
+                                    <option value="">[ Unassigned ]</option>
+                                    {filterPMTeamOnly ? (
+                                      candidateEngineers.map((eng) => (
+                                        <option key={eng.id} value={eng.id}>
+                                          {formatName(eng.fullName)} ({eng.designation || eng.grade})
+                                        </option>
+                                      ))
+                                    ) : (
+                                      <>
+                                        {[1, 2, 3, 4].map((lvl) => {
+                                          const group = groupedEngineers[lvl];
+                                          if (!group || group.length === 0) return null;
+                                          return (
+                                            <optgroup key={lvl} label={SENIORITY_SECTION_LABELS[lvl]}>
+                                              {group.map((eng) => (
+                                                <option key={eng.id} value={eng.id}>
+                                                  {formatName(eng.fullName)} ({eng.designation || eng.grade})
+                                                </option>
+                                              ))}
+                                            </optgroup>
+                                          );
+                                        })}
+                                      </>
+                                    )}
+                                  </select>
+                                  {rationales[key] && (
+                                    <div className="mt-1 flex items-center justify-end">
+                                      <span
+                                        className={`inline-block text-[11px] px-2 py-0.5 rounded font-medium ${
+                                          rationales[key].isWeakMatch
+                                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                            : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                        }`}
+                                      >
+                                        {rationales[key].rationale}
+                                      </span>
+                                    </div>
                                   )}
-                                </select>
-                                {rationales[key] && (
-                                  <div className="mt-1 flex items-center justify-end">
-                                    <span
-                                      className={`inline-block text-[11px] px-2 py-0.5 rounded font-medium ${
-                                        rationales[key].isWeakMatch
-                                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                          : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                                      }`}
-                                    >
-                                      {rationales[key].rationale}
-                                    </span>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+          )}
 
         </div>
       </section>

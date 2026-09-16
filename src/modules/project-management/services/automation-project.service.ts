@@ -1,6 +1,7 @@
 import { prisma } from '@/core/db/prisma';
 import { assertCan } from '@/core/rbac/guard';
-import { DomainError } from '@/core/rbac/errors';
+import { hasPermissionAnywhere } from '@/core/rbac/engine';
+import { DomainError, ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
 import { addDays, addWorkingDays, startOfDay } from '@/core/utils/dates';
@@ -133,8 +134,8 @@ export async function createAutomationProject(principal: Principal, input: Creat
   assertCan(principal, 'pm.project.create', { departmentId: manager.departmentId ?? principal.departmentId });
 
 
-  // Generate code if missing
-  let code = input.code?.trim();
+  // Generate code if missing or sanitize provided code
+  let code = input.code?.trim().toUpperCase();
   if (!code) {
     const count = await prisma.project.count({ where: { companyId: principal.companyId } });
     code = `ACS-PRJ-${String(count + 1).padStart(3, '0')}`;
@@ -353,7 +354,9 @@ export async function autoAssignAutomationTeam(
   principal: Principal,
   input: AutoAssignTeamInput,
 ) {
-  assertCan(principal, 'pm.project.create');
+  if (!hasPermissionAnywhere(principal, 'pm.project.create')) {
+    throw new ForbiddenError('Missing permission: pm.project.create');
+  }
 
   if (!input.tasks || input.tasks.length === 0) {
     return { assignments: [] };
