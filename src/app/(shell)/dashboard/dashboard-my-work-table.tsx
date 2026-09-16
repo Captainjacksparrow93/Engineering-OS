@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { formatDate, daysUntil } from '@/core/utils/dates';
+import { cleanTaskTitle } from '@/core/utils/strings';
 import { EmptyState, PriorityBadge, ProgressBar, StatusBadge } from '@/components/ui';
 
 export interface DashboardMyWorkItem {
@@ -101,7 +102,7 @@ export function DashboardMyWorkTable({ items }: { items: DashboardMyWorkItem[] }
             <tr key={task.id}>
               <td>
                 <Link href={`/pm/tasks/${task.id}`} className="font-medium text-ink hover:text-ink">
-                  {task.title}
+                  {cleanTaskTitle(task.title)}
                 </Link>
                 {task.priority !== 'MEDIUM' ? (
                   <div className="mt-0.5 flex items-center gap-2">

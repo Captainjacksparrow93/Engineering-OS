@@ -264,7 +264,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
               projectId: project.id,
               parentId: phaseTask.id,
               code: taskCode,
-              title: `Step ${item.stepNumber}: ${item.title}`,
+              title: item.title,
               description: item.description ?? `Standard step ${item.stepNumber} of ${tpl.name}`,
               type: 'PROJECT',
               status: hasBlocker ? 'BLOCKED' : 'TODO',

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import clsx from 'clsx';
 import { ProgressBar, StatusBadge, AvatarStack } from '@/components/ui';
 import { AssigneeCell } from '@/components/assignee-cell';
+import { cleanTaskTitle } from '@/core/utils/strings';
 
 interface WbsTask {
   id: string;
@@ -202,7 +203,7 @@ export function WbsTable({
                         href={`/pm/tasks/${task.id}`}
                         className={clsx('hover:text-ink', isPhase ? 'font-semibold text-ink' : 'text-ink')}
                       >
-                        {task.title}
+                        {cleanTaskTitle(task.title)}
                       </Link>
                       <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                         {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}

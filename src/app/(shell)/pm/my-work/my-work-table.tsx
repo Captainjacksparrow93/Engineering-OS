@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { formatDate, daysUntil } from '@/core/utils/dates';
 import { PriorityBadge, ProgressBar, StatusBadge } from '@/components/ui';
+import { cleanTaskTitle } from '@/core/utils/strings';
 
 export interface MyWorkRow {
   task: {
@@ -109,7 +110,7 @@ export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
               <tr key={assignment.id}>
                 <td>
                   <Link href={`/pm/tasks/${task.id}`} className="font-medium text-ink hover:text-ink">
-                    {task.title}
+                    {cleanTaskTitle(task.title)}
                   </Link>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                     {task.priority !== 'MEDIUM' ? <PriorityBadge priority={task.priority} /> : null}

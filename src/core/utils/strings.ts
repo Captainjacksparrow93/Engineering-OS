@@ -21,3 +21,8 @@ export function formatName(name: string | null | undefined): string {
   return first + ' ' + last;
 }
 
+export function cleanTaskTitle(title: string | null | undefined): string {
+  if (!title) return '';
+  return title.replace(/^Step\s+\d+:\s*/i, '').trim();
+}
+

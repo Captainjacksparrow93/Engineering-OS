@@ -1,4 +1,4 @@
-import { formatName } from '@/core/utils/strings';
+import { formatName, cleanTaskTitle } from '@/core/utils/strings';
 import Link from 'next/link';
 import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
@@ -88,9 +88,9 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         breadcrumb={[
           { label: 'Projects', href: '/pm/projects' },
           { label: task.project.name, href: `/pm/projects/${task.project.id}` },
-          { label: task.title },
+          { label: cleanTaskTitle(task.title) },
         ]}
-        title={task.title}
+        title={cleanTaskTitle(task.title)}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <StatusBadge status={task.status} />
@@ -98,7 +98,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
             {task.parent ? (
               <Link href={`/pm/tasks/${task.parent.id}`} className="text-caption text-ink hover:underline">
-                under {task.parent.title}
+                under {cleanTaskTitle(task.parent.title)}
               </Link>
             ) : null}
           </span>
