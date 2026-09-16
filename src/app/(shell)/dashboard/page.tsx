@@ -53,24 +53,21 @@ export default async function DashboardPage() {
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {data.isManagement ? (
           <>
-            <Stat label="Active Projects" value={data.portfolio.activeProjects} hint="Projects currently in progress" />
+            <Stat label="Active Projects" value={data.portfolio.activeProjects} />
             <Stat
               label="Overdue Projects"
               value={data.portfolio.overdueProjects}
               tone={data.portfolio.overdueProjects > 0 ? 'danger' : 'success'}
-              hint="Projects behind schedule"
             />
             <Stat
               label="Active Roadblocks"
               value={data.portfolio.activeRoadblocks}
               tone={data.portfolio.activeRoadblocks > 0 ? 'warning' : 'default'}
-              hint="Issues blocking tasks"
             />
             <Stat
               label="Awaiting Approval"
               value={data.portfolio.pendingReviews}
               tone={data.portfolio.pendingReviews > 0 ? 'warning' : 'default'}
-              hint="Completed tasks waiting for sign-off"
             />
           </>
         ) : (

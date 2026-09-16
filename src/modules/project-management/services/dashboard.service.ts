@@ -52,7 +52,7 @@ export async function getDashboard(principal: Principal) {
           orderBy: { code: 'asc' },
         },
       },
-      orderBy: [{ priority: 'desc' }, { targetEndDate: 'asc' }],
+      orderBy: [{ targetEndDate: 'asc' }, { priority: 'desc' }],
       take: 25,
     }),
     prisma.taskAssignment.findMany({
@@ -99,7 +99,7 @@ export async function getDashboard(principal: Principal) {
       ? prisma.taskProgressLog.findMany({
           where: {
             blocker: { not: null },
-            task: { project: visibility, status: { in: ['BLOCKED', 'IN_PROGRESS', 'TODO'] } },
+            task: { project: visibility, status: 'BLOCKED' },
           },
           include: {
             user: { select: { id: true, fullName: true, avatarColor: true, designation: true, grade: true } },

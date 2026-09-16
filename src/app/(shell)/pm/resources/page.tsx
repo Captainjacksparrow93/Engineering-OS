@@ -105,7 +105,6 @@ export default async function ResourcesPage({
                     <p className="truncate text-body-sm font-semibold text-ink">{formatName(workload.person.fullName)}</p>
                     <p className="truncate text-caption text-muted">
                       {workload.person.designation ?? workload.person.grade.replaceAll('_', ' ').toLowerCase()}
-                      {workload.person.departmentName ? ` · ${workload.person.departmentName}` : ''}
                     </p>
                   </div>
                   <StatusBadge status={workload.status} />

@@ -209,7 +209,6 @@ export function AdhocForm({
                     </div>
                     <p className="truncate text-caption text-muted">
                       {person.designation || 'Engineer'}
-                      {person.departmentName ? ` · ${person.departmentName}` : ''}
                     </p>
                   </div>
                   <div className="text-right">

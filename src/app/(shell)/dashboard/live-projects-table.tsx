@@ -30,7 +30,7 @@ type SortField = 'project' | 'manager' | 'delivery' | 'progress' | 'status';
 type SortDir = 'asc' | 'desc';
 
 export function LiveProjectsTable({ projects }: { projects: DashboardProject[] }) {
-  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortField, setSortField] = useState<SortField | null>('delivery');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   const handleSort = (field: SortField) => {
@@ -53,8 +53,8 @@ export function LiveProjectsTable({ projects }: { projects: DashboardProject[] }
       } else if (sortField === 'manager') {
         cmp = (a.manager?.fullName || '').localeCompare(b.manager?.fullName || '');
       } else if (sortField === 'delivery') {
-        const timeA = a.targetEndDate ? new Date(a.targetEndDate).getTime() : 0;
-        const timeB = b.targetEndDate ? new Date(b.targetEndDate).getTime() : 0;
+        const timeA = a.targetEndDate ? new Date(a.targetEndDate).getTime() : Number.POSITIVE_INFINITY;
+        const timeB = b.targetEndDate ? new Date(b.targetEndDate).getTime() : Number.POSITIVE_INFINITY;
         cmp = timeA - timeB;
       } else if (sortField === 'progress') {
         cmp = a.progressPercent - b.progressPercent;

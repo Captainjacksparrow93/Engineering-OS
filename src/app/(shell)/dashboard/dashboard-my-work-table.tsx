@@ -24,7 +24,7 @@ type SortField = 'task' | 'project' | 'due' | 'progress' | 'status';
 type SortDir = 'asc' | 'desc';
 
 export function DashboardMyWorkTable({ items }: { items: DashboardMyWorkItem[] }) {
-  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortField, setSortField] = useState<SortField | null>('due');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   const handleSort = (field: SortField) => {
@@ -47,8 +47,8 @@ export function DashboardMyWorkTable({ items }: { items: DashboardMyWorkItem[] }
       } else if (sortField === 'project') {
         cmp = a.task.project.name.localeCompare(b.task.project.name);
       } else if (sortField === 'due') {
-        const timeA = a.task.plannedEnd ? new Date(a.task.plannedEnd).getTime() : 0;
-        const timeB = b.task.plannedEnd ? new Date(b.task.plannedEnd).getTime() : 0;
+        const timeA = a.task.plannedEnd ? new Date(a.task.plannedEnd).getTime() : Number.POSITIVE_INFINITY;
+        const timeB = b.task.plannedEnd ? new Date(b.task.plannedEnd).getTime() : Number.POSITIVE_INFINITY;
         cmp = timeA - timeB;
       } else if (sortField === 'progress') {
         cmp = a.task.percentComplete - b.task.percentComplete;
