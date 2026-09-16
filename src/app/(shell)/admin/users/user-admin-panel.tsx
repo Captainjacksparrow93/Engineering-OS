@@ -1,4 +1,5 @@
 'use client';
+import { formatName } from '@/core/utils/strings';
 
 import { useActionState, useState } from 'react';
 import clsx from 'clsx';
@@ -162,7 +163,7 @@ export function UserAdminPanel({
             <select id="managerId" name="managerId" className="select" defaultValue="">
               <option value="">None</option>
               {users.map((user) => (
-                <option key={user.id} value={user.id}>{user.fullName}</option>
+                <option key={user.id} value={user.id}>{formatName(user.fullName)}</option>
               ))}
             </select>
           </div>
@@ -201,7 +202,7 @@ export function UserAdminPanel({
             <select id="grant-user" name="userId" required className="select" defaultValue="">
               <option value="" disabled>Select</option>
               {users.map((user) => (
-                <option key={user.id} value={user.id}>{user.fullName} ({user.employeeCode})</option>
+                <option key={user.id} value={user.id}>{formatName(user.fullName)}</option>
               ))}
             </select>
           </div>
@@ -239,7 +240,7 @@ export function UserAdminPanel({
                 : null}
               {scopeType === 'PROJECT'
                 ? projects.map((project) => (
-                    <option key={project.id} value={project.id}>{project.code} - {project.name}</option>
+                    <option key={project.id} value={project.id}>{project.name}</option>
                   ))
                 : null}
             </select>
@@ -262,7 +263,7 @@ export function UserAdminPanel({
             <select id="status-user" name="userId" required className="select" defaultValue="">
               <option value="" disabled>Select</option>
               {users.map((user) => (
-                <option key={user.id} value={user.id}>{user.fullName} ({user.employeeCode})</option>
+                <option key={user.id} value={user.id}>{formatName(user.fullName)}</option>
               ))}
             </select>
           </div>

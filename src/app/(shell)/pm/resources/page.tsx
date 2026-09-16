@@ -1,3 +1,4 @@
+﻿import { formatName } from '@/core/utils/strings';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
@@ -103,9 +104,9 @@ export default async function ResourcesPage({
             .map((workload) => (
               <Card key={workload.person.id} bodyClassName="p-4">
                 <div className="mb-3 flex items-start gap-3">
-                  <Avatar name={workload.person.fullName} color={workload.person.avatarColor} size={38} />
+                  <Avatar name={formatName(workload.person.fullName)} color={workload.person.avatarColor} size={38} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-body-sm font-semibold text-ink">{workload.person.fullName}</p>
+                    <p className="truncate text-body-sm font-semibold text-ink">{formatName(workload.person.fullName)}</p>
                     <p className="truncate text-caption text-muted">
                       {workload.person.designation ?? workload.person.grade.replaceAll('_', ' ').toLowerCase()}
                       {workload.person.departmentName ? ` · ${workload.person.departmentName}` : ''}

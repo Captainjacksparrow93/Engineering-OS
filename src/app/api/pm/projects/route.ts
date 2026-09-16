@@ -10,7 +10,6 @@ export const GET = handler(async (request: NextRequest) => {
   const projects = await listProjects(principal, {
     status: params.get('status') ?? undefined,
     search: params.get('q') ?? undefined,
-    mine: params.get('mine') === '1',
   });
   return ok({ projects });
 });

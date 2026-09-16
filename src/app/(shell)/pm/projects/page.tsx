@@ -11,14 +11,13 @@ export const dynamic = 'force-dynamic';
 export default async function ProjectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; mine?: string }>;
+  searchParams: Promise<{ status?: string; q?: string }>;
 }) {
   const principal = await requirePrincipal();
   const params = await searchParams;
   const projects = await listProjects(principal, {
     status: params.status,
     search: params.q,
-    mine: params.mine === '1',
   });
 
   const canCreate = hasPermissionAnywhere(principal, 'pm.project.create');
@@ -27,7 +26,7 @@ export default async function ProjectsPage({
     <>
       <PageHeader
         title="Projects"
-        subtitle={`${projects.length} project${projects.length === 1 ? '' : 's'} you can see`}
+        subtitle={`${projects.length} project${projects.length === 1 ? '' : 's'}`}
         actions={
           canCreate ? (
             <Link href="/pm/projects/new" className="btn btn-primary">
@@ -57,10 +56,6 @@ export default async function ProjectsPage({
             ))}
           </select>
         </div>
-        <label className="flex items-center gap-2 pb-2 text-body-sm text-body">
-          <input type="checkbox" name="mine" value="1" defaultChecked={params.mine === '1'} />
-          Only mine
-        </label>
         <button type="submit" className="btn btn-secondary mb-0.5">
           Apply
         </button>
@@ -69,7 +64,7 @@ export default async function ProjectsPage({
       {projects.length === 0 ? (
         <EmptyState
           title="No projects match"
-          hint="Projects appear here when you manage them, are a member, or hold a task on them."
+          hint="Projects you manage appear here."
           action={canCreate ? <Link href="/pm/projects/new" className="btn btn-secondary">Define new project</Link> : undefined}
         />
       ) : (
@@ -85,9 +80,7 @@ export default async function ProjectsPage({
                 </div>
 
                 <p className="mb-base flex items-center gap-xs text-caption text-muted">
-                  <span className="code text-muted-soft">{project.code}</span>
-                  <span className="text-muted-soft">·</span>
-                  <span className="truncate">{project.clientName}</span>
+                  <span className="truncate font-medium">{project.clientName}</span>
                 </p>
 
                 <ProgressBar
@@ -104,7 +97,9 @@ export default async function ProjectsPage({
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   <PriorityBadge priority={project.priority} />
                   {project.stats.blockedCount > 0 ? (
-                    <span className="badge bg-error/10 text-error">{project.stats.blockedCount} blocked</span>
+                    <span className="badge bg-surface-strong text-muted" title="Internal tasks waiting on prerequisite steps">
+                      {project.stats.blockedCount} waiting on deps
+                    </span>
                   ) : null}
                   {project.panelCount > 0 ? (
                     <span className="badge bg-surface-strong text-body">{project.panelCount} panels</span>
@@ -128,5 +123,3 @@ export default async function ProjectsPage({
     </>
   );
 }
-
-

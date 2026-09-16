@@ -1,4 +1,5 @@
-'use client';
+﻿'use client';
+import { formatName } from '@/core/utils/strings';
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
@@ -442,7 +443,7 @@ export function AutomationProjectWizard({
             >
               {managers.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.fullName} {m.designation ? `(${m.designation})` : ''}
+                  {formatName(m.fullName)} {m.designation ? `(${m.designation})` : ''}
                 </option>
               ))}
             </select>
@@ -583,7 +584,7 @@ export function AutomationProjectWizard({
                                   {filterPMTeamOnly ? (
                                     candidateEngineers.map((eng) => (
                                       <option key={eng.id} value={eng.id}>
-                                        {eng.fullName} ({eng.designation || eng.grade})
+                                        {formatName(eng.fullName)} ({eng.designation || eng.grade})
                                       </option>
                                     ))
                                   ) : (
@@ -595,7 +596,7 @@ export function AutomationProjectWizard({
                                           <optgroup key={lvl} label={SENIORITY_SECTION_LABELS[lvl]}>
                                             {group.map((eng) => (
                                               <option key={eng.id} value={eng.id}>
-                                                {eng.fullName} ({eng.designation || eng.grade})
+                                                {formatName(eng.fullName)} ({eng.designation || eng.grade})
                                               </option>
                                             ))}
                                           </optgroup>

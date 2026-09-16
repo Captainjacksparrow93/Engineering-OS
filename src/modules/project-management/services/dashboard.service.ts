@@ -21,6 +21,7 @@ export async function getDashboard(principal: Principal) {
     projects,
     myAssignments,
     incomingHandovers,
+    incomingProjectHandovers,
     activeRoadblocks,
     recentProgress,
     unreadCount,
@@ -82,6 +83,14 @@ export async function getDashboard(principal: Principal) {
       where: { toUserId: principal.userId, status: 'PENDING' },
       include: {
         task: { select: { id: true, code: true, title: true, priority: true, plannedEnd: true } },
+        fromUser: { select: { id: true, fullName: true, avatarColor: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.projectHandover.findMany({
+      where: { toUserId: principal.userId, status: 'PENDING' },
+      include: {
+        project: { select: { id: true, name: true, clientName: true, priority: true, targetEndDate: true } },
         fromUser: { select: { id: true, fullName: true, avatarColor: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -196,7 +205,7 @@ export async function getDashboard(principal: Principal) {
     portfolio: {
       activeProjects: projectCards.length,
       atRisk: projectCards.filter((p) => p.health === 'AT_RISK').length,
-      activeRoadblocks: activeRoadblocks.length || projectCards.reduce((sum, p) => sum + p.blockedCount, 0),
+      activeRoadblocks: activeRoadblocks.length,
       pendingReviews: pendingReviewsCount,
       overdueTasks: projectCards.reduce((sum, p) => sum + p.overdueCount, 0),
     },
@@ -210,6 +219,7 @@ export async function getDashboard(principal: Principal) {
       items: myAssignments,
     },
     incomingHandovers,
+    incomingProjectHandovers,
     activeRoadblocks,
     recentProgress,
     teamOperations: {

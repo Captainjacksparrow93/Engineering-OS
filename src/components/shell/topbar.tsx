@@ -5,11 +5,12 @@ import { Avatar } from '@/components/ui';
 import { signOut } from '@/app/actions/auth';
 import type { Principal } from '@/core/rbac/types';
 import { useShell } from './shell-context';
+import { formatName } from '@/core/utils/strings';
 
 export function Topbar({ principal, unread }: { principal: Principal; unread: number }) {
   const { isCollapsed, toggleCollapsed } = useShell();
 
-  const displayName = principal.fullName;
+  const displayName = formatName(principal.fullName);
 
   // Format role to clean title (e.g. SUPER_ADMIN / DIRECTOR -> Director)
   const formatRole = (keys: string[]) => {

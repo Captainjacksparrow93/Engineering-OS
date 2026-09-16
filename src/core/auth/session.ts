@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 import { SignJWT, jwtVerify } from 'jose';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '@/core/db/prisma';
@@ -77,7 +78,7 @@ async function verifyToken(token: string): Promise<SessionClaims | null> {
 }
 
 /** Returns the current principal, or null when signed out. Never throws. */
-export async function getPrincipal(): Promise<Principal | null> {
+export const getPrincipal = cache(async function getPrincipal(): Promise<Principal | null> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -93,7 +94,7 @@ export async function getPrincipal(): Promise<Principal | null> {
   if (session.userId !== claims.sub) return null;
 
   return loadPrincipal(session.userId);
-}
+});
 
 /** Use in server components and route handlers that require a signed-in user. */
 export async function requirePrincipal(): Promise<Principal> {

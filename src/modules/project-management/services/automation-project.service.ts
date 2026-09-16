@@ -3,7 +3,7 @@ import { assertCan } from '@/core/rbac/guard';
 import { DomainError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
-import { addWorkingDays, startOfDay } from '@/core/utils/dates';
+import { addWorkingDays } from '@/core/utils/dates';
 import { recomputeTaskDerivedState } from './task.service';
 
 export interface ScopeSelection {
@@ -237,8 +237,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
           const draft = unitTasks.find((d) => d.stepNumber === item.stepNumber);
 
           const taskCode = `${project.code}-T${String(globalTaskCounter++).padStart(3, '0')}`;
-          const isFirstStep = item.stepNumber === 1;
-
+          const hasBlocker = Boolean(item.dependsOnStep);
           const taskStart = draft?.plannedStart ? new Date(draft.plannedStart) : start;
           const taskEnd = draft?.plannedEnd ? new Date(draft.plannedEnd) : addWorkingDays(taskStart, item.defaultDurationDays);
           const estimatedHours = draft?.estimatedHours ?? item.defaultDurationDays * 8;
@@ -251,7 +250,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
               title: `Step ${item.stepNumber}: ${item.title}`,
               description: item.description ?? `Standard step ${item.stepNumber} of ${tpl.name}`,
               type: 'PROJECT',
-              status: isFirstStep ? 'TODO' : 'BLOCKED',
+              status: hasBlocker ? 'BLOCKED' : 'TODO',
               priority: item.isSimulationSignoff ? 'HIGH' : 'MEDIUM',
               estimatedHours,
               plannedStart: taskStart,
@@ -277,13 +276,12 @@ export async function createAutomationProject(principal: Principal, input: Creat
           }
         }
 
-        // Wire Finish-to-Start dependencies
+        // Wire Finish-to-Start dependencies only when explicitly configured in template
         for (const item of tpl.items) {
           const successorId = stepTaskIdMap.get(item.stepNumber);
           if (!successorId) continue;
 
-          // Wire explicit template dependency or sequential fallback
-          const predStep = item.dependsOnStep ?? (item.stepNumber > 1 ? item.stepNumber - 1 : null);
+          const predStep = item.dependsOnStep;
           if (predStep && stepTaskIdMap.has(predStep)) {
             const predecessorId = stepTaskIdMap.get(predStep)!;
             await tx.taskDependency.create({
@@ -294,30 +292,6 @@ export async function createAutomationProject(principal: Principal, input: Creat
                 lagDays: 0,
               },
             });
-          }
-
-          // If this is Step 13 (simulation trial), wire it to be blocked by all previous steps!
-          if (item.isSimulationSignoff || item.stepNumber === 13) {
-            for (let s = 1; s < item.stepNumber; s++) {
-              const prevId = stepTaskIdMap.get(s);
-              if (prevId && prevId !== stepTaskIdMap.get(predStep ?? 0)) {
-                await tx.taskDependency.upsert({
-                  where: {
-                    predecessorId_successorId: {
-                      predecessorId: prevId,
-                      successorId,
-                    },
-                  },
-                  create: {
-                    predecessorId: prevId,
-                    successorId,
-                    type: 'FINISH_TO_START',
-                    lagDays: 0,
-                  },
-                  update: {},
-                });
-              }
-            }
           }
         }
       }
@@ -341,3 +315,5 @@ export async function createAutomationProject(principal: Principal, input: Creat
   await recomputeTaskDerivedState(createdProject.id);
   return createdProject;
 }
+
+

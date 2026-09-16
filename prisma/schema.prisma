@@ -120,6 +120,9 @@ model User {
   handoversFrom     TaskHandover[]    @relation("HandoverFrom")
   handoversTo       TaskHandover[]    @relation("HandoverTo")
   handoversDecided  TaskHandover[]    @relation("HandoverDecidedBy")
+  projectHandoversFrom    ProjectHandover[] @relation("ProjectHandoverFrom")
+  projectHandoversTo      ProjectHandover[] @relation("ProjectHandoverTo")
+  projectHandoversDecided ProjectHandover[] @relation("ProjectHandoverDecidedBy")
   comments          TaskComment[]
 
   @@index([companyId])
@@ -415,6 +418,7 @@ model Project {
   members    ProjectMember[]
   tasks      Task[]
   milestones Milestone[]
+  handovers  ProjectHandover[]
 
   @@index([companyId, status])
   @@index([managerId])
@@ -647,6 +651,29 @@ model TaskHandover {
   @@index([toUserId, status])
   @@index([fromUserId, status])
   @@map("pm_task_handovers")
+}
+
+model ProjectHandover {
+  id           String         @id @default(cuid())
+  projectId    String
+  fromUserId   String
+  toUserId     String
+  reason       String?
+  status       HandoverStatus @default(PENDING)
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime       @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fromUser  User    @relation("ProjectHandoverFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser    User    @relation("ProjectHandoverTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  decidedBy User?   @relation("ProjectHandoverDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([toUserId, status])
+  @@index([fromUserId, status])
+  @@map("pm_project_handovers")
 }
 
 /// Append-only progress ledger. Task.percentComplete/actualHours are projections of

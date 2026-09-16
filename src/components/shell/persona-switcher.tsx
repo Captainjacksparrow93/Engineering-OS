@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { usePathname } from 'next/navigation';
-import { TEST_PERSONAS, type TestPersona } from '@/core/auth/test-personas';
+import { TEST_PERSONAS } from '@/core/auth/test-personas';
 import { quickSwitchPersona } from '@/app/actions/auth';
 
 interface PersonaSwitcherProps {
@@ -90,3 +90,5 @@ export function PersonaSwitcher({ currentEmail }: PersonaSwitcherProps) {
     </div>
   );
 }
+
+

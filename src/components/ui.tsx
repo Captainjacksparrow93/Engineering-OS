@@ -1,3 +1,4 @@
+import { formatName } from '@/core/utils/strings';
 import clsx from 'clsx';
 import Link from 'next/link';
 
@@ -23,7 +24,8 @@ export function Avatar({
   size?: number;
   title?: string;
 }) {
-  const initials = name
+  const displayName = formatName(name);
+  const initials = displayName
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
@@ -36,7 +38,7 @@ export function Avatar({
 
   return (
     <span
-      title={title ?? name}
+      title={title ?? displayName}
       className="inline-flex shrink-0 items-center justify-center rounded-pill border border-hairline font-medium text-ink"
       style={{ backgroundColor: tint, width: size, height: size, fontSize: size * 0.36 }}
     >
@@ -266,3 +268,6 @@ export function Alert({
 export function CodeRef({ children, className }: { children: React.ReactNode; className?: string }) {
   return <span className={clsx('code', className)}>{children}</span>;
 }
+
+
+

@@ -119,7 +119,13 @@ const ADMIN_NAV: NavItem[] = [
   { label: 'Audit trail', href: '/admin/audit', requires: 'admin.audit.read', icon: Icons.Audit },
 ];
 
-export function Sidebar({ principal }: { principal: Principal }) {
+export function Sidebar({
+  principal,
+  pendingHandovers = 0,
+}: {
+  principal: Principal;
+  pendingHandovers?: number;
+}) {
   const { isCollapsed, toggleCollapsed } = useShell();
 
   const visible = (item: NavItem) => !item.requires || hasPermissionAnywhere(principal, item.requires);
@@ -174,7 +180,14 @@ export function Sidebar({ principal }: { principal: Principal }) {
               <div className="my-1 border-t border-hairline-soft" />
             )}
             {WORKSPACE_NAV.filter(visible).map((item) => (
-              <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} collapsed={isCollapsed} />
+              <NavLink
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                icon={item.icon}
+                badge={item.href === '/pm/handovers' ? pendingHandovers : undefined}
+                collapsed={isCollapsed}
+              />
             ))}
           </div>
         )}
@@ -188,7 +201,14 @@ export function Sidebar({ principal }: { principal: Principal }) {
               <div className="my-2 border-t border-hairline-soft" />
             )}
             {MANAGEMENT_NAV.filter(visible).map((item) => (
-              <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} collapsed={isCollapsed} />
+              <NavLink
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                icon={item.icon}
+                badge={item.href === '/pm/handovers' ? pendingHandovers : undefined}
+                collapsed={isCollapsed}
+              />
             ))}
           </div>
         )}

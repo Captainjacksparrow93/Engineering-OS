@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState } from 'react';
 import {
   assignTaskAction,
   changeTaskStatusAction,
@@ -8,6 +8,7 @@ import {
   type ActionState,
 } from '@/app/actions/pm';
 import { FormMessage, SubmitButton } from '@/components/form';
+import { formatName } from '@/core/utils/strings';
 
 const NEXT_STATUS: Record<string, Array<{ value: string; label: string; variant?: 'primary' | 'secondary' }>> = {
   DRAFT: [{ value: 'TODO', label: 'Release to the queue', variant: 'primary' }],
@@ -37,7 +38,6 @@ export function TaskControls({
   const [statusState, statusAction] = useActionState<ActionState, FormData>(changeTaskStatusAction, {});
   const [assignState, assignAction] = useActionState<ActionState, FormData>(assignTaskAction, {});
   const [deleteState, deleteAction] = useActionState<ActionState, FormData>(deleteTaskAction, {});
-  const [reassigning, setReassigning] = useState(false);
 
   const transitions = NEXT_STATUS[task.status] ?? [];
   const mayTransition = permissions.canEdit || permissions.isHolder;
@@ -71,47 +71,61 @@ export function TaskControls({
           </div>
         ) : null}
 
+        {mayTransition && task.status !== 'COMPLETED' && task.status !== 'CANCELLED' ? (
+          <form
+            action={async (formData: FormData) => {
+              const comment = String(formData.get('comment') || '').trim();
+              if (comment) {
+                const { flagRoadblockAction } = await import('@/app/actions/pm');
+                await flagRoadblockAction(task.id, comment);
+              }
+            }}
+            className="rounded-lg border border-error/20 bg-error/[0.04] p-3 space-y-2"
+          >
+            <p className="text-caption font-semibold uppercase tracking-wider text-error">Raise a Roadblock</p>
+            <textarea
+              name="comment"
+              required
+              rows={2}
+              className="textarea text-xs w-full bg-surface border-error/30 focus:border-error"
+              placeholder="What is blocking this task? (e.g. Awaiting client drawing signoff)"
+            />
+            <button type="submit" className="btn btn-sm w-full bg-error text-white hover:opacity-90">
+              Flag Roadblock
+            </button>
+          </form>
+        ) : null}
+
         <FormMessage state={statusState} />
 
         {permissions.canAssign ? (
-          <div className="border-t border-hairline pt-3">
-            {reassigning ? (
-              <form action={assignAction}>
-                <input type="hidden" name="taskId" value={task.id} />
-                <div className="field">
-                  <label className="label" htmlFor="assign-user">Reassign to</label>
-                  <select id="assign-user" name="userId" required className="select" defaultValue="">
-                    <option value="" disabled>Select</option>
-                    {assignableUsers.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.fullName}{user.designation ? ` - ${user.designation}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="hint">Management reassignment takes effect immediately - it is not a peer handover.</p>
-                </div>
-                <div className="field">
-                  <label className="label" htmlFor="assign-role">As</label>
-                  <select id="assign-role" name="role" className="select" defaultValue="OWNER">
-                    <option value="OWNER">Owner (replaces current)</option>
-                    <option value="COLLABORATOR">Collaborator (works alongside)</option>
-                    <option value="REVIEWER">Reviewer</option>
-                  </select>
-                </div>
-                <FormMessage state={assignState} />
-                <div className="mt-2 flex gap-2">
-                  <SubmitButton size="sm">Confirm</SubmitButton>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setReassigning(false)}>
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <button type="button" className="btn btn-secondary w-full" onClick={() => setReassigning(true)}>
-                Assign / reassign
-              </button>
-            )}
-          </div>
+          <form action={assignAction} className="border-t border-hairline pt-3">
+            <p className="mb-2 text-caption font-semibold uppercase tracking-wider text-muted-soft">Reassign Task</p>
+            <input type="hidden" name="taskId" value={task.id} />
+            <div className="field">
+              <label className="label" htmlFor="assign-user">Reassign to</label>
+              <select id="assign-user" name="userId" required className="select w-full" defaultValue="">
+                <option value="" disabled>Select colleague</option>
+                {assignableUsers.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {formatName(user.fullName)} {user.designation ? `(${user.designation})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="assign-role">As</label>
+              <select id="assign-role" name="role" className="select w-full" defaultValue="OWNER">
+                <option value="OWNER">Owner (replaces current)</option>
+                <option value="COLLABORATOR">Collaborator (works alongside)</option>
+                <option value="REVIEWER">Reviewer</option>
+              </select>
+            </div>
+            <FormMessage state={assignState} />
+            <div className="mt-2">
+              <SubmitButton size="sm" className="w-full">Reassign</SubmitButton>
+            </div>
+          </form>
         ) : null}
 
         {permissions.canDelete ? (

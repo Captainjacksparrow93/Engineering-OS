@@ -1,9 +1,10 @@
-'use client';
+﻿'use client';
 
 import { useActionState, useState } from 'react';
 import { requestHandoverAction, type ActionState } from '@/app/actions/pm';
 import { FormMessage, SubmitButton } from '@/components/form';
 import { StatusBadge } from '@/components/ui';
+import { formatName } from '@/core/utils/strings';
 
 interface Candidate {
   id: string;
@@ -34,16 +35,7 @@ export function HandoverForm({
   fallbackPeers: Array<{ id: string; fullName: string; designation: string | null }>;
 }) {
   const [state, action] = useActionState<ActionState, FormData>(requestHandoverAction, {});
-  const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState('');
-
-  if (!open) {
-    return (
-      <button type="button" className="btn btn-secondary w-full" onClick={() => setOpen(true)}>
-        Hand remaining work to a peer
-      </button>
-    );
-  }
 
   const ranked = candidates.slice(0, 6);
 
@@ -51,9 +43,6 @@ export function HandoverForm({
     <section className="card border-hairline-strong">
       <header className="card-header bg-canvas-soft">
         <h2 className="card-title">Hand over {remainingPercent}% remaining</h2>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(false)}>
-          Cancel
-        </button>
       </header>
       <form action={action} className="card-body">
         <input type="hidden" name="taskId" value={taskId} />
@@ -78,7 +67,9 @@ export function HandoverForm({
                       className="accent-ink"
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-body-sm font-medium text-ink">{candidate.fullName}</span>
+                      <span className="block truncate text-body-sm font-medium text-ink">
+                        {formatName(candidate.fullName)}
+                      </span>
                       <span className="block truncate text-caption text-muted">
                         {candidate.designation ?? ''} · {candidate.freeHours}h free
                         {candidate.matchedSkills.length ? ` · ${candidate.matchedSkills.join(', ')}` : ''}
@@ -94,11 +85,11 @@ export function HandoverForm({
         ) : (
           <div className="field">
             <label className="label" htmlFor="toUserId">Hand over to</label>
-            <select id="toUserId" name="toUserId" required className="select" defaultValue="">
+            <select id="toUserId" name="toUserId" required className="select w-full" defaultValue="">
               <option value="" disabled>Select a peer</option>
               {fallbackPeers.map((peer) => (
                 <option key={peer.id} value={peer.id}>
-                  {peer.fullName}{peer.designation ? ` - ${peer.designation}` : ''}
+                  {formatName(peer.fullName)}{peer.designation ? ` - ${peer.designation}` : ''}
                 </option>
               ))}
             </select>

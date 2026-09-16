@@ -3,12 +3,13 @@ import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
 import { getProjectWorkspace } from '@/modules/project-management/services/project.service';
 import { formatDate, daysUntil } from '@/core/utils/dates';
-import { Alert, Card, PageHeader, PriorityBadge, ProgressBar, Stat, StatusBadge } from '@/components/ui';
+import { Alert, Card, PageHeader, PriorityBadge, ProgressBar, Stat } from '@/components/ui';
 import { WbsTable } from './wbs-table';
 import { AddTaskForm } from './add-task-form';
 import { TeamPanel } from './team-panel';
 import { CompleteProjectButton } from './complete-project-button';
 import { HandoverProjectButton } from './handover-project-button';
+import { ProjectStatusSelector } from './project-status-selector';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,9 +23,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const workspace = await getProjectWorkspace(principal, id);
   const { project, tasks, summary, permissions, criticalTaskIds } = workspace;
 
-  const colleagues = permissions.canAssign
+  const colleagues = permissions.canAssign || permissions.canManageMembers || permissions.canEditProject
     ? await prisma.user.findMany({
-        where: { companyId: principal.companyId, status: 'ACTIVE' },
+        where: { companyId: principal.companyId, status: 'ACTIVE', id: { not: project.managerId } },
         select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true, skills: true },
         orderBy: { fullName: 'asc' },
       })
@@ -35,36 +36,51 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   return (
     <>
       <PageHeader
-        breadcrumb={[{ label: 'Projects', href: '/pm/projects' }, { label: project.code }]}
+        breadcrumb={[{ label: 'Projects', href: '/pm/projects' }, { label: project.name }]}
         title={project.name}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <span>{project.clientName}</span>
             <span className="text-muted-soft">·</span>
-            <span className="code text-caption">{project.code}</span>
+            
             {project.poNumber ? (
               <>
                 <span className="text-muted-soft">·</span>
                 <span className="text-caption">PO {project.poNumber}</span>
               </>
             ) : null}
-            <StatusBadge status={project.status} />
+            <ProjectStatusSelector projectId={project.id} currentStatus={project.status} canEdit={permissions.canEditProject} />
             <PriorityBadge priority={project.priority} />
           </span>
         }
         actions={
-          <>
+          <div className="flex flex-wrap items-center gap-2">
             <Link href={`/pm/resources?projectId=${project.id}`} className="btn btn-secondary">
               Team load
             </Link>
+            {permissions.canManageMembers ? (
+              <HandoverProjectButton projectId={project.id} colleagues={colleagues} />
+            ) : null}
             {permissions.canCreateTask ? (
               <Link href={`/pm/adhoc?projectId=${project.id}`} className="btn btn-primary">
                 Raise ad-hoc task
               </Link>
             ) : null}
-          </>
+          </div>
         }
       />
+
+      {project.status !== 'COMPLETED' && summary.progressPercent === 100 ? (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
+          <div>
+            <p className="font-semibold text-emerald-950">All tasks are 100% complete!</p>
+            <p className="text-body-sm text-emerald-800">
+              Ready to mark this project completed and notify leadership?
+            </p>
+          </div>
+          <CompleteProjectButton projectId={project.id} />
+        </div>
+      ) : null}
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="Progress" value={`${summary.progressPercent}%`} hint={`${summary.completedCount}/${summary.taskCount} tasks done`} />
@@ -87,7 +103,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
       <div className="mb-5 grid gap-3 lg:grid-cols-4">
         <Card className="lg:col-span-3" title="Work breakdown structure" bodyClassName="p-0">
-          <WbsTable tasks={tasks} criticalTaskIds={criticalTaskIds} />
+          <WbsTable
+            tasks={tasks}
+            criticalTaskIds={criticalTaskIds}
+            projectId={project.id}
+            canAssign={permissions.canAssign}
+            colleagues={colleagues}
+          />
         </Card>
 
         <div className="space-y-3">
@@ -149,4 +171,5 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     </>
   );
 }
+
 

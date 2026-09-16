@@ -62,7 +62,7 @@ export function DependencyPanel({
                       {edge.predecessor!.title}
                     </Link>
                     <span className="text-caption text-muted-soft">
-                      {edge.predecessor!.code} · {TYPE_LABEL[edge.type]}
+                      {TYPE_LABEL[edge.type]}
                       {edge.lagDays !== 0 ? ` · ${edge.lagDays > 0 ? '+' : ''}${edge.lagDays}d` : ''}
                     </span>
                   </div>
@@ -109,7 +109,7 @@ export function DependencyPanel({
                 <option value="" disabled>Select a task</option>
                 {projectTasks.map((task) => (
                   <option key={task.id} value={task.id}>
-                    {task.code} - {task.title}
+                    {task.title}
                   </option>
                 ))}
               </select>

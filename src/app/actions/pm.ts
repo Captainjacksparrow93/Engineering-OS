@@ -213,6 +213,7 @@ export async function changeTaskStatusAction(_prev: ActionState, form: FormData)
 export async function assignTaskAction(_prev: ActionState, form: FormData): Promise<ActionState> {
   const principal = await requirePrincipal();
   const taskId = String(form.get('taskId'));
+  const projectId = form.get('projectId') ? String(form.get('projectId')) : undefined;
   const state = await run(async () => {
     const input = assignTaskSchema.parse({
       userId: value(form, 'userId'),
@@ -223,6 +224,8 @@ export async function assignTaskAction(_prev: ActionState, form: FormData): Prom
     return assignTask(principal, taskId, input);
   });
   revalidatePath(`/pm/tasks/${taskId}`);
+  if (projectId) revalidatePath(`/pm/projects/${projectId}`);
+  revalidatePath('/dashboard');
   return state;
 }
 
@@ -398,19 +401,79 @@ export async function handoverProjectAction(_prev: ActionState, form: FormData):
   const principal = await requirePrincipal();
   const projectId = String(form.get('projectId'));
   const newManagerId = String(form.get('newManagerId'));
+  const reason = form.get('reason') ? String(form.get('reason')) : undefined;
 
   if (!projectId || !newManagerId) {
-    return { error: 'Missing fields' };
+    return { error: 'Missing required fields' };
   }
 
   const state = await run(async () => {
-    const { handoverProject } = await import('@/modules/project-management/services/project.service');
-    await handoverProject(principal, projectId, newManagerId);
-    return 'Handover complete';
+    const { requestProjectHandover } = await import('@/modules/project-management/services/handover.service');
+    await requestProjectHandover(principal, { projectId, toUserId: newManagerId, reason });
+    return 'Project handover request sent for acceptance.';
   });
 
   if (!state.error) {
     revalidatePath('/pm/projects/' + projectId);
+    revalidatePath('/pm/handovers');
+    revalidatePath('/dashboard');
   }
   return state;
 }
+
+export async function decideProjectHandoverAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const handoverId = String(form.get('handoverId'));
+  const decision = String(form.get('decision')) as 'ACCEPTED' | 'REJECTED';
+  const note = form.get('note') ? String(form.get('note')) : undefined;
+
+  if (!handoverId || !['ACCEPTED', 'REJECTED'].includes(decision)) {
+    return { error: 'Invalid handover decision.' };
+  }
+
+  const state = await run(async () => {
+    const { decideProjectHandover } = await import('@/modules/project-management/services/handover.service');
+    await decideProjectHandover(principal, handoverId, decision, note);
+    return decision === 'ACCEPTED' ? 'Project handover accepted.' : 'Project handover rejected.';
+  });
+
+  revalidatePath('/pm/handovers');
+  revalidatePath('/pm/projects');
+  revalidatePath('/dashboard');
+  return state;
+}
+
+export async function cancelProjectHandoverAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const handoverId = String(form.get('handoverId'));
+  if (!handoverId) return { error: 'Missing handover ID' };
+
+  const state = await run(async () => {
+    const { cancelProjectHandover } = await import('@/modules/project-management/services/handover.service');
+    await cancelProjectHandover(principal, handoverId);
+    return 'Project handover request cancelled.';
+  });
+
+  revalidatePath('/pm/handovers');
+  revalidatePath('/dashboard');
+  return state;
+}
+
+export async function updateProjectStatusAction(projectId: string, status: string) {
+  const principal = await requirePrincipal();
+  const validStatuses = ['DRAFT', 'PLANNING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED'];
+  if (!validStatuses.includes(status)) {
+    return { success: false, error: 'Invalid project status.' };
+  }
+  try {
+    const { updateProject } = await import('@/modules/project-management/services/project.service');
+    await updateProject(principal, projectId, { status: status as never });
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to update project status.' };
+  }
+}
+

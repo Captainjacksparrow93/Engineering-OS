@@ -11,39 +11,22 @@ All code changes, bug investigations, architectural designs, refactorings, and f
 
 ---
 
-## 1. Structured Step-by-Step Reasoning: Sequential Thinking (`sequentialthinking`)
-- **Mandatory First Step**: Before touching, creating, or modifying any code, invoke and engage in structured sequential thinking (`sequentialthinking` MCP / deep multi-step reasoning).
-- **Explicit Lifecycle Mapping**:
-  1. Break the task or problem into numbered logical steps.
-  2. Map the complete execution flow from entry point to exit point across interacting components, state mutations, background tasks, API boundaries, and database storage.
-  3. Hypothesize all failure modes and edge cases (race conditions, stale cache, auth/CORS boundaries, network failures, malformed input).
-  4. Formulate testable assumptions and validate them before writing code.
+## 1. Graph Navigation & Impact Analysis: Code Review Graph (`code-review-graph`)
+- **Fast Search by Default**: Use fast native search tools (`grep_search`, `find_by_name`, `view_file`) for direct, localized inspections.
+- **On-Demand Graph Analysis**: Engage `code-review-graph` tools when handling large multi-file refactors, unknown architectural boundaries, or assessing blast-radius when modifying shared database models or foundational services.
+  - Discover high-level structures via `get_architecture_overview_tool`, `list_flows_tool`, and `list_communities_tool`.
+  - Check blast radius on shared components using `get_impact_radius_tool` and `get_affected_flows_tool`.
 
 ---
 
-## 2. Graph Navigation & Impact Analysis: Code Review Graph (`code-review-graph`)
-- **Graph-First Exploration**: ALWAYS navigate and inspect codebases using the Code Review Knowledge Graph before using raw regex/grep searches.
-  - Discover architectural structure using `get_architecture_overview_tool`, `list_flows_tool`, and `list_communities_tool`.
-  - Search symbols and logic using `semantic_search_nodes_tool` and `query_graph_tool`.
-- **Blast Radius & Dependent Analysis**:
-  - Before modifying any shared function, model, resolver, or interface, execute `get_impact_radius_tool` and `get_affected_flows_tool`.
-  - Ensure zero unintended side effects across downstream callers.
-- **Diff & Change Review**:
-  - Use `detect_changes_tool` and `get_review_context_tool` for token-efficient, risk-scored reviews.
+## 2. Surgical Precision & Editing (`replace_file_content` & `token-savior`)
+- **Direct Surgical Edits**: Use direct, targeted file reading and `replace_file_content` as the primary, fast path for scoped edits.
+- **AST-Aware Precision on Demand**: Use `token-savior` (`get_function_source`, `find_symbol`, `replace_symbol_source`) when dealing with massive files or complex symbol references to minimize token overhead.
+- **Clean Diffs**: Ensure edits are minimal, scoped, and leave surrounding code pristine.
 
 ---
 
-## 3. Surgical AST Extraction & Editing: Token Savior (`token-savior`)
-- **Targeted Symbol Inspection**:
-  - Never dump massive multi-thousand-line files into context.
-  - Use `get_function_source`, `find_symbol`, `get_full_context`, and `get_call_chain` to inspect exact functions, classes, and call hierarchies with minimal token overhead.
-- **AST-Aware Precision Edits**:
-  - Use `replace_symbol_source` and `add_field_to_model` for clean, syntax-aware refactoring.
-  - Ensure edits are surgical, scoped, and leave surrounding code pristine.
-
----
-
-## 4. Senior Dev Restraint & Simplification: Ponytail (`ponytail`)
+## 3. Senior Dev Restraint & Simplification: Ponytail (`ponytail`)
 - **The Ladder of Restraint** (stop at the first rung that holds):
   1. *YAGNI*: Does this actually need to be built, or is it speculative? If unneeded, do not build it.
   2. *Reuse*: Does a helper, utility, pattern, or component already exist in this codebase? Reuse it.
@@ -60,7 +43,7 @@ All code changes, bug investigations, architectural designs, refactorings, and f
 
 ---
 
-## 5. Engineering Rigor: Matt Pocock Principles & Impeccable Standards
+## 4. Engineering Rigor: Matt Pocock Principles & Impeccable Standards
 - **Deep Modules & Clean Interfaces**:
   - Design deep modules with simple, intuitive interfaces that hide internal complexity.
   - Avoid shallow abstractions, leaky internals, and unnecessary glue code.
@@ -80,7 +63,8 @@ All code changes, bug investigations, architectural designs, refactorings, and f
 
 ---
 
-## 6. Build Artifact & Verification Quality Gate
-- Never assume code works purely from source inspection.
-- Always execute `npm run build` / `npm run lint` / compiler checks to verify 0 errors.
-- Run all test suites (`npm test`, vitest, self-checks) to guarantee 100% pass rate before finishing any task.
+## 5. Tiered Verification Quality Gate
+- **Tier 1 (Fast Feedback for Local Changes)**:
+  - For localized bug fixes, single-file edits, and UI adjustments: run fast compiler typechecks (`npx tsc --noEmit`) and relevant unit tests.
+- **Tier 2 (Full Verification for System Changes)**:
+  - For database migrations, multi-service refactors, and before production deployment: execute `npm run build` and the full test suite (`npm test`).

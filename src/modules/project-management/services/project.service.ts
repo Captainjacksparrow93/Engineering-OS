@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/core/db/prisma';
 import { assertCan } from '@/core/rbac/guard';
 import { can } from '@/core/rbac/engine';
@@ -7,7 +8,7 @@ import { audit, diffOf } from '@/core/audit/audit';
 import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
-import { assertProjectPermission, assertProjectVisible, projectVisibilityWhere } from './access';
+import { assertProjectPermission, assertProjectVisible } from './access';
 import type { CreateProjectInput } from '../validation/schemas';
 import { computeSchedule, rollUpProgress, type Graph } from '../domain/scheduling';
 
@@ -210,27 +211,68 @@ export interface ProjectListFilters {
   status?: string;
   search?: string;
   managerId?: string;
-  mine?: boolean;
 }
 
 export async function listProjects(principal: Principal, filters: ProjectListFilters = {}) {
-  const where = projectVisibilityWhere(principal);
+  const isDirector =
+    can(principal, 'pm.project.read.all') ||
+    principal.grade === 'DIRECTOR' ||
+    principal.roleKeys.includes('DIRECTOR');
+
+  const isHead =
+    principal.grade === 'HEAD' ||
+    principal.roleKeys.includes('DEPARTMENT_HEAD');
+
+  const deptIds = Array.from(
+    new Set([
+      ...principal.coveredDepartmentIds,
+      ...(principal.departmentId ? [principal.departmentId] : []),
+    ]),
+  );
+
+  let scopeWhere: Prisma.ProjectWhereInput = {};
+  if (filters.managerId) {
+    scopeWhere = { managerId: filters.managerId };
+  } else if (isDirector) {
+    scopeWhere = {};
+  } else if (isHead) {
+    scopeWhere = {
+      OR: [
+        ...(deptIds.length > 0 ? [{ departmentId: { in: deptIds } }] : []),
+        { managerId: principal.userId },
+        { sponsorId: principal.userId },
+      ],
+    };
+  } else {
+    // Project Managers and engineers strictly see only projects they directly manage
+    scopeWhere = { managerId: principal.userId };
+  }
+
+  const whereClauses: Prisma.ProjectWhereInput[] = [
+    { companyId: principal.companyId },
+  ];
+
+  if (Object.keys(scopeWhere).length > 0) {
+    whereClauses.push(scopeWhere);
+  }
+
+  if (filters.status) {
+    whereClauses.push({ status: filters.status as never });
+  }
+
+  if (filters.search) {
+    whereClauses.push({
+      OR: [
+        { name: { contains: filters.search, mode: 'insensitive' as const } },
+        { code: { contains: filters.search, mode: 'insensitive' as const } },
+        { clientName: { contains: filters.search, mode: 'insensitive' as const } },
+      ],
+    });
+  }
 
   const projects = await prisma.project.findMany({
     where: {
-      ...where,
-      ...(filters.status ? { status: filters.status as never } : {}),
-      ...(filters.managerId ? { managerId: filters.managerId } : {}),
-      ...(filters.mine ? { OR: [{ managerId: principal.userId }, { members: { some: { userId: principal.userId } } }] } : {}),
-      ...(filters.search
-        ? {
-            OR: [
-              { name: { contains: filters.search, mode: 'insensitive' as const } },
-              { code: { contains: filters.search, mode: 'insensitive' as const } },
-              { clientName: { contains: filters.search, mode: 'insensitive' as const } },
-            ],
-          }
-        : {}),
+      AND: whereClauses,
     },
     orderBy: [{ priority: 'desc' }, { targetEndDate: 'asc' }],
     include: {

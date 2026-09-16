@@ -1,6 +1,6 @@
-'use client';
+﻿'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Avatar, StatusBadge } from '@/components/ui';
 import { DataTable, type ColumnDef } from '@/components/data-table';
 import { UserAdminPanel } from './user-admin-panel';
@@ -319,8 +319,8 @@ export function UsersTable({
               {/* Header */}
               <div className="flex items-center justify-between p-base border-b border-hairline bg-canvas-soft">
                 <div className="flex items-center gap-3 min-w-0">
-                  <Avatar name={selectedUser.fullName} color={selectedUser.avatarColor} size={40} />
-                  <h3 className="text-body font-semibold text-ink truncate">{selectedUser.fullName}</h3>
+                  <Avatar name={formatFirstLastName(selectedUser.fullName)} color={selectedUser.avatarColor} size={40} />
+                  <h3 className="text-body font-semibold text-ink truncate">{formatFirstLastName(selectedUser.fullName)}</h3>
                 </div>
                 <button
                   type="button"
@@ -343,7 +343,7 @@ export function UsersTable({
                   <div className="rounded-lg border border-hairline bg-canvas p-3 space-y-2 text-body-sm">
                     <div className="flex justify-between">
                       <span className="text-muted">Full Name</span>
-                      <span className="font-medium text-ink">{selectedUser.fullName}</span>
+                      <span className="font-medium text-ink">{formatFirstLastName(selectedUser.fullName)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted">Employee Code</span>
@@ -374,7 +374,7 @@ export function UsersTable({
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted">Reports To</span>
-                      <span className="text-ink">{selectedUser.manager?.fullName ?? '-'}</span>
+                      <span className="text-ink">{formatFirstLastName(selectedUser.manager?.fullName)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted">Working Capacity</span>
@@ -422,3 +422,5 @@ export function UsersTable({
     </>
   );
 }
+
+

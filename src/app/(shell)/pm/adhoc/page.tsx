@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation';
+﻿import { redirect } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { prisma } from '@/core/db/prisma';
@@ -12,46 +12,28 @@ export const dynamic = 'force-dynamic';
 /**
  * Ad-hoc assignment.
  *
- * The scenario this screen exists for: an urgent job lands mid-week and management
- * needs to know, right now, who can absorb it. Filters at the top re-rank the
- * candidate list; picking a candidate and submitting creates the task and assigns it
- * in one step.
+ * Fast unplanned work creation. No complex composite scoring or page-reload filters:
+ * candidates are ranked cleanly by current available capacity (free hours).
  */
 export default async function AdhocPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    projectId?: string;
-    skills?: string;
-    hours?: string;
-    priority?: string;
-    departmentId?: string;
-  }>;
+  searchParams: Promise<{ projectId?: string }>;
 }) {
   const principal = await requirePrincipal();
   if (!hasPermissionAnywhere(principal, 'pm.task.adhoc.create')) redirect('/dashboard');
 
   const params = await searchParams;
-  const skills = params.skills ? params.skills.split(',').map((s) => s.trim()).filter(Boolean) : [];
-  const requiredHours = params.hours ? Number(params.hours) : 8;
-  const priority = (params.priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL') ?? 'HIGH';
 
-  const [projects, departments, suggestions] = await Promise.all([
+  const [projects, suggestions] = await Promise.all([
     prisma.project.findMany({
       where: { ...projectVisibilityWhere(principal), status: { notIn: ['COMPLETED', 'CANCELLED'] } },
       select: { id: true, code: true, name: true, clientName: true },
       orderBy: { code: 'asc' },
     }),
-    prisma.department.findMany({
-      where: { companyId: principal.companyId },
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
-    }),
     suggestAssignees(principal, {
-      skills: skills.length ? skills : undefined,
-      requiredHours,
-      priority,
-      departmentId: params.departmentId,
+      requiredHours: 8,
+      priority: 'HIGH',
     }).catch(() => []),
   ]);
 
@@ -59,7 +41,7 @@ export default async function AdhocPage({
     <>
       <PageHeader
         title="Assign ad-hoc work"
-        subtitle="Unplanned work that has to be delivered now. Candidates are ranked by spare capacity, skill fit and grade."
+        subtitle="Unplanned work that has to be delivered now. Ranked directly by who is free right now."
       />
 
       {projects.length === 0 ? (
@@ -70,21 +52,15 @@ export default async function AdhocPage({
       ) : (
         <AdhocForm
           projects={projects}
-          departments={departments}
-          filters={{ skills: params.skills ?? '', hours: requiredHours, priority, departmentId: params.departmentId ?? '', projectId: params.projectId ?? '' }}
+          defaultProjectId={params.projectId}
           suggestions={suggestions.map((s) => ({
             id: s.workload.person.id,
             fullName: s.workload.person.fullName,
             designation: s.workload.person.designation,
             departmentName: s.workload.person.departmentName,
             avatarColor: s.workload.person.avatarColor,
-            score: s.score,
-            skillMatch: s.skillMatch,
             status: s.workload.status,
             freeHours: s.workload.freeHours,
-            utilizationPercent: s.workload.utilizationPercent,
-            openTaskCount: s.workload.openTaskCount,
-            reasons: s.reasons,
           }))}
         />
       )}

@@ -1,3 +1,4 @@
+import { formatName } from '@/core/utils/strings';
 import Link from 'next/link';
 import { requirePrincipal } from '@/core/auth/session';
 import { getDashboard } from '@/modules/project-management/services/dashboard.service';
@@ -16,10 +17,12 @@ export default async function DashboardPage() {
     principal.roleKeys.includes('DIRECTOR') ||
     principal.roleKeys.includes('DEPARTMENT_HEAD');
 
+  const greetingName = formatName(principal.fullName).split(' ')[0] || principal.fullName;
+
   return (
     <>
       <PageHeader
-        title={`Good day, ${principal.fullName.split(' ')[0]}`}
+        title={`Good day, ${greetingName}`}
         subtitle={
           data.isManagement
             ? 'Executive Operations Dashboard — Live portfolio health, roadblock radar, and engineering capacity.'
@@ -79,27 +82,44 @@ export default async function DashboardPage() {
       </div>
 
       {/* Handovers Waiting on User */}
-      {data.incomingHandovers.length > 0 ? (
+      {((data.incomingProjectHandovers?.length ?? 0) > 0 || data.incomingHandovers.length > 0) ? (
         <div className="mb-6">
           <Card
-            title={`${data.incomingHandovers.length} handover${data.incomingHandovers.length > 1 ? 's' : ''} waiting on you`}
+            title={`${(data.incomingProjectHandovers?.length ?? 0) + data.incomingHandovers.length} handover request${(data.incomingProjectHandovers?.length ?? 0) + data.incomingHandovers.length > 1 ? 's' : ''} waiting on you`}
             action={
-              <Link href="/pm/handovers" className="btn btn-secondary btn-sm">
-                Review
+              <Link href="/pm/handovers" className="btn btn-primary btn-sm font-medium">
+                Review in Handovers
               </Link>
             }
           >
             <ul className="divide-y divide-hairline">
+              {data.incomingProjectHandovers?.map((handover) => (
+                <li key={handover.id} className="flex flex-wrap items-center gap-3 py-2.5 first:pt-0 last:pb-0 bg-primary/[0.02] -mx-4 px-4 rounded">
+                  <Avatar name={formatName(handover.fromUser.fullName)} color={handover.fromUser.avatarColor} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-body-sm text-ink font-semibold">
+                      <span className="badge bg-primary text-white text-xs mr-2">Project Handover</span>
+                      {formatName(handover.fromUser.fullName)} wants to transfer project ownership of{' '}
+                      <Link href={`/pm/projects/${handover.project.id}`} className="text-primary hover:underline">
+                        {handover.project.name}
+                      </Link>
+                    </p>
+                    <p className="truncate text-caption text-muted">{handover.project.clientName}</p>
+                  </div>
+                  <Link href="/pm/handovers" className="btn btn-secondary btn-sm text-xs">
+                    Accept / Decline
+                  </Link>
+                </li>
+              ))}
               {data.incomingHandovers.map((handover) => (
                 <li key={handover.id} className="flex flex-wrap items-center gap-3 py-2 first:pt-0 last:pb-0">
-                  <Avatar name={handover.fromUser.fullName} color={handover.fromUser.avatarColor} />
+                  <Avatar name={formatName(handover.fromUser.fullName)} color={handover.fromUser.avatarColor} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-body-sm text-ink">
-                      <span className="font-medium">{handover.fromUser.fullName}</span> wants to pass you{' '}
-                      <Link href={`/pm/tasks/${handover.task.id}`} className="text-ink hover:underline">
-                        {handover.task.code}
-                      </Link>{' '}
-                      - {handover.task.title}
+                      <span className="font-medium">{formatName(handover.fromUser.fullName)}</span> wants to pass you task{' '}
+                      <Link href={`/pm/tasks/${handover.task.id}`} className="font-medium text-ink hover:underline">
+                        {handover.task.title}
+                      </Link>
                     </p>
                     <p className="truncate text-caption text-muted">{handover.reason}</p>
                   </div>
@@ -114,9 +134,9 @@ export default async function DashboardPage() {
       {/* Management View: What is going on & Roadblocks */}
       {data.isManagement ? (
         <div className="space-y-6">
-          {/* Section 1: "WHAT IS GOING ON?" - Active Projects */}
+          {/* Section 1: Active Projects */}
           <Card
-            title="What Is Going On? — Live Automation Projects"
+            title="Live projects"
             action={
               <Link href="/pm/projects" className="text-caption font-medium text-ink hover:underline">
                 View all ({data.projects.length})
@@ -135,10 +155,9 @@ export default async function DashboardPage() {
                     <tr className="bg-surface-subtle text-muted text-left uppercase tracking-wider">
                       <th>Project & Client</th>
                       <th>Project Manager</th>
-                      <th>Current Step / Phase</th>
                       <th>Target Delivery</th>
-                      <th className="w-36">Overall Progress</th>
-                      <th className="text-right">Health Status</th>
+                      <th className="w-36">Progress</th>
+                      <th className="text-right">Health</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-hairline">
@@ -151,21 +170,14 @@ export default async function DashboardPage() {
                               {project.name}
                             </Link>
                             <div className="mt-0.5 flex items-center gap-2">
-                              <span className="code text-caption text-muted-soft">{project.code}</span>
                               <span className="text-caption text-muted font-medium">• {project.clientName}</span>
                               <PriorityBadge priority={project.priority} />
                             </div>
                           </td>
                           <td>
                             <span className="flex items-center gap-2 font-medium text-ink text-xs">
-                              <Avatar name={project.manager.fullName} color={project.manager.avatarColor} size={22} />
-                              {project.manager.fullName}
-                            </span>
-                          </td>
-                          <td>
-                            <p className="font-medium text-ink text-xs truncate max-w-xs">{project.currentStep}</p>
-                            <span className="text-caption text-muted">
-                              {project.completedTaskCount} of {project.taskCount} tasks completed
+                              <Avatar name={formatName(project.manager.fullName)} color={project.manager.avatarColor} size={22} />
+                              {formatName(project.manager.fullName)}
                             </span>
                           </td>
                           <td className="whitespace-nowrap">
@@ -175,7 +187,7 @@ export default async function DashboardPage() {
                                 {due !== null ? (
                                   <span
                                     className={`block text-caption font-semibold ${
-                                      due < 0 ? 'text-error' : due <= 7 ? 'text-amber-600' : 'text-muted-soft'
+                                      due < 0 ? 'text-error' : due <= 7 ? 'text-stage-review' : 'text-muted-soft'
                                     }`}
                                   >
                                     {due < 0 ? `${-due}d late` : due === 0 ? 'Due today' : `in ${due} days`}
@@ -197,19 +209,15 @@ export default async function DashboardPage() {
                           </td>
                           <td className="text-right">
                             <span
-                              className={`badge text-xs ${
-                                project.health === 'BLOCKED'
-                                  ? 'bg-red-100 text-red-800'
+                              className={`badge text-xs font-semibold ${
+                                project.health === 'HEALTHY'
+                                  ? 'bg-success/[0.08] text-success'
                                   : project.health === 'AT_RISK'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-emerald-100 text-emerald-800'
+                                  ? 'bg-error/[0.08] text-error'
+                                  : 'bg-stage-review/[0.15] text-stage-review'
                               }`}
                             >
-                              {project.health === 'BLOCKED'
-                                ? '● BLOCKED'
-                                : project.health === 'AT_RISK'
-                                ? '▲ AT RISK'
-                                : '✓ HEALTHY'}
+                              {project.health.replace('_', ' ')}
                             </span>
                           </td>
                         </tr>
@@ -221,35 +229,33 @@ export default async function DashboardPage() {
             )}
           </Card>
 
-          {/* Section 2: "WHAT BLOCKERS EXIST TODAY?" - Roadblock Radar */}
+          {/* Section 2: Roadblock Radar */}
           <Card
-            title="What Blockers Exist Today? — Roadblock Radar"
-            bodyClassName="p-4"
+            title={`Roadblocks (${data.portfolio.activeRoadblocks} active)`}
+            className="border-error/20 bg-error/[0.03]"
           >
             {data.activeRoadblocks.length === 0 ? (
-              <p className="text-sm text-emerald-700 font-medium py-2">
-                ✓ No active roadblocks reported. All technical milestones are moving smoothly!
-              </p>
+              <p className="text-xs text-muted">No active roadblocks reported across active projects. Smooth flow.</p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {data.activeRoadblocks.map((log) => (
                   <div
                     key={log.id}
-                    className="rounded-lg border border-red-200 bg-red-50/50 p-3.5 space-y-2 relative shadow-sm"
+                    className="flex flex-col justify-between gap-2 rounded-lg border border-hairline bg-surface p-3.5"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <Avatar name={log.user.fullName} color={log.user.avatarColor} size={24} />
+                        <Avatar name={formatName(log.user.fullName)} color={log.user.avatarColor} size={24} />
                         <div>
-                          <p className="text-xs font-semibold text-ink">{log.user.fullName}</p>
+                          <p className="text-xs font-semibold text-ink">{formatName(log.user.fullName)}</p>
                           <p className="text-caption text-muted">{log.user.designation || log.user.grade}</p>
                         </div>
                       </div>
-                      <span className="badge bg-red-100 text-red-800 text-xs font-bold uppercase">Roadblock</span>
+                      <span className="badge bg-error/[0.08] text-error text-xs font-semibold">CRITICAL</span>
                     </div>
 
-                    <div className="bg-white/80 rounded border border-red-100 p-2.5">
-                      <p className="text-xs font-medium text-red-950 whitespace-pre-wrap leading-relaxed">
+                    <div className="bg-canvas-soft rounded border border-hairline p-2.5">
+                      <p className="text-xs font-medium text-ink whitespace-pre-wrap leading-relaxed">
                         &ldquo;{log.blocker}&rdquo;
                       </p>
                     </div>
@@ -258,10 +264,10 @@ export default async function DashboardPage() {
                       <p>
                         Task:{' '}
                         <Link href={`/pm/tasks/${log.task.id}`} className="font-semibold text-ink hover:underline">
-                          {log.task.code} ({log.task.title.slice(0, 30)}...)
+                          {log.task.title}
                         </Link>
                       </p>
-                      <span className="code font-mono text-muted">{log.task.project.code}</span>
+                      <span className="text-muted font-medium">{log.task.project.name}</span>
                     </div>
                   </div>
                 ))}
@@ -272,7 +278,7 @@ export default async function DashboardPage() {
           {/* Section 3: "WHO IS DOING WHAT RIGHT NOW?" - Live Team Operations */}
           <div className="grid gap-4 lg:grid-cols-2">
             {/* Team 1: Parth Nagar */}
-            <Card title="Who Is Doing What? — Team 1: Parth Nagar (Technical Automation)">
+            <Card title="Team 1: Parth Nagar - Technical Automation">
               {data.teamOperations.parthTeam.length === 0 ? (
                 <p className="text-caption text-muted">No team members assigned.</p>
               ) : (
@@ -280,12 +286,12 @@ export default async function DashboardPage() {
                   {data.teamOperations.parthTeam.map((w: any) => (
                     <li key={w.person.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
                       <div className="flex items-center gap-2 min-w-0">
-                        <Avatar name={w.person.fullName} size={24} />
+                        <Avatar name={formatName(w.person.fullName)} size={24} />
                         <div className="min-w-0">
-                          <p className="font-semibold text-ink truncate">{w.person.fullName}</p>
+                          <p className="font-semibold text-ink truncate">{formatName(w.person.fullName)}</p>
                           <p className="text-caption text-muted truncate">
                             {w.assignments[0]
-                              ? `${w.assignments[0].taskCode} - ${w.assignments[0].taskTitle.slice(0, 24)}... (${w.assignments[0].percentComplete}%)`
+                              ? `${w.assignments[0].taskTitle} (${w.assignments[0].percentComplete}%)`
                               : 'Available / Idle'}
                           </p>
                         </div>
@@ -294,12 +300,12 @@ export default async function DashboardPage() {
                         <span
                           className={`badge text-xs font-medium ${
                             w.status === 'FREE'
-                              ? 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-success/[0.08] text-success'
                               : w.status === 'AVAILABLE'
-                              ? 'bg-blue-100 text-blue-800'
+                              ? 'bg-surface-strong text-ink'
                               : w.status === 'BUSY'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-red-100 text-red-800'
+                              ? 'bg-stage-review/[0.15] text-stage-review'
+                              : 'bg-error/[0.08] text-error'
                           }`}
                         >
                           {w.status}
@@ -313,7 +319,7 @@ export default async function DashboardPage() {
             </Card>
 
             {/* Team 2: Paras Prajapati */}
-            <Card title="Who Is Doing What? — Team 2: Paras Prajapati (Technical Automation)">
+            <Card title="Team 2: Paras Prajapati - Technical Automation">
               {data.teamOperations.parasTeam.length === 0 ? (
                 <p className="text-caption text-muted">No team members assigned.</p>
               ) : (
@@ -321,12 +327,12 @@ export default async function DashboardPage() {
                   {data.teamOperations.parasTeam.map((w: any) => (
                     <li key={w.person.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
                       <div className="flex items-center gap-2 min-w-0">
-                        <Avatar name={w.person.fullName} size={24} />
+                        <Avatar name={formatName(w.person.fullName)} size={24} />
                         <div className="min-w-0">
-                          <p className="font-semibold text-ink truncate">{w.person.fullName}</p>
+                          <p className="font-semibold text-ink truncate">{formatName(w.person.fullName)}</p>
                           <p className="text-caption text-muted truncate">
                             {w.assignments[0]
-                              ? `${w.assignments[0].taskCode} - ${w.assignments[0].taskTitle.slice(0, 24)}... (${w.assignments[0].percentComplete}%)`
+                              ? `${w.assignments[0].taskTitle} (${w.assignments[0].percentComplete}%)`
                               : 'Available / Idle'}
                           </p>
                         </div>
@@ -335,12 +341,12 @@ export default async function DashboardPage() {
                         <span
                           className={`badge text-xs font-medium ${
                             w.status === 'FREE'
-                              ? 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-success/[0.08] text-success'
                               : w.status === 'AVAILABLE'
-                              ? 'bg-blue-100 text-blue-800'
+                              ? 'bg-surface-strong text-ink'
                               : w.status === 'BUSY'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-red-100 text-red-800'
+                              ? 'bg-stage-review/[0.15] text-stage-review'
+                              : 'bg-error/[0.08] text-error'
                           }`}
                         >
                           {w.status}
@@ -354,22 +360,29 @@ export default async function DashboardPage() {
             </Card>
           </div>
 
-          {/* Section 4: "EVERY ACTIVITY TRACKED" - Real-time Audit & Activity Feed */}
-          <Card title="Every Activity Tracked — Real-Time Activity Feed">
+          {/* Section 4: Recent activity */}
+          <Card
+            title="Recent activity"
+            action={
+              <Link href="/admin/audit" className="text-caption font-medium text-ink hover:underline">
+                Full audit trail
+              </Link>
+            }
+          >
             {data.recentProgress.length === 0 ? (
               <p className="text-caption text-muted">No activity logged yet.</p>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {data.recentProgress.map((log) => (
+                {data.recentProgress.slice(0, 9).map((log) => (
                   <div key={log.id} className="rounded border border-hairline p-3 bg-surface text-xs space-y-1">
                     <div className="flex items-center justify-between text-caption text-muted">
-                      <span className="font-semibold text-ink">{log.user.fullName.split(' ')[0]}</span>
+                      <span className="font-semibold text-ink">{formatName(log.user.fullName)}</span>
                       <span>{formatDate(log.createdAt)}</span>
                     </div>
                     <p className="font-medium text-ink">
                       Updated{' '}
-                      <Link href={`/pm/tasks/${log.task.id}`} className="code text-primary hover:underline">
-                        {log.task.code}
+                      <Link href={`/pm/tasks/${log.task.id}`} className="text-primary hover:underline">
+                        {log.task.title}
                       </Link>{' '}
                       to {log.percentComplete}%
                     </p>
@@ -418,11 +431,10 @@ export default async function DashboardPage() {
                               {task.title}
                             </Link>
                             <div className="mt-0.5 flex items-center gap-2">
-                              <span className="code text-caption text-muted-soft">{task.code}</span>
                               <PriorityBadge priority={task.priority} />
                             </div>
                           </td>
-                          <td className="text-caption text-muted">{task.project.code}</td>
+                          <td className="text-caption text-muted">{task.project.name}</td>
                           <td className="whitespace-nowrap text-caption">
                             {task.plannedEnd ? (
                               <span className={due !== null && due < 0 ? 'font-medium text-error' : 'text-body'}>
@@ -461,12 +473,12 @@ export default async function DashboardPage() {
                 <ul className="space-y-3">
                   {data.recentProgress.slice(0, 6).map((log) => (
                     <li key={log.id} className="flex gap-2 text-xs">
-                      <Avatar name={log.user.fullName} size={22} />
+                      <Avatar name={formatName(log.user.fullName)} size={22} />
                       <div className="min-w-0">
                         <p className="text-ink">
-                          <span className="font-medium">{log.user.fullName.split(' ')[0]}</span> moved{' '}
-                          <Link href={`/pm/tasks/${log.task.id}`} className="code hover:underline">
-                            {log.task.code}
+                          <span className="font-medium">{formatName(log.user.fullName)}</span> moved{' '}
+                          <Link href={`/pm/tasks/${log.task.id}`} className="hover:underline font-medium">
+                            {log.task.title}
                           </Link>{' '}
                           to {log.percentComplete}%
                         </p>

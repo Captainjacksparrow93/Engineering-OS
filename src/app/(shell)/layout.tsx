@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getPrincipal } from '@/core/auth/session';
 import { unreadCount } from '@/core/notifications/notify';
+import { prisma } from '@/core/db/prisma';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
 import { ShellContainer } from '@/components/shell/shell-container';
@@ -16,11 +17,21 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   const principal = await getPrincipal();
   if (!principal) redirect('/login');
 
-  const notifications = await unreadCount(principal.userId);
+  const [notifications, taskHandovers, projectHandovers] = await Promise.all([
+    unreadCount(principal.userId),
+    prisma.taskHandover.count({
+      where: { toUserId: principal.userId, status: 'PENDING' },
+    }),
+    prisma.projectHandover.count({
+      where: { toUserId: principal.userId, status: 'PENDING' },
+    }),
+  ]);
+
+  const pendingHandovers = taskHandovers + projectHandovers;
 
   return (
     <ShellContainer
-      sidebar={<Sidebar key="shell-sidebar" principal={principal} />}
+      sidebar={<Sidebar key="shell-sidebar" principal={principal} pendingHandovers={pendingHandovers} />}
       topbar={<Topbar key="shell-topbar" principal={principal} unread={notifications} />}
     >
       {children}

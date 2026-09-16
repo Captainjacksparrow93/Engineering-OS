@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-engos}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-engos_secure_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-engineering_os}
     volumes:
       - engos_db_data:/var/lib/postgresql/data
@@ -38,17 +38,15 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    volumes:
-      - ./prisma:/app/prisma
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-engos}:${POSTGRES_PASSWORD:-engos_secure_password}@db:5432/${POSTGRES_DB:-engineering_os}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-engos}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-engineering_os}?schema=public&connection_limit=10&pool_timeout=20
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
       APP_URL: ${APP_URL:-https://engos.srv1275499.hstgr.cloud}
       SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-43200}
       NODE_ENV: production
       PORT: '3000'
       HOSTNAME: '0.0.0.0'
-      SEED_PASSWORD: ${SEED_PASSWORD:-ChangeMe@2026!}
+      SEED_PASSWORD: ${SEED_PASSWORD:?set SEED_PASSWORD in .env}
     networks:
       - engos_internal_net # Talks to private PostgreSQL DB
       - n8n_default       # Joins central Traefik network for automated HTTPS

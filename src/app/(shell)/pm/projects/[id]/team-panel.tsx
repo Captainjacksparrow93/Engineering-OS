@@ -1,6 +1,6 @@
-'use client';
+﻿'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState } from 'react';
 import { addMemberAction, removeMemberAction, type ActionState } from '@/app/actions/pm';
 import { FormMessage, SubmitButton } from '@/components/form';
 import { Avatar } from '@/components/ui';
@@ -26,7 +26,6 @@ export function TeamPanel({
 }) {
   const [addState, addAction] = useActionState<ActionState, FormData>(addMemberAction, {});
   const [removeState, removeAction] = useActionState<ActionState, FormData>(removeMemberAction, {});
-  const [adding, setAdding] = useState(false);
 
   const memberIds = new Set(members.map((m) => m.user.id));
   const available = colleagues.filter((c) => !memberIds.has(c.id));
@@ -35,11 +34,6 @@ export function TeamPanel({
     <section className="card">
       <header className="card-header">
         <h2 className="card-title">Team ({members.length})</h2>
-        {canManage ? (
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAdding((v) => !v)}>
-            {adding ? 'Cancel' : 'Add'}
-          </button>
-        ) : null}
       </header>
 
       <div className="card-body">
@@ -50,7 +44,7 @@ export function TeamPanel({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-body-sm font-medium text-ink">{formatName(member.user.fullName)}</p>
                 <p className="truncate text-caption text-muted">
-                    {member.user.designation || member.role.toLowerCase()}
+                  {member.user.designation || member.role.toLowerCase()}
                 </p>
               </div>
               {canManage && member.role !== 'MANAGER' ? (
@@ -68,13 +62,14 @@ export function TeamPanel({
 
         <FormMessage state={removeState} />
 
-        {adding ? (
-          <form action={addAction} className="mt-3 border-t border-hairline pt-3">
+        {canManage && available.length > 0 ? (
+          <form action={addAction} className="mt-4 border-t border-hairline pt-3">
+            <p className="mb-2 text-caption font-semibold uppercase tracking-wider text-muted-soft">Add Member</p>
             <input type="hidden" name="projectId" value={projectId} />
             <div className="field">
               <label className="label" htmlFor="member-user">Employee</label>
-              <select id="member-user" name="userId" required className="select" defaultValue="">
-                <option value="" disabled>Select</option>
+              <select id="member-user" name="userId" required className="select w-full" defaultValue="">
+                <option value="" disabled>Select colleague</option>
                 {available.map((person) => (
                   <option key={person.id} value={person.id}>
                     {formatName(person.fullName)} - {person.designation || 'Engineer'}
@@ -84,12 +79,11 @@ export function TeamPanel({
             </div>
             <div className="field">
               <label className="label" htmlFor="member-role">Role on this project</label>
-              <select id="member-role" name="role" className="select" defaultValue="ENGINEER">
+              <select id="member-role" name="role" className="select w-full" defaultValue="ENGINEER">
                 {['LEAD', 'ENGINEER', 'REVIEWER', 'OBSERVER'].map((role) => (
                   <option key={role} value={role}>{role.toLowerCase()}</option>
                 ))}
               </select>
-              <p className="hint">Grants matching rights on this project only.</p>
             </div>
             <FormMessage state={addState} />
             <div className="mt-2">
@@ -101,6 +95,3 @@ export function TeamPanel({
     </section>
   );
 }
-
-
-

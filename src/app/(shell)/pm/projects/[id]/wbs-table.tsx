@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import clsx from 'clsx';
 import { formatDate } from '@/core/utils/dates';
-import { AvatarStack, ProgressBar, PriorityBadge, StatusBadge } from '@/components/ui';
+import { ProgressBar, PriorityBadge, StatusBadge, AvatarStack } from '@/components/ui';
+import { AssigneeCell } from '@/components/assignee-cell';
 
 interface WbsTask {
   id: string;
@@ -17,9 +18,16 @@ interface WbsTask {
   rolledUpPercent: number;
   plannedStart: Date | null;
   plannedEnd: Date | null;
-  assignments: Array<{ user: { id: string; fullName: string; avatarColor: string } }>;
+  assignments: Array<{ user: { id: string; fullName: string; avatarColor?: string | null; designation?: string | null } }>;
   schedule: { floatDays: number; isCritical: boolean } | null;
   _count: { children: number; dependencies: number; handovers: number };
+}
+
+interface Colleague {
+  id: string;
+  fullName: string;
+  designation?: string | null;
+  avatarColor?: string | null;
 }
 
 /**
@@ -29,7 +37,19 @@ interface WbsTask {
  * critical path (zero float - any slip moves the delivery date) and tasks that are
  * blocked by an unmet dependency.
  */
-export function WbsTable({ tasks, criticalTaskIds }: { tasks: WbsTask[]; criticalTaskIds: string[] }) {
+export function WbsTable({
+  tasks,
+  criticalTaskIds,
+  projectId,
+  canAssign = false,
+  colleagues = [],
+}: {
+  tasks: WbsTask[];
+  criticalTaskIds: string[];
+  projectId?: string;
+  canAssign?: boolean;
+  colleagues?: Colleague[];
+}) {
   if (tasks.length === 0) {
     return <p className="p-4 text-body-sm text-muted">No tasks yet. Break the project down below.</p>;
   }
@@ -96,7 +116,17 @@ export function WbsTable({ tasks, criticalTaskIds }: { tasks: WbsTask[]; critica
                   </div>
                 </td>
                 <td>
-                  <AvatarStack people={task.assignments.map((a) => a.user)} />
+                  {isPhase ? (
+                    <AvatarStack people={task.assignments.map((a) => a.user)} />
+                  ) : (
+                    <AssigneeCell
+                      taskId={task.id}
+                      projectId={projectId}
+                      assignees={task.assignments.map((a) => a.user)}
+                      canAssign={canAssign}
+                      colleagues={colleagues}
+                    />
+                  )}
                 </td>
                 <td className="whitespace-nowrap text-caption">
                   <span className={overdue ? 'font-medium text-error' : 'text-body'}>

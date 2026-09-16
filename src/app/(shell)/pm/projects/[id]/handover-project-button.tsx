@@ -1,4 +1,5 @@
 'use client';
+import { formatName } from '@/core/utils/strings';
 
 import { useActionState, useState } from 'react';
 import { handoverProjectAction, type ActionState } from '@/app/actions/pm';
@@ -37,22 +38,31 @@ export function HandoverProjectButton({
         </header>
         <form action={action} className="card-body space-y-4 pt-4">
           <p className="text-sm text-muted">
-            This will transfer primary ownership of the project and reassign all of your open tasks in this project to the new manager.
+            Send a handover request to any employee or colleague. Once they review and accept the request in their Handovers dashboard, project ownership will transfer to them.
           </p>
           <input type="hidden" name="projectId" value={projectId} />
           <div>
-            <label className="label">Select new Project Manager</label>
+            <label className="label">Select colleague / employee</label>
             <select name="newManagerId" className="select w-full" required>
-              <option value="">[ Choose a colleague ]</option>
+              <option value="">[ Choose an employee ]</option>
               {colleagues.map((c) => (
-                <option key={c.id} value={c.id}>{c.fullName} ({c.designation || 'Engineer'})</option>
+                <option key={c.id} value={c.id}>{formatName(c.fullName)} ({c.designation || 'Team Member'})</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="label">Handover Note (Optional)</label>
+            <textarea
+              name="reason"
+              rows={2}
+              className="input w-full text-sm"
+              placeholder="Context, current status, or instructions for the incoming manager..."
+            />
           </div>
           <FormMessage state={state} />
           <footer className="pt-4 flex justify-end gap-2">
             <button type="button" onClick={() => setShow(false)} className="btn btn-secondary btn-sm">Cancel</button>
-            <SubmitButton className="btn btn-primary btn-sm">Confirm Handover</SubmitButton>
+            <SubmitButton className="btn btn-primary btn-sm">Send Handover Request</SubmitButton>
           </footer>
         </form>
       </div>

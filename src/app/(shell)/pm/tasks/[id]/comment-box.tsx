@@ -1,4 +1,5 @@
-'use client';
+﻿'use client';
+import { formatName } from '@/core/utils/strings';
 
 import { useActionState } from 'react';
 import { addCommentAction, type ActionState } from '@/app/actions/pm';
@@ -34,9 +35,9 @@ export function CommentBox({ taskId, comments }: { taskId: string; comments: Com
           <ul className="mt-4 space-y-3 border-t border-hairline pt-3">
             {comments.map((comment) => (
               <li key={comment.id} className="flex gap-2">
-                <Avatar name={comment.user.fullName} color={comment.user.avatarColor} size={24} />
+                <Avatar name={formatName(comment.user.fullName)} color={comment.user.avatarColor} size={24} />
                 <div className="min-w-0">
-                  <p className="text-caption font-medium text-ink">{comment.user.fullName}</p>
+                  <p className="text-caption font-medium text-ink">{formatName(comment.user.fullName)}</p>
                   <p className="whitespace-pre-wrap text-body-sm text-body">{comment.body}</p>
                 </div>
               </li>

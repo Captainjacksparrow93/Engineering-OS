@@ -41,7 +41,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
 
   const [newTitle, setNewTitle] = useState('');
   const [newSeniority, setNewSeniority] = useState('JUNIOR');
-  const [newDuration, setNewDuration] = useState(2);
+
   const [showAddModal, setShowAddModal] = useState(false);
 
   const [isPending, startTransition] = useTransition();
@@ -94,7 +94,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
       const res = await addTemplateItemAction(activeTemplate.id, {
         title: newTitle.trim(),
         recommendedSeniority: newSeniority,
-        defaultDurationDays: Number(newDuration),
+        defaultDurationDays: 1,
       });
       if (res.success) {
         setShowAddModal(false);
@@ -340,3 +340,6 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
     </div>
   );
 }
+
+
+

@@ -294,9 +294,288 @@ export async function cancelHandover(principal: Principal, handoverId: string) {
   });
 }
 
+// =====================================================================================
+// PROJECT HANDOVER (Two-way consent between Project Managers)
+// =====================================================================================
+
+export async function requestProjectHandover(
+  principal: Principal,
+  input: { projectId: string; toUserId: string; reason?: string },
+) {
+  const project = await prisma.project.findUnique({
+    where: { id: input.projectId },
+    select: { id: true, code: true, name: true, managerId: true, departmentId: true },
+  });
+  if (!project) throw new NotFoundError('Project not found.');
+
+  const isManager = project.managerId === principal.userId;
+  const isOverride =
+    can(principal, 'pm.handover.override', {
+      projectId: project.id,
+      departmentId: project.departmentId,
+    }) ||
+    can(principal, 'pm.project.update', {
+      projectId: project.id,
+      departmentId: project.departmentId,
+    });
+
+  if (!isManager && !isOverride) {
+    throw new ForbiddenError('You can only hand over a project you currently manage.');
+  }
+
+  if (input.toUserId === principal.userId) {
+    throw new DomainError('You cannot hand over a project to yourself.');
+  }
+  if (input.toUserId === project.managerId) {
+    throw new DomainError('That colleague is already managing this project.');
+  }
+
+  const target = await prisma.user.findFirst({
+    where: { id: input.toUserId, companyId: principal.companyId, status: 'ACTIVE' },
+    select: { id: true, fullName: true },
+  });
+  if (!target) throw new DomainError('Selected colleague is not an active employee.');
+
+  const pending = await prisma.projectHandover.findFirst({
+    where: { projectId: input.projectId, status: 'PENDING' },
+  });
+  if (pending) {
+    throw new DomainError('A handover request for this project is already awaiting a decision.');
+  }
+
+  const handover = await prisma.$transaction(async (tx) => {
+    const created = await tx.projectHandover.create({
+      data: {
+        projectId: input.projectId,
+        fromUserId: project.managerId,
+        toUserId: input.toUserId,
+        reason: input.reason?.trim() || null,
+        status: 'PENDING',
+      },
+    });
+
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'pm',
+        action: 'project.handover.requested',
+        entityType: 'Project',
+        entityId: input.projectId,
+        diff: { fromUserId: project.managerId, toUserId: input.toUserId, reason: input.reason },
+      },
+      tx,
+    );
+
+    await notify(
+      {
+        userIds: [input.toUserId],
+        title: `${principal.fullName} wants to hand over ${project.name}`,
+        body: `Project handover requested. ${input.reason ? `Reason: ${input.reason}` : 'Please review and accept or decline.'}`,
+        link: '/pm/handovers',
+      },
+      tx,
+    );
+
+    return created;
+  });
+
+  return handover;
+}
+
+export async function decideProjectHandover(
+  principal: Principal,
+  handoverId: string,
+  decision: 'ACCEPTED' | 'REJECTED',
+  note?: string,
+) {
+  const handover = await prisma.projectHandover.findUnique({
+    where: { id: handoverId },
+    include: {
+      project: { select: { id: true, code: true, name: true, managerId: true, departmentId: true } },
+      fromUser: { select: { id: true, fullName: true } },
+      toUser: { select: { id: true, fullName: true } },
+    },
+  });
+  if (!handover) throw new NotFoundError('Project handover request not found.');
+  if (handover.status !== 'PENDING') throw new DomainError('This handover request has already been decided.');
+
+  const isReceiver = handover.toUserId === principal.userId;
+  const canOverride = can(principal, 'pm.handover.override', {
+    projectId: handover.project.id,
+    departmentId: handover.project.departmentId,
+  });
+
+  if (!isReceiver && !canOverride) {
+    throw new ForbiddenError('Only the assigned new manager can accept or decline this project handover.');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.projectHandover.update({
+      where: { id: handoverId },
+      data: {
+        status: decision,
+        decidedById: principal.userId,
+        decidedAt: new Date(),
+        decisionNote: note ?? null,
+      },
+    });
+
+    if (decision === 'ACCEPTED') {
+      // 1. Update project managerId
+      await tx.project.update({
+        where: { id: handover.projectId },
+        data: { managerId: handover.toUserId },
+      });
+
+      // 2. Upsert project member
+      await tx.projectMember.upsert({
+        where: { projectId_userId: { projectId: handover.projectId, userId: handover.toUserId } },
+        create: { projectId: handover.projectId, userId: handover.toUserId, role: 'MANAGER', allocationPercent: 100 },
+        update: { role: 'MANAGER' },
+      });
+
+      // 3. Grant RBAC Role to new manager
+      const managerRole = await tx.role.findUnique({ where: { key: 'PROJECT_MANAGER' } });
+      if (managerRole) {
+        await tx.roleAssignment.upsert({
+          where: {
+            userId_roleId_scopeType_scopeId: {
+              userId: handover.toUserId,
+              roleId: managerRole.id,
+              scopeType: 'PROJECT',
+              scopeId: handover.projectId,
+            },
+          },
+          create: {
+            userId: handover.toUserId,
+            roleId: managerRole.id,
+            scopeType: 'PROJECT',
+            scopeId: handover.projectId,
+            grantedBy: principal.userId,
+          },
+          update: {},
+        });
+
+        // 4. Revoke old manager's RBAC role
+        await tx.roleAssignment.deleteMany({
+          where: {
+            userId: handover.fromUserId,
+            roleId: managerRole.id,
+            scopeType: 'PROJECT',
+            scopeId: handover.projectId,
+          },
+        });
+      }
+
+      // 5. Update old manager member role
+      await tx.projectMember.updateMany({
+        where: { projectId: handover.projectId, userId: handover.fromUserId, role: 'MANAGER' },
+        data: { role: 'OBSERVER' },
+      });
+
+      // 6. Bulk reassign open task assignments from old PM to new PM
+      const openAssignments = await tx.taskAssignment.findMany({
+        where: {
+          userId: handover.fromUserId,
+          status: 'ACTIVE',
+          task: { projectId: handover.projectId, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+        },
+        select: { id: true, taskId: true },
+      });
+
+      if (openAssignments.length > 0) {
+        await tx.taskAssignment.updateMany({
+          where: { id: { in: openAssignments.map((a) => a.id) } },
+          data: { userId: handover.toUserId },
+        });
+
+        for (const a of openAssignments) {
+          await audit(
+            {
+              actorId: principal.userId,
+              module: 'pm',
+              action: 'task.reassigned',
+              entityType: 'Task',
+              entityId: a.taskId,
+              diff: { assigneeId: { old: handover.fromUserId, new: handover.toUserId }, bulkHandover: true },
+            },
+            tx,
+          );
+        }
+      }
+
+      await notify(
+        {
+          userIds: [handover.fromUserId],
+          title: `Project handover accepted: ${handover.project.name}`,
+          body: `${handover.toUser.fullName} has accepted the handover and is now the Project Manager.`,
+          link: `/pm/projects/${handover.projectId}`,
+        },
+        tx,
+      );
+    } else {
+      await notify(
+        {
+          userIds: [handover.fromUserId],
+          title: `Project handover declined: ${handover.project.name}`,
+          body: `${handover.toUser.fullName} declined the handover. ${note ? `Reason: ${note}` : ''}`,
+          link: `/pm/projects/${handover.projectId}`,
+        },
+        tx,
+      );
+    }
+
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'pm',
+        action: `project.handover.${decision.toLowerCase()}`,
+        entityType: 'Project',
+        entityId: handover.projectId,
+        diff: { handoverId, decision, note: note ?? null },
+      },
+      tx,
+    );
+
+    return updated;
+  });
+}
+
+export async function cancelProjectHandover(principal: Principal, handoverId: string) {
+  const handover = await prisma.projectHandover.findUnique({ where: { id: handoverId } });
+  if (!handover) throw new NotFoundError('Project handover not found.');
+  if (handover.status !== 'PENDING') throw new DomainError('Only a pending project handover can be withdrawn.');
+  if (handover.fromUserId !== principal.userId) throw new ForbiddenError('Only the requester can withdraw this.');
+
+  await prisma.$transaction(async (tx) => {
+    await tx.projectHandover.update({
+      where: { id: handoverId },
+      data: { status: 'CANCELLED', decidedById: principal.userId, decidedAt: new Date() },
+    });
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'pm',
+        action: 'project.handover.cancelled',
+        entityType: 'Project',
+        entityId: handover.projectId,
+        diff: { handoverId },
+      },
+      tx,
+    );
+  });
+}
+
 /** The inbox: handovers waiting on me, plus the ones I raised. */
 export async function listHandovers(principal: Principal) {
-  const [incoming, outgoing, oversight] = await Promise.all([
+  const [
+    incoming,
+    outgoing,
+    oversight,
+    incomingProjects,
+    outgoingProjects,
+    oversightProjects,
+  ] = await Promise.all([
     prisma.taskHandover.findMany({
       where: { toUserId: principal.userId, status: 'PENDING' },
       include: handoverInclude,
@@ -319,9 +598,38 @@ export async function listHandovers(principal: Principal) {
       orderBy: { createdAt: 'desc' },
       take: 25,
     }),
+    prisma.projectHandover.findMany({
+      where: { toUserId: principal.userId, status: 'PENDING' },
+      include: projectHandoverInclude,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.projectHandover.findMany({
+      where: { fromUserId: principal.userId },
+      include: projectHandoverInclude,
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+    }),
+    prisma.projectHandover.findMany({
+      where: {
+        status: 'PENDING',
+        toUserId: { not: principal.userId },
+        fromUserId: { not: principal.userId },
+        project: { sponsorId: principal.userId },
+      },
+      include: projectHandoverInclude,
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+    }),
   ]);
 
-  return { incoming, outgoing, oversight };
+  return {
+    incoming,
+    outgoing,
+    oversight,
+    incomingProjects,
+    outgoingProjects,
+    oversightProjects,
+  };
 }
 
 const handoverInclude = {
@@ -341,6 +649,23 @@ const handoverInclude = {
   toUser: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
 } as const;
 
+const projectHandoverInclude = {
+  project: {
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      status: true,
+      priority: true,
+      targetEndDate: true,
+      clientName: true,
+    },
+  },
+  fromUser: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
+  toUser: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
+} as const;
+
 export async function getTaskContextForHandover(taskId: string) {
   return loadTaskContext(taskId);
 }
+

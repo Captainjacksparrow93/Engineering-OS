@@ -67,7 +67,7 @@ export default async function MyWorkPage({
                           {task.title}
                         </Link>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                          <span className="code text-caption text-muted-soft">{task.code}</span>
+                          
                           <PriorityBadge priority={task.priority} />
                           {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
                           {assignment.role !== 'OWNER' ? (
@@ -77,7 +77,7 @@ export default async function MyWorkPage({
                       </td>
                       <td className="text-caption text-muted">
                         <Link href={`/pm/projects/${task.project.id}`} className="hover:text-ink">
-                          {task.project.code}
+                          {task.project.name}
                         </Link>
                         <span className="block text-caption text-muted-soft">{task.project.clientName}</span>
                       </td>
@@ -107,8 +107,8 @@ export default async function MyWorkPage({
                           <span className="text-success">clear</span>
                         ) : (
                           unmetDependencies.map((dep) => (
-                            <Link key={dep.id} href={`/pm/tasks/${dep.id}`} className="code block text-caption text-error hover:underline">
-                              {dep.code}
+                            <Link key={dep.id} href={`/pm/tasks/${dep.id}`} className="block text-caption text-error hover:underline">
+                              {dep.title}
                             </Link>
                           ))
                         )}

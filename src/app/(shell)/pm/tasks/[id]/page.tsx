@@ -1,3 +1,4 @@
+import { formatName } from '@/core/utils/strings';
 import Link from 'next/link';
 import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
@@ -79,19 +80,18 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       <PageHeader
         breadcrumb={[
           { label: 'Projects', href: '/pm/projects' },
-          { label: task.project.code, href: `/pm/projects/${task.project.id}` },
-          { label: task.code },
+          { label: task.project.name, href: `/pm/projects/${task.project.id}` },
+          { label: task.title },
         ]}
         title={task.title}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
-            <span className="code text-caption">{task.code}</span>
             <StatusBadge status={task.status} />
             <PriorityBadge priority={task.priority} />
             {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
             {task.parent ? (
               <Link href={`/pm/tasks/${task.parent.id}`} className="text-caption text-ink hover:underline">
-                under {task.parent.code}
+                under {task.parent.title}
               </Link>
             ) : null}
           </span>
@@ -105,8 +105,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             {blockers.map((blocker, index) => (
               <span key={blocker.predecessorId}>
                 {index > 0 ? ', ' : ''}
-                <Link href={`/pm/tasks/${blocker.predecessorId}`} className="code underline">
-                  {blocker.predecessorCode}
+                <Link href={`/pm/tasks/${blocker.predecessorId}`} className="font-semibold text-error underline">
+                  {blocker.predecessorTitle}
                 </Link>{' '}
                 ({blocker.reason})
               </span>
@@ -119,8 +119,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       {pendingHandover ? (
         <div className="mb-4">
           <Alert tone="warning">
-            Handover pending: <strong>{pendingHandover.fromUser.fullName}</strong> →{' '}
-            <strong>{pendingHandover.toUser.fullName}</strong> ({pendingHandover.remainingPercent}% remaining).{' '}
+            Handover pending: <strong>{formatName(pendingHandover.fromUser.fullName)}</strong> →{' '}
+            <strong>{formatName(pendingHandover.toUser.fullName)}</strong> ({pendingHandover.remainingPercent}% remaining).{' '}
             <Link href="/pm/handovers" className="underline">
               Open handovers
             </Link>
@@ -157,8 +157,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
               <div>
                 <p className="label">Raised by</p>
                 <p className="flex items-center gap-1.5 text-body-sm text-ink">
-                  <Avatar name={task.createdBy.fullName} color={task.createdBy.avatarColor} size={18} />
-                  {task.createdBy.fullName}
+                  <Avatar name={formatName(task.createdBy.fullName)} color={task.createdBy.avatarColor} size={18} />
+                  {formatName(task.createdBy.fullName)}
                 </p>
               </div>
             </div>
@@ -195,7 +195,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                         <Link href={`/pm/tasks/${child.id}`} className="text-body-sm text-ink hover:text-ink">
                           {child.title}
                         </Link>
-                        <span className="code ml-2 text-caption text-muted-soft">{child.code}</span>
+                        
                       </td>
                       <td className="w-28">
                         <ProgressBar value={child.percentComplete} />
@@ -221,10 +221,10 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
               <ul className="divide-y divide-hairline">
                 {task.progressLogs.map((log) => (
                   <li key={log.id} className="flex gap-3 px-4 py-3">
-                    <Avatar name={log.user.fullName} color={log.user.avatarColor} size={26} />
+                    <Avatar name={formatName(log.user.fullName)} color={log.user.avatarColor} size={26} />
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-center gap-2 text-body-sm">
-                        <span className="font-medium text-ink">{log.user.fullName}</span>
+                        <span className="font-medium text-ink">{formatName(log.user.fullName)}</span>
                         <span className="badge bg-canvas-soft text-ink">{log.percentComplete}%</span>
                         {log.hoursSpent > 0 ? <span className="text-caption text-muted">{log.hoursSpent}h</span> : null}
                         <span className="text-caption text-muted-soft">{formatDate(log.loggedFor)}</span>
@@ -259,9 +259,9 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
               <ul className="space-y-2">
                 {activeAssignments.map((assignment) => (
                   <li key={assignment.id} className="flex items-center gap-2">
-                    <Avatar name={assignment.user.fullName} color={assignment.user.avatarColor} size={26} />
+                    <Avatar name={formatName(assignment.user.fullName)} color={assignment.user.avatarColor} size={26} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-body-sm font-medium text-ink">{assignment.user.fullName}</p>
+                      <p className="truncate text-body-sm font-medium text-ink">{formatName(assignment.user.fullName)}</p>
                       <p className="truncate text-caption text-muted">
                         {assignment.role.toLowerCase()} · {Math.round(assignment.allocatedHours)}h allocated
                       </p>
@@ -277,8 +277,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                 <ul className="space-y-1.5">
                   {pastAssignments.map((assignment) => (
                     <li key={assignment.id} className="flex items-center gap-2 text-caption text-muted">
-                      <Avatar name={assignment.user.fullName} color={assignment.user.avatarColor} size={18} />
-                      <span className="flex-1 truncate">{assignment.user.fullName}</span>
+                      <Avatar name={formatName(assignment.user.fullName)} color={assignment.user.avatarColor} size={18} />
+                      <span className="flex-1 truncate">{formatName(assignment.user.fullName)}</span>
                       <StatusBadge status={assignment.status} />
                     </li>
                   ))}
@@ -318,11 +318,11 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                 {task.handovers.map((handover) => (
                   <li key={handover.id} className="rounded-md border border-hairline p-2">
                     <p className="flex items-center gap-1.5 text-caption">
-                      <Avatar name={handover.fromUser.fullName} color={handover.fromUser.avatarColor} size={16} />
-                      <span className="text-body">{handover.fromUser.fullName}</span>
+                      <Avatar name={formatName(handover.fromUser.fullName)} color={handover.fromUser.avatarColor} size={16} />
+                      <span className="text-body">{formatName(handover.fromUser.fullName)}</span>
                       <span className="text-muted-soft">→</span>
-                      <Avatar name={handover.toUser.fullName} color={handover.toUser.avatarColor} size={16} />
-                      <span className="text-body">{handover.toUser.fullName}</span>
+                      <Avatar name={formatName(handover.toUser.fullName)} color={handover.toUser.avatarColor} size={16} />
+                      <span className="text-body">{formatName(handover.toUser.fullName)}</span>
                       <StatusBadge status={handover.status} className="ml-auto" />
                     </p>
                     <p className="mt-1 text-caption text-muted">{handover.reason}</p>

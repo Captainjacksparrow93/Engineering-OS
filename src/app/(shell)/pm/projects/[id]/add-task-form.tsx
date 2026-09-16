@@ -1,4 +1,5 @@
 'use client';
+import { formatName } from '@/core/utils/strings';
 
 import { useActionState, useState } from 'react';
 import { createTaskAction, type ActionState } from '@/app/actions/pm';
@@ -74,7 +75,7 @@ export function AddTaskForm({
               <option value="">Top level</option>
               {tasks.map((task) => (
                 <option key={task.id} value={task.id}>
-                  {task.code} - {task.title}
+                  {task.title}
                 </option>
               ))}
             </select>
@@ -110,7 +111,7 @@ export function AddTaskForm({
               <option value="">Leave unassigned</option>
               {people.map((person) => (
                 <option key={person.id} value={person.id}>
-                  {person.fullName}{person.designation ? ` - ${person.designation}` : ''}
+                  {formatName(person.fullName)}{person.designation ? ` - ${person.designation}` : ''}
                 </option>
               ))}
             </select>
@@ -132,7 +133,7 @@ export function AddTaskForm({
             <select id="dependsOn" name="dependsOn" multiple size={Math.min(6, Math.max(3, tasks.length))} className="select h-auto">
               {tasks.map((task) => (
                 <option key={task.id} value={task.id}>
-                  {task.code} - {task.title}
+                  {task.title}
                 </option>
               ))}
             </select>
