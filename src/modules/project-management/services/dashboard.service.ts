@@ -145,9 +145,9 @@ export async function getDashboard(principal: Principal) {
       (t) => t.plannedEnd && t.plannedEnd < today && !['COMPLETED', 'CANCELLED'].includes(t.status),
     ).length;
 
-    let health: 'ON_TRACK' | 'AT_RISK' | 'ROADBLOCK' = 'ON_TRACK';
+    let health: 'ON_TRACK' | 'OVERDUE' | 'ROADBLOCK' = 'ON_TRACK';
     if (blockedCount > 0) health = 'ROADBLOCK';
-    else if (overdueCount > 0) health = 'AT_RISK';
+    else if (overdueCount > 0) health = 'OVERDUE';
 
     return {
       id: project.id,
@@ -204,7 +204,7 @@ export async function getDashboard(principal: Principal) {
     projects: projectCards,
     portfolio: {
       activeProjects: projectCards.length,
-      atRisk: projectCards.filter((p) => p.health === 'AT_RISK').length,
+      overdueProjects: projectCards.filter((p) => p.health === 'OVERDUE').length,
       activeRoadblocks: activeRoadblocks.length,
       pendingReviews: pendingReviewsCount,
       overdueTasks: projectCards.reduce((sum, p) => sum + p.overdueCount, 0),

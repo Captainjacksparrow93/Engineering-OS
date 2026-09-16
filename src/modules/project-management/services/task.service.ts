@@ -482,11 +482,14 @@ export async function loadProjectGraph(projectId: string, tx: Tx = prisma): Prom
 }
 
 /** Everything one engineer is holding right now, ready for "My work". */
-export async function listMyTasks(principal: Principal, filters: { status?: string; includeCompleted?: boolean } = {}) {
+export async function listMyTasks(
+  principal: Principal,
+  filters: { status?: string; includeCompleted?: boolean; onlyCompleted?: boolean } = {},
+) {
   const assignments = await prisma.taskAssignment.findMany({
     where: {
       userId: principal.userId,
-      status: filters.includeCompleted ? undefined : 'ACTIVE',
+      status: filters.includeCompleted || filters.onlyCompleted ? undefined : 'ACTIVE',
     },
     include: {
       task: {
@@ -506,7 +509,12 @@ export async function listMyTasks(principal: Principal, filters: { status?: stri
   });
 
   const rows = assignments
-    .filter((a) => filters.includeCompleted || !['COMPLETED', 'CANCELLED'].includes(a.task.status))
+    .filter((a) => {
+      if (filters.onlyCompleted) {
+        return a.task.status === 'COMPLETED';
+      }
+      return filters.includeCompleted || !['COMPLETED', 'CANCELLED'].includes(a.task.status);
+    })
     .filter((a) => !filters.status || a.task.status === filters.status)
     .sort((a, b) => {
       if (!a.task.plannedEnd && !b.task.plannedEnd) return 0;

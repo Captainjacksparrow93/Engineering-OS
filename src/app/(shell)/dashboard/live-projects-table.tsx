@@ -23,10 +23,10 @@ export interface DashboardProject {
   overdueCount: number;
   progressPercent: number;
   dueSoon: boolean;
-  health: 'ON_TRACK' | 'AT_RISK' | 'ROADBLOCK';
+  health: 'ON_TRACK' | 'OVERDUE' | 'ROADBLOCK';
 }
 
-type SortField = 'project' | 'manager' | 'delivery' | 'progress' | 'health';
+type SortField = 'project' | 'manager' | 'delivery' | 'progress' | 'status';
 type SortDir = 'asc' | 'desc';
 
 export function LiveProjectsTable({ projects }: { projects: DashboardProject[] }) {
@@ -58,9 +58,9 @@ export function LiveProjectsTable({ projects }: { projects: DashboardProject[] }
         cmp = timeA - timeB;
       } else if (sortField === 'progress') {
         cmp = a.progressPercent - b.progressPercent;
-      } else if (sortField === 'health') {
-        const healthScore = (h: string) => (h === 'ROADBLOCK' ? 2 : h === 'AT_RISK' ? 1 : 0);
-        cmp = healthScore(a.health) - healthScore(b.health);
+      } else if (sortField === 'status') {
+        const statusScore = (h: string) => (h === 'OVERDUE' ? 2 : h === 'ROADBLOCK' ? 1 : 0);
+        cmp = statusScore(a.health) - statusScore(b.health);
       }
       return sortDir === 'asc' ? cmp : -cmp;
     });
@@ -92,13 +92,13 @@ export function LiveProjectsTable({ projects }: { projects: DashboardProject[] }
               Project Manager {renderSortArrow('manager')}
             </th>
             <th onClick={() => handleSort('delivery')} className="cursor-pointer hover:text-ink">
-              Target Delivery {renderSortArrow('delivery')}
+              Due Date {renderSortArrow('delivery')}
             </th>
             <th onClick={() => handleSort('progress')} className="w-36 cursor-pointer hover:text-ink">
               Progress {renderSortArrow('progress')}
             </th>
-            <th onClick={() => handleSort('health')} className="text-right cursor-pointer hover:text-ink">
-              Health {renderSortArrow('health')}
+            <th onClick={() => handleSort('status')} className="text-right cursor-pointer hover:text-ink">
+              Status {renderSortArrow('status')}
             </th>
           </tr>
         </thead>
@@ -142,11 +142,8 @@ export function LiveProjectsTable({ projects }: { projects: DashboardProject[] }
                 </td>
                 <td>
                   <ProgressBar value={project.progressPercent} />
-                  <div className="mt-1 flex items-center justify-between text-caption text-muted">
+                  <div className="mt-1 flex items-center text-caption text-muted">
                     <span>{project.progressPercent}%</span>
-                    {project.blockedCount > 0 && (
-                      <span className="text-amber-600 font-medium">{project.blockedCount} roadblock</span>
-                    )}
                   </div>
                 </td>
                 <td className="text-right">
@@ -154,14 +151,16 @@ export function LiveProjectsTable({ projects }: { projects: DashboardProject[] }
                     className={`badge text-xs font-semibold ${
                       project.health === 'ON_TRACK'
                         ? 'bg-success/[0.08] text-success'
-                        : project.health === 'AT_RISK'
+                        : project.health === 'OVERDUE'
                         ? 'bg-error/[0.08] text-error'
                         : 'bg-amber-100 text-amber-800'
                     }`}
                   >
                     {project.health === 'ROADBLOCK'
                       ? `${project.blockedCount} ROADBLOCK`
-                      : project.health.replace('_', ' ')}
+                      : project.health === 'OVERDUE'
+                      ? 'OVERDUE'
+                      : 'ON TRACK'}
                   </span>
                 </td>
               </tr>

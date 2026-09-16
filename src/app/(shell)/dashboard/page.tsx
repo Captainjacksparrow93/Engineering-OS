@@ -27,7 +27,7 @@ export default async function DashboardPage() {
         title={`Good day, ${greetingName}`}
         subtitle={
           data.isManagement
-            ? 'Executive Operations Dashboard — Live portfolio health, roadblock radar, and engineering capacity.'
+            ? 'Company Overview — Live project progress, active roadblocks, and team workload.'
             : 'Your personal work queue and anything waiting on your action.'
         }
         actions={
@@ -53,24 +53,24 @@ export default async function DashboardPage() {
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {data.isManagement ? (
           <>
-            <Stat label="Active Projects" value={data.portfolio.activeProjects} hint="Ongoing automation orders" />
+            <Stat label="Active Projects" value={data.portfolio.activeProjects} hint="Projects currently in progress" />
             <Stat
-              label="Projects At Risk"
-              value={data.portfolio.atRisk}
-              tone={data.portfolio.atRisk > 0 ? 'danger' : 'success'}
-              hint="Blocked or overdue milestones"
+              label="Overdue Projects"
+              value={data.portfolio.overdueProjects}
+              tone={data.portfolio.overdueProjects > 0 ? 'danger' : 'success'}
+              hint="Projects behind schedule"
             />
             <Stat
               label="Active Roadblocks"
               value={data.portfolio.activeRoadblocks}
               tone={data.portfolio.activeRoadblocks > 0 ? 'warning' : 'default'}
-              hint="Flagged client/vendor delays"
+              hint="Issues blocking tasks"
             />
             <Stat
-              label="Pending PM Reviews"
+              label="Awaiting Approval"
               value={data.portfolio.pendingReviews}
               tone={data.portfolio.pendingReviews > 0 ? 'warning' : 'default'}
-              hint="Completed steps awaiting sign-off"
+              hint="Completed tasks waiting for sign-off"
             />
           </>
         ) : (
@@ -155,7 +155,7 @@ export default async function DashboardPage() {
             className="border-error/20 bg-error/[0.03]"
           >
             {data.activeRoadblocks.length === 0 ? (
-              <p className="text-xs text-muted">No active roadblocks reported across active projects. Smooth flow.</p>
+              <p className="text-xs text-muted">All projects are moving smoothly with no reported roadblocks.</p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {data.activeRoadblocks.map((log) => (
@@ -171,7 +171,7 @@ export default async function DashboardPage() {
                           <p className="text-caption text-muted">{log.user.designation || log.user.grade}</p>
                         </div>
                       </div>
-                      <span className="badge bg-error/[0.08] text-error text-xs font-semibold">CRITICAL</span>
+                      <span className="badge bg-amber-100 text-amber-800 text-xs font-semibold">ROADBLOCK</span>
                     </div>
 
                     <div className="bg-canvas-soft rounded border border-hairline p-2.5">

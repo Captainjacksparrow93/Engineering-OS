@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { formatName } from '@/core/utils/strings';
 
 import { useState, useTransition } from 'react';
@@ -92,8 +92,6 @@ export function AutomationProjectWizard({
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
   
   // Task durations: key = `${templateCode}_${stepNumber}` -> durationDays
-  const [taskDurations, setTaskDurations] = useState<Record<string, number>>({});
-
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -140,12 +138,6 @@ export function AutomationProjectWizard({
     setTaskAssignments((prev) => ({ ...prev, [key]: userId }));
   };
 
-  const setTaskDuration = (tplCode: string, step: number, duration: number) => {
-    const key = `${tplCode}_${step}`;
-    setTaskDurations((prev) => ({ ...prev, [key]: duration }));
-  };
-
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !clientName.trim() || !selectedPMId) {
@@ -189,7 +181,7 @@ export function AutomationProjectWizard({
           const assigneeId = taskAssignments[key] || undefined;
           const taskStart = cursorDate.toISOString().split('T')[0];
 
-          const duration = taskDurations[key] ?? item.defaultDurationDays;
+          const duration = item.defaultDurationDays;
 
           // Advance cursor by duration days
           const taskEndDt = new Date(cursorDate);
@@ -515,7 +507,6 @@ export function AutomationProjectWizard({
                           <th className="w-12 text-center">Step</th>
                           <th>Standard Checklist Task</th>
                           <th className="w-32">Seniority</th>
-                          <th className="w-24 text-center">Duration</th>
                           <th className="w-64 text-right">Assignee (Technical Pool)</th>
                         </tr>
                       </thead>
@@ -529,9 +520,8 @@ export function AutomationProjectWizard({
                               <td className="text-center font-bold text-muted">{item.stepNumber}</td>
                               <td>
                                 <p className="font-medium text-ink text-sm">{item.title}</p>
-                                <span className="code text-caption text-muted-soft">{item.code}</span>
                                 {item.isSimulationSignoff && (
-                                  <span className="badge ml-2 bg-purple-100 text-purple-800 text-xs">
+                                  <span className="badge mt-0.5 bg-purple-100 text-purple-800 text-xs">
                                     Sign-off Gate
                                   </span>
                                 )}
@@ -556,21 +546,6 @@ export function AutomationProjectWizard({
                                     ? 'Jr. Eng'
                                     : 'Trainee'}
                                 </span>
-                              </td>
-                              <td className="text-center">
-                                <div className="flex items-center justify-center gap-1">
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={30}
-                                    value={taskDurations[key] ?? item.defaultDurationDays}
-                                    onChange={(e) =>
-                                      setTaskDuration(tplCode, item.stepNumber, Number(e.target.value))
-                                    }
-                                    className="input text-xs w-16 text-center py-1"
-                                  />
-                                  <span className="text-caption text-muted">d</span>
-                                </div>
                               </td>
                               <td className="text-right">
                                 <select

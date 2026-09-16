@@ -148,7 +148,7 @@ export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
                 </td>
                 <td className="text-caption">
                   {unmetDependencies.length === 0 ? (
-                    <span className="text-success">clear</span>
+                    <span className="text-success font-medium">Ready to start</span>
                   ) : (
                     unmetDependencies.map((dep) => (
                       <Link key={dep.id} href={`/pm/tasks/${dep.id}`} className="block text-caption text-error hover:underline">

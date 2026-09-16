@@ -58,7 +58,7 @@ export function TaskControls({
                 </SubmitButton>
               </form>
             ))}
-            {task.status !== 'CANCELLED' && task.status !== 'COMPLETED' && permissions.canEdit ? (
+            {task.status !== 'CANCELLED' && task.status !== 'COMPLETED' && permissions.canDelete ? (
               <form action={statusAction}>
                 <input type="hidden" name="taskId" value={task.id} />
                 <input type="hidden" name="status" value="CANCELLED" />
