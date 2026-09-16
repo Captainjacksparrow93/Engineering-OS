@@ -20,7 +20,7 @@ import { addComment, approveTaskReview, assignTask, changeTaskStatus, createTask
 import { addDependency, removeDependency } from '@/modules/project-management/services/dependency.service';
 import { logProgress } from '@/modules/project-management/services/progress.service';
 import { cancelHandover, decideHandover, requestHandover } from '@/modules/project-management/services/handover.service';
-import { markRead } from '@/core/notifications/notify';
+import { markAllRead, markRead } from '@/core/notifications/notify';
 
 /**
  * Server actions are the write path for the UI. Each one authenticates, validates,
@@ -337,6 +337,13 @@ export async function cancelHandoverAction(_prev: ActionState, form: FormData): 
 export async function markNotificationReadAction(_prev: ActionState, form: FormData): Promise<ActionState> {
   const principal = await requirePrincipal();
   const state = await run(() => markRead(principal.userId, String(form.get('notificationId'))));
+  revalidatePath('/notifications');
+  return state;
+}
+
+export async function markAllNotificationsReadAction(_prev: ActionState, _form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const state = await run(() => markAllRead(principal.userId));
   revalidatePath('/notifications');
   return state;
 }

@@ -43,9 +43,9 @@ body {
     @apply inline-flex h-10 items-center justify-center gap-xs rounded-md border px-[18px]
       text-button transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
-  /* Cursor Orange. One primary action per screen - the brand voltage stays scarce. */
+  /* Clean, uniform styling matching Mark Read / secondary */
   .btn-primary {
-    @apply border-primary bg-primary text-on-primary hover:bg-primary-active hover:border-primary-active;
+    @apply border-hairline-strong bg-surface text-ink hover:bg-canvas-soft font-medium;
   }
   .btn-secondary {
     @apply border-hairline-strong bg-surface text-ink hover:bg-canvas-soft;

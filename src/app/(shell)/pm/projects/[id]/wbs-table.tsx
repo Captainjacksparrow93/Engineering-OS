@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { daysUntil } from '@/core/utils/dates';
 import { ProgressBar, StatusBadge, AvatarStack } from '@/components/ui';
 import { AssigneeCell } from '@/components/assignee-cell';
 
@@ -33,32 +32,8 @@ interface Colleague {
   avatarColor?: string | null;
 }
 
-type SortField = 'task' | 'assignee' | 'timeline' | 'progress' | 'status';
+type SortField = 'task' | 'assignee' | 'progress' | 'status';
 type SortDir = 'asc' | 'desc';
-
-function formatCompactRange(start: Date | string | null | undefined, end: Date | string | null | undefined): string {
-  if (!start && !end) return '-';
-  if (!start && end) {
-    const d = typeof end === 'string' ? new Date(end) : end;
-    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-  }
-  if (start && !end) {
-    const d = typeof start === 'string' ? new Date(start) : start;
-    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-  }
-  const s = typeof start === 'string' ? new Date(start!) : start!;
-  const e = typeof end === 'string' ? new Date(end!) : end!;
-  const sDay = s.getUTCDate();
-  const eDay = e.getUTCDate();
-  const sMonth = s.toLocaleDateString('en-IN', { month: 'short', timeZone: 'UTC' });
-  const eMonth = e.toLocaleDateString('en-IN', { month: 'short', timeZone: 'UTC' });
-
-  if (sMonth === eMonth && s.getUTCFullYear() === e.getUTCFullYear()) {
-    if (sDay === eDay) return `${sDay} ${sMonth}`;
-    return `${sDay}–${eDay} ${sMonth}`;
-  }
-  return `${sDay} ${sMonth} – ${eDay} ${eMonth}`;
-}
 
 /**
  * The checklist tasks rendered as a clean, focused table with interactive sorting.
@@ -123,10 +98,6 @@ export function WbsTable({
           const nameA = a.assignments[0]?.user.fullName || '';
           const nameB = b.assignments[0]?.user.fullName || '';
           cmp = nameA.localeCompare(nameB);
-        } else if (sortField === 'timeline') {
-          const timeA = a.plannedEnd ? new Date(a.plannedEnd).getTime() : 0;
-          const timeB = b.plannedEnd ? new Date(b.plannedEnd).getTime() : 0;
-          cmp = timeA - timeB;
         } else if (sortField === 'progress') {
           cmp = a.rolledUpPercent - b.rolledUpPercent;
         } else if (sortField === 'status') {
@@ -196,22 +167,19 @@ export function WbsTable({
       ) : null}
 
       <div className="overflow-x-auto">
-        <table className="table min-w-[760px]">
+        <table className="table min-w-[640px]">
           <thead>
             <tr className="select-none">
-              <th onClick={() => handleSort('task')} className="w-[42%] cursor-pointer hover:text-ink">
+              <th onClick={() => handleSort('task')} className="w-[45%] cursor-pointer hover:text-ink">
                 Task {renderSortArrow('task')}
               </th>
-              <th onClick={() => handleSort('assignee')} className="cursor-pointer hover:text-ink">
+              <th onClick={() => handleSort('assignee')} className="w-[25%] cursor-pointer hover:text-ink">
                 Assignee {renderSortArrow('assignee')}
               </th>
-              <th onClick={() => handleSort('timeline')} className="cursor-pointer hover:text-ink">
-                Timeline {renderSortArrow('timeline')}
-              </th>
-              <th onClick={() => handleSort('progress')} className="w-32 cursor-pointer hover:text-ink">
+              <th onClick={() => handleSort('progress')} className="w-36 cursor-pointer hover:text-ink">
                 Progress {renderSortArrow('progress')}
               </th>
-              <th onClick={() => handleSort('status')} className="cursor-pointer hover:text-ink">
+              <th onClick={() => handleSort('status')} className="w-28 cursor-pointer hover:text-ink">
                 Status {renderSortArrow('status')}
               </th>
             </tr>
@@ -219,16 +187,13 @@ export function WbsTable({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-6 text-center text-body-sm text-muted">
+                <td colSpan={4} className="py-6 text-center text-body-sm text-muted">
                   No tasks assigned to you in this project.
                 </td>
               </tr>
             ) : (
               rows.map(({ task, depth }) => {
                 const isPhase = task.type === 'PHASE' || task._count.children > 0;
-                const overdue = task.plannedEnd && new Date(task.plannedEnd) < new Date() && !['COMPLETED', 'CANCELLED'].includes(task.status);
-                const due = daysUntil(task.plannedEnd ? new Date(task.plannedEnd) : null);
-                const isClosed = ['COMPLETED', 'CANCELLED'].includes(task.status);
 
                 return (
                   <tr key={task.id} className={clsx(isPhase && 'bg-canvas-soft')}>
@@ -268,16 +233,6 @@ export function WbsTable({
                           colleagues={colleagues}
                         />
                       )}
-                    </td>
-                    <td className="whitespace-nowrap text-caption">
-                      <span className={clsx('block font-medium', overdue ? 'text-error' : 'text-ink')}>
-                        {formatCompactRange(task.plannedStart, task.plannedEnd)}
-                      </span>
-                      {!isClosed && due !== null ? (
-                        <span className={clsx('block text-[11px]', due < 0 ? 'text-error font-medium' : 'text-muted')}>
-                          {due < 0 ? `${-due}d late` : due === 0 ? 'Due today' : `in ${due}d`}
-                        </span>
-                      ) : null}
                     </td>
                     <td>
                       <ProgressBar

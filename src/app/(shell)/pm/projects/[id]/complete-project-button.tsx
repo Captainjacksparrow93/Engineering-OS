@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useTransition } from 'react';
 import { completeAutomationProjectAction } from '@/app/actions/pm';
@@ -20,14 +20,14 @@ export function CompleteProjectButton({ projectId }: { projectId: string }) {
       <button
         onClick={() => setDismissed(true)}
         disabled={isPending}
-        className="btn btn-secondary btn-sm bg-white hover:bg-emerald-50 text-emerald-900 border-emerald-300"
+        className="btn btn-secondary btn-sm"
       >
         Not Yet
       </button>
       <button
         onClick={handleComplete}
         disabled={isPending}
-        className="btn btn-primary btn-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-1.5 shadow-sm"
+        className="btn btn-secondary btn-sm font-semibold flex items-center gap-1.5"
       >
         {isPending ? 'Notifying Head...' : 'Yes, Mark Project Completed'}
       </button>
