@@ -6,6 +6,7 @@ import { audit } from '@/core/audit/audit';
 import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
+import { formatName } from '@/core/utils/strings';
 import { assertTaskPermission, loadTaskContext } from './access';
 
 /**
@@ -22,7 +23,7 @@ export async function requestHandover(
   principal: Principal,
   input: { taskId: string; toUserId: string; reason: string },
 ) {
-  const context = await assertTaskPermission(principal, input.taskId, 'pm.handover.request');
+  await assertTaskPermission(principal, input.taskId, 'pm.handover.request');
   const task = await prisma.task.findUniqueOrThrow({
     where: { id: input.taskId },
     include: { project: { select: { id: true, code: true, managerId: true, departmentId: true } } },
@@ -109,7 +110,7 @@ export async function requestHandover(
     await notify(
       {
         userIds: [input.toUserId],
-        title: `${principal.fullName} wants to hand you ${context.code}`,
+        title: `${formatName(principal.fullName)} wants to hand you ${task.title}`,
         body: `${remainingPercent}% remaining (~${remainingHours}h). Reason: ${input.reason.slice(0, 160)}`,
         link: `/pm/handovers`,
       },
@@ -119,8 +120,8 @@ export async function requestHandover(
     await notify(
       {
         userIds: [task.project.managerId].filter((id) => id !== principal.userId),
-        title: `Handover raised on ${context.code}`,
-        body: `${principal.fullName} → ${target.fullName}: ${input.reason.slice(0, 160)}`,
+        title: `Handover raised on ${task.title}`,
+        body: `${formatName(principal.fullName)} → ${formatName(target.fullName)}: ${input.reason.slice(0, 160)}`,
         link: `/pm/tasks/${input.taskId}`,
       },
       tx,
@@ -223,8 +224,8 @@ export async function decideHandover(
       await notify(
         {
           userIds: [handover.fromUserId, handover.task.project.managerId].filter((id) => id !== principal.userId),
-          title: `Handover accepted on ${handover.task.code}`,
-          body: `${handover.toUser.fullName} has taken over the remaining ${handover.remainingPercent}%.`,
+          title: `Handover accepted: ${handover.task.title}`,
+          body: `${formatName(handover.toUser.fullName)} has taken over the remaining ${handover.remainingPercent}% of "${handover.task.title}".`,
           link: `/pm/tasks/${handover.taskId}`,
         },
         tx,
@@ -245,8 +246,8 @@ export async function decideHandover(
       await notify(
         {
           userIds: [handover.fromUserId, handover.task.project.managerId],
-          title: `Handover declined on ${handover.task.code}`,
-          body: `${handover.toUser.fullName} declined. ${note ?? 'No reason given.'} The task stays with ${handover.fromUser.fullName}.`,
+          title: `Handover declined: ${handover.task.title}`,
+          body: `${formatName(handover.toUser.fullName)} declined. ${note ?? 'No reason given.'} The task stays with ${formatName(handover.fromUser.fullName)}.`,
           link: `/pm/tasks/${handover.taskId}`,
         },
         tx,
@@ -369,7 +370,7 @@ export async function requestProjectHandover(
     await notify(
       {
         userIds: [input.toUserId],
-        title: `${principal.fullName} wants to hand over ${project.name}`,
+        title: `${formatName(principal.fullName)} wants to hand over ${project.name}`,
         body: `Project handover requested. ${input.reason ? `Reason: ${input.reason}` : 'Please review and accept or decline.'}`,
         link: '/pm/handovers',
       },
@@ -508,7 +509,7 @@ export async function decideProjectHandover(
         {
           userIds: [handover.fromUserId],
           title: `Project handover accepted: ${handover.project.name}`,
-          body: `${handover.toUser.fullName} has accepted the handover and is now the Project Manager.`,
+          body: `${formatName(handover.toUser.fullName)} has accepted the handover and is now the Project Manager.`,
           link: `/pm/projects/${handover.projectId}`,
         },
         tx,
@@ -518,7 +519,7 @@ export async function decideProjectHandover(
         {
           userIds: [handover.fromUserId],
           title: `Project handover declined: ${handover.project.name}`,
-          body: `${handover.toUser.fullName} declined the handover. ${note ? `Reason: ${note}` : ''}`,
+          body: `${formatName(handover.toUser.fullName)} declined the handover. ${note ? `Reason: ${note}` : ''}`,
           link: `/pm/projects/${handover.projectId}`,
         },
         tx,

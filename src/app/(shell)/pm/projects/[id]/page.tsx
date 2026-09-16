@@ -30,7 +30,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           companyId: principal.companyId,
           status: 'ACTIVE',
           id: { not: project.managerId },
-          department: { code: { in: ['TECH', 'DESIGN', 'DIR'] } },
+          department: { code: { in: ['TECH', 'DESIGN'] } },
+          NOT: [
+            { designation: { contains: 'Director', mode: 'insensitive' } },
+            { grade: 'DIRECTOR' },
+          ],
         },
         select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true, skills: true },
         orderBy: { fullName: 'asc' },
@@ -115,6 +119,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             projectId={project.id}
             canAssign={permissions.canAssign}
             colleagues={colleagues}
+            currentUserId={principal.userId}
           />
         </Card>
 

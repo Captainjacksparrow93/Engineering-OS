@@ -58,7 +58,8 @@ export async function getWorkloads(principal: Principal, query: AvailabilityQuer
     where: {
       companyId: principal.companyId,
       status: 'ACTIVE',
-      department: { code: { in: ['TECH', 'DESIGN', 'DIR'] } },
+      department: { code: { in: ['TECH', 'DESIGN'] } },
+      NOT: [{ designation: { contains: 'Director' } }, { grade: 'DIRECTOR' }],
       ...visibilityFilter(principal, query),
       ...(query.projectId ? { projectMembers: { some: { projectId: query.projectId } } } : {}),
       ...(query.skills?.length ? { skills: { hasSome: query.skills } } : {}),
@@ -101,7 +102,7 @@ export async function getWorkloads(principal: Principal, query: AvailabilityQuer
             percentComplete: true,
             plannedStart: true,
             plannedEnd: true,
-            project: { select: { id: true, code: true } },
+            project: { select: { id: true, code: true, name: true } },
           },
         },
       },
@@ -126,6 +127,7 @@ export async function getWorkloads(principal: Principal, query: AvailabilityQuer
         taskTitle: a.task.title,
         projectId: a.task.project.id,
         projectCode: a.task.project.code,
+        projectName: a.task.project.name,
         priority: a.task.priority,
         status: a.task.status,
         allocatedHours: a.allocatedHours || 0,
@@ -274,7 +276,8 @@ export async function peersForHandover(principal: Principal, taskId: string) {
     where: {
       companyId: principal.companyId,
       status: 'ACTIVE',
-      department: { code: { in: ['TECH', 'DESIGN', 'DIR'] } },
+      department: { code: { in: ['TECH', 'DESIGN'] } },
+      NOT: [{ designation: { contains: 'Director' } }, { grade: 'DIRECTOR' }],
       id: { notIn: [...held, principal.userId] },
       OR: [
         { projectMembers: { some: { projectId: task.projectId } } },

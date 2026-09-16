@@ -34,6 +34,7 @@ export interface WorkloadAssignment {
   taskTitle: string;
   projectId: string;
   projectCode: string;
+  projectName?: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   status: 'DRAFT' | 'BLOCKED' | 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'COMPLETED' | 'CANCELLED';
   allocatedHours: number;

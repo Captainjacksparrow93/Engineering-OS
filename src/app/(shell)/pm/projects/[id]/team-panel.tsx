@@ -98,7 +98,7 @@ export function TeamPanel({
                 {isReassigning ? (
                   <form action={reassignAction} className="rounded-lg border border-hairline bg-canvas-soft p-2.5 space-y-2">
                     <p className="text-caption font-semibold text-ink">
-                      Reassign all tasks of {formatName(member.user.fullName)} to:
+                      Reassign all tasks to:
                     </p>
                     <input type="hidden" name="projectId" value={projectId} />
                     <input type="hidden" name="fromUserId" value={member.user.id} />

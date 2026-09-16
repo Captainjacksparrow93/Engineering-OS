@@ -11,6 +11,7 @@ import { notify } from '@/core/notifications/notify';
 import { assertProjectPermission, assertProjectVisible } from './access';
 import type { CreateProjectInput } from '../validation/schemas';
 import { computeSchedule, rollUpProgress, type Graph } from '../domain/scheduling';
+import { formatName } from '@/core/utils/strings';
 
 /**
  * Project lifecycle.
@@ -115,8 +116,8 @@ export async function createProject(principal: Principal, input: CreateProjectIn
       await notify(
         {
           userIds: [manager.id],
-          title: `You are managing ${created.code}`,
-          body: `${principal.fullName} assigned you as project manager for "${created.name}".`,
+          title: `You are managing ${created.name}`,
+          body: `${formatName(principal.fullName)} assigned you as project manager for "${created.name}".`,
           link: `/pm/projects/${created.id}`,
         },
         tx,
@@ -337,7 +338,8 @@ export async function getProjectWorkspace(principal: Principal, projectId: strin
     orderBy: [{ code: 'asc' }],
     include: {
       assignments: {
-        where: { status: 'ACTIVE' },
+        where: { status: { in: ['ACTIVE', 'COMPLETED'] } },
+        orderBy: { assignedAt: 'desc' },
         include: { user: { select: { id: true, fullName: true, avatarColor: true } } },
       },
       _count: { select: { children: true, dependencies: true, handovers: true } },
@@ -574,6 +576,26 @@ export async function reassignAllMemberTasks(
       count++;
     }
 
+    // If fromUser is not the Project Manager, remove them from projectMember if 0 tasks left
+    const fromMember = await tx.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId: fromUserId } },
+    });
+    if (fromMember && fromMember.role !== 'MANAGER') {
+      const remaining = await tx.taskAssignment.count({
+        where: { userId: fromUserId, task: { projectId } },
+      });
+      if (remaining === 0) {
+        await tx.projectMember.delete({
+          where: { projectId_userId: { projectId, userId: fromUserId } },
+        });
+      }
+    }
+
+    const project = await tx.project.findUnique({
+      where: { id: projectId },
+      select: { name: true },
+    });
+
     await audit(
       {
         actorId: principal.userId,
@@ -590,7 +612,7 @@ export async function reassignAllMemberTasks(
       {
         userIds: [toUserId],
         title: 'Project tasks assigned',
-        body: `${principal.fullName} reassigned ${count} task(s) on this project to you.`,
+        body: `${formatName(principal.fullName)} reassigned ${count} task(s) on "${project?.name ?? 'Project'}" to you.`,
         link: `/pm/projects/${projectId}`,
       },
       tx,
@@ -663,8 +685,8 @@ export async function completeAutomationProject(principal: Principal, projectId:
     await notify(
       {
         userIds: heads.map((h) => h.id),
-        title: `Project Completed: ${project.code}`,
-        body: `PM ${project.manager.fullName} marked project "${project.name}" as COMPLETED and ready for review.`,
+        title: `Project Completed: ${project.name}`,
+        body: `PM ${formatName(project.manager.fullName)} marked project "${project.name}" as COMPLETED and ready for review.`,
         link: `/pm/projects/${projectId}`,
       },
       tx,
@@ -677,7 +699,7 @@ export async function completeAutomationProject(principal: Principal, projectId:
         action: 'project.completed',
         entityType: 'Project',
         entityId: projectId,
-        diff: { status: 'COMPLETED', completedBy: principal.fullName },
+        diff: { status: 'COMPLETED', completedBy: formatName(principal.fullName) },
       },
       tx,
     );

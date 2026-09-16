@@ -5,6 +5,7 @@ import { audit } from '@/core/audit/audit';
 import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
+import { formatName } from '@/core/utils/strings';
 import { assertTaskPermission } from './access';
 import { recomputeTaskDerivedState } from './task.service';
 import { startOfDay } from '@/core/utils/dates';
@@ -18,35 +19,19 @@ import type { ProgressInput } from '../validation/schemas';
  * history defensible when a customer disputes a delivery date months later.
  */
 export async function logProgress(principal: Principal, input: ProgressInput) {
-  const context = await assertTaskPermission(principal, input.taskId, 'pm.progress.log');
+  await assertTaskPermission(principal, input.taskId, 'pm.progress.log');
   const task = await prisma.task.findUniqueOrThrow({ where: { id: input.taskId } });
 
-  if (task.status === 'CANCELLED') throw new DomainError('This task was cancelled.');
-  if (task.status === 'COMPLETED') throw new DomainError('This task is already complete. Reopen it to log more work.');
-
-  const hasChildren = await prisma.task.count({ where: { parentId: task.id } });
-  if (hasChildren > 0) {
-    throw new DomainError('Progress is rolled up from subtasks. Log against the subtask instead.');
+  if (['COMPLETED', 'CANCELLED'].includes(task.status)) {
+    throw new DomainError('Progress cannot be logged against a closed task.');
   }
 
-  if (input.percentComplete < task.percentComplete) {
-    throw new DomainError(
-      `Progress cannot go backwards (currently ${task.percentComplete}%). Add a note or raise a blocker instead.`,
-    );
-  }
-
-  const loggedFor = startOfDay(input.loggedFor ?? new Date());
-  const today = startOfDay(new Date());
-  if (loggedFor > today) throw new DomainError('You cannot log progress for a future date.');
-
-  const nextStatus =
-    input.blocker
-      ? 'BLOCKED'
-      : input.percentComplete >= 100
-        ? 'IN_REVIEW'
-        : task.status === 'TODO' || task.status === 'BLOCKED'
-          ? 'IN_PROGRESS'
-          : task.status;
+  const existingLogs = await prisma.taskProgressLog.findMany({
+    where: { taskId: input.taskId },
+    select: { hoursSpent: true },
+  });
+  const priorHours = existingLogs.reduce((sum, l) => sum + l.hoursSpent, 0);
+  const nextActualHours = priorHours + input.hoursSpent;
 
   const result = await prisma.$transaction(async (tx) => {
     const log = await tx.taskProgressLog.create({
@@ -56,18 +41,26 @@ export async function logProgress(principal: Principal, input: ProgressInput) {
         percentComplete: input.percentComplete,
         hoursSpent: input.hoursSpent,
         note: input.note,
-        blocker: input.blocker || null,
-        loggedFor,
+        blocker: input.blocker ?? null,
+        loggedFor: input.loggedFor ? startOfDay(input.loggedFor) : startOfDay(new Date()),
       },
     });
+
+    const nextStatus =
+      input.blocker && input.blocker.trim().length > 0
+        ? 'BLOCKED'
+        : task.status === 'TODO'
+          ? 'IN_PROGRESS'
+          : task.status;
 
     await tx.task.update({
       where: { id: input.taskId },
       data: {
         percentComplete: input.percentComplete,
-        actualHours: { increment: input.hoursSpent },
-        status: nextStatus as never,
+        actualHours: nextActualHours,
+        status: nextStatus,
         actualStart: task.actualStart ?? new Date(),
+        actualEnd: input.percentComplete >= 100 ? task.actualEnd ?? new Date() : null,
       },
     });
 
@@ -75,12 +68,13 @@ export async function logProgress(principal: Principal, input: ProgressInput) {
       {
         actorId: principal.userId,
         module: 'pm',
-        action: 'progress.logged',
+        action: 'task.progress_logged',
         entityType: 'Task',
         entityId: input.taskId,
         diff: {
           percentComplete: { from: task.percentComplete, to: input.percentComplete },
           hoursSpent: input.hoursSpent,
+          totalActualHours: nextActualHours,
           blocker: input.blocker ?? null,
         },
       },
@@ -91,25 +85,24 @@ export async function logProgress(principal: Principal, input: ProgressInput) {
       {
         name: EVENTS.PROGRESS_LOGGED,
         module: 'pm',
-        entityType: 'Task',
-        entityId: input.taskId,
+        entityType: 'TaskProgressLog',
+        entityId: log.id,
         actorId: principal.userId,
         payload: {
+          taskId: input.taskId,
           projectId: task.projectId,
-          code: task.code,
           percentComplete: input.percentComplete,
           hoursSpent: input.hoursSpent,
-          blocked: Boolean(input.blocker),
+          hasBlocker: Boolean(input.blocker),
         },
       },
       tx,
     );
 
-    // A blocker is the one thing management must never learn about late.
-    if (input.blocker) {
+    if (input.blocker && input.blocker.trim().length > 0) {
       const project = await tx.project.findUnique({
         where: { id: task.projectId },
-        select: { managerId: true, sponsorId: true, code: true },
+        select: { managerId: true, sponsorId: true, code: true, name: true },
       });
       await publish(
         {
@@ -125,8 +118,8 @@ export async function logProgress(principal: Principal, input: ProgressInput) {
       await notify(
         {
           userIds: [project?.managerId, project?.sponsorId].filter((v): v is string => Boolean(v)),
-          title: `Blocker raised on ${context.code}`,
-          body: `${principal.fullName}: ${input.blocker.slice(0, 200)}`,
+          title: `Roadblock on ${project?.name || ''} · ${task.title}`,
+          body: `${formatName(principal.fullName)}: ${input.blocker.slice(0, 200)}`,
           link: `/pm/tasks/${input.taskId}`,
         },
         tx,
@@ -138,8 +131,8 @@ export async function logProgress(principal: Principal, input: ProgressInput) {
       await notify(
         {
           userIds: project?.managerId ? [project.managerId] : [],
-          title: `${context.code} is ready for review`,
-          body: `${principal.fullName} reported "${task.title}" as 100% complete.`,
+          title: `Review ready: ${task.title}`,
+          body: `${formatName(principal.fullName)} reported "${task.title}" as 100% complete.`,
           link: `/pm/tasks/${input.taskId}`,
         },
         tx,

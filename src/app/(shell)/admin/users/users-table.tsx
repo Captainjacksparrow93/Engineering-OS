@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useMemo, useState, useEffect } from 'react';
 import { Avatar, StatusBadge } from '@/components/ui';
@@ -99,7 +99,7 @@ export function UsersTable({
   const scopeName = (scopeType: string, scopeId: string | null) => {
     if (scopeType === 'GLOBAL') return 'Company-wide';
     if (scopeType === 'DEPARTMENT') return departments.find((d) => d.id === scopeId)?.name ?? 'Department';
-    return projects.find((p) => p.id === scopeId)?.code ?? 'Project';
+    return projects.find((p) => p.id === scopeId)?.name ?? 'Project';
   };
 
   // Priority search: Employee Name matches are ranked highest, followed by Code, Department, Role

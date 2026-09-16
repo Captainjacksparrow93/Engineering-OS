@@ -1,4 +1,4 @@
-﻿import { formatName } from '@/core/utils/strings';
+import { formatName } from '@/core/utils/strings';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
@@ -154,7 +154,9 @@ export default async function ResourcesPage({
                         <Link href={`/pm/tasks/${assignment.taskId}`} className="min-w-0 flex-1 truncate text-body hover:text-ink">
                           {assignment.taskTitle}
                         </Link>
-                        <span className="code text-caption text-muted-soft">{assignment.projectCode}</span>
+                        <span className="text-caption text-muted-soft truncate max-w-[140px]" title={assignment.projectName || assignment.projectCode}>
+                          {assignment.projectName || assignment.projectCode}
+                        </span>
                         <StatusBadge status={assignment.status} />
                       </li>
                     ))}

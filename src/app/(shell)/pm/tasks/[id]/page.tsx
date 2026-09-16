@@ -65,7 +65,11 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           where: {
             companyId: principal.companyId,
             status: 'ACTIVE',
-            department: { code: { in: ['TECH', 'DESIGN', 'DIR'] } },
+            department: { code: { in: ['TECH', 'DESIGN'] } },
+            NOT: [
+              { designation: { contains: 'Director', mode: 'insensitive' } },
+              { grade: 'DIRECTOR' },
+            ],
           },
           select: { id: true, fullName: true, designation: true },
           orderBy: { fullName: 'asc' },

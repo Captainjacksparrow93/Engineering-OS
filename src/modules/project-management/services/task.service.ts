@@ -11,6 +11,7 @@ import { assertProjectPermission, assertTaskPermission, assertTaskVisible, loadT
 import { addDependency } from './dependency.service';
 import type { CreateTaskInput } from '../validation/schemas';
 import { blockingReasons, completionBlockers, downstreamTaskIds, rollUpProgress, type Graph } from '../domain/scheduling';
+import { formatName } from '@/core/utils/strings';
 
 /**
  * Task lifecycle: creation inside the WBS, assignment, status transitions and the
@@ -145,7 +146,7 @@ export async function changeTaskStatus(
   status: PrismaTaskStatus,
   note?: string,
 ) {
-  const context = await assertTaskPermission(principal, taskId, 'pm.task.update');
+  await assertTaskPermission(principal, taskId, 'pm.task.update');
   const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId } });
 
   if (task.status === status) return task;
@@ -220,22 +221,65 @@ export async function changeTaskStatus(
     );
 
     if (status === 'COMPLETED') {
-      // Whoever was waiting on this can now move; tell them without being asked.
+      // 1. Notify leadership (PM, Sponsor, HOD, Directors)
+      const project = await tx.project.findUnique({
+        where: { id: task.projectId },
+        select: { id: true, name: true, managerId: true, sponsorId: true, departmentId: true },
+      });
+
+      if (project) {
+        const leadershipUsers = await tx.user.findMany({
+          where: {
+            companyId: principal.companyId,
+            status: 'ACTIVE',
+            OR: [
+              { id: project.managerId },
+              ...(project.sponsorId ? [{ id: project.sponsorId }] : []),
+              { grade: { in: ['DIRECTOR', 'HEAD'] } },
+              { designation: { contains: 'Director', mode: 'insensitive' } },
+            ],
+          },
+          select: { id: true },
+        });
+
+        const notifyIds = leadershipUsers
+          .map((u) => u.id)
+          .filter((uid) => uid !== principal.userId);
+
+        if (notifyIds.length > 0) {
+          await notify(
+            {
+              userIds: notifyIds,
+              title: `Task completed: ${task.title}`,
+              body: `${formatName(principal.fullName)} marked "${task.title}" as completed in ${project.name}.`,
+              link: `/pm/projects/${task.projectId}`,
+            },
+            tx,
+          );
+        }
+      }
+
+      // 2. Whoever was waiting on this can now move; tell them without being asked.
       const unblocked = downstreamTaskIds(taskId, graph.edges);
       if (unblocked.length) {
         const holders = await tx.taskAssignment.findMany({
           where: { taskId: { in: unblocked }, status: 'ACTIVE' },
           select: { userId: true, taskId: true },
         });
-        await notify(
-          {
-            userIds: holders.map((h) => h.userId),
-            title: `${context.code} is done`,
-            body: `A task you are waiting on ("${task.title}") has been completed.`,
-            link: `/pm/projects/${task.projectId}`,
-          },
-          tx,
-        );
+        const downstreamHolders = holders
+          .map((h) => h.userId)
+          .filter((uid) => uid !== principal.userId);
+        if (downstreamHolders.length > 0) {
+          await notify(
+            {
+              userIds: downstreamHolders,
+              title: `${task.title} is done`,
+              body: `A task you are waiting on ("${task.title}") has been completed.`,
+              link: `/pm/projects/${task.projectId}`,
+            },
+            tx,
+          );
+        }
       }
     }
 
@@ -257,7 +301,7 @@ export async function assignTask(
   taskId: string,
   input: { userId: string; role?: 'OWNER' | 'COLLABORATOR' | 'REVIEWER'; allocatedHours?: number; note?: string },
 ) {
-  const context = await assertTaskPermission(principal, taskId, 'pm.task.assign');
+  await assertTaskPermission(principal, taskId, 'pm.task.assign');
   const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId } });
   const role = input.role ?? 'OWNER';
 
@@ -324,8 +368,8 @@ export async function assignTask(
       await notify(
         {
           userIds: [input.userId],
-          title: `New ${task.type === 'ADHOC' ? 'ad-hoc ' : ''}task: ${context.code}`,
-          body: `${principal.fullName} assigned you "${task.title}" (${Math.round(remainingHours)}h${
+          title: `New ${task.type === 'ADHOC' ? 'ad-hoc ' : ''}task: ${task.title}`,
+          body: `${formatName(principal.fullName)} assigned you "${task.title}" (${Math.round(remainingHours)}h${
             task.plannedEnd ? `, due ${task.plannedEnd.toISOString().slice(0, 10)}` : ''
           }).`,
           link: `/pm/tasks/${taskId}`,
@@ -450,7 +494,13 @@ export async function listMyTasks(principal: Principal, filters: { status?: stri
 
   const rows = assignments
     .filter((a) => filters.includeCompleted || !['COMPLETED', 'CANCELLED'].includes(a.task.status))
-    .filter((a) => !filters.status || a.task.status === filters.status);
+    .filter((a) => !filters.status || a.task.status === filters.status)
+    .sort((a, b) => {
+      if (!a.task.plannedEnd && !b.task.plannedEnd) return 0;
+      if (!a.task.plannedEnd) return 1;
+      if (!b.task.plannedEnd) return -1;
+      return new Date(a.task.plannedEnd).getTime() - new Date(b.task.plannedEnd).getTime();
+    });
 
   return rows.map((a) => ({
     assignment: { id: a.id, role: a.role, status: a.status, allocatedHours: a.allocatedHours },
@@ -541,8 +591,8 @@ export async function addComment(principal: Principal, taskId: string, body: str
     await notify(
       {
         userIds: task.assigneeIds.filter((id) => id !== principal.userId),
-        title: `Comment on ${task.code}`,
-        body: `${principal.fullName}: ${trimmed.slice(0, 140)}`,
+        title: `Comment on ${task.title}`,
+        body: `${formatName(principal.fullName)}: ${trimmed.slice(0, 140)}`,
         link: `/pm/tasks/${taskId}`,
       },
       tx,
@@ -555,11 +605,12 @@ export async function addComment(principal: Principal, taskId: string, body: str
  * Project Manager Quality Gate: Approve task submitted for review.
  * Marks task COMPLETED, auto-unlocks downstream tasks, and checks if the entire project is completed.
  */
-export async function approveTaskReview(principal: Principal, taskId: string) {
+export async function approveTaskReview(principal: Principal, taskId: string, feedback?: string) {
   const task = await prisma.task.findUniqueOrThrow({
     where: { id: taskId },
     include: {
-      project: { select: { id: true, managerId: true, sponsorId: true, code: true, name: true } },
+      project: { select: { id: true, managerId: true, departmentId: true, name: true } },
+      assignments: { where: { status: 'ACTIVE' } },
     },
   });
 
@@ -574,9 +625,19 @@ export async function approveTaskReview(principal: Principal, taskId: string) {
     throw new DomainError('Only the Project Manager or Department Head can approve task reviews.');
   }
 
-  const updatedTask = await changeTaskStatus(principal, taskId, 'COMPLETED');
+  const updatedTask = await changeTaskStatus(principal, taskId, 'COMPLETED', feedback);
 
-  // Check if all tasks in the project are completed
+  const trimmedFeedback = feedback?.trim();
+  if (trimmedFeedback) {
+    await prisma.taskComment.create({
+      data: {
+        taskId,
+        userId: principal.userId,
+        body: `[PM Review Approved]: ${trimmedFeedback}`,
+      },
+    });
+  }
+
   const remainingOpen = await prisma.task.count({
     where: {
       projectId: task.projectId,
@@ -589,7 +650,6 @@ export async function approveTaskReview(principal: Principal, taskId: string) {
     task: updatedTask,
     allTasksCompleted: remainingOpen === 0,
     projectId: task.projectId,
-    projectCode: task.project.code,
     projectName: task.project.name,
   };
 }
@@ -602,8 +662,8 @@ export async function disapproveTaskReview(principal: Principal, taskId: string,
   const task = await prisma.task.findUniqueOrThrow({
     where: { id: taskId },
     include: {
-      project: { select: { id: true, managerId: true, sponsorId: true, code: true } },
-      assignments: { where: { status: 'ACTIVE' }, select: { userId: true } },
+      project: { select: { id: true, managerId: true, departmentId: true, name: true } },
+      assignments: { where: { status: 'ACTIVE' } },
     },
   });
 
@@ -635,8 +695,8 @@ export async function disapproveTaskReview(principal: Principal, taskId: string,
   if (assigneeIds.length > 0) {
     await notify({
       userIds: assigneeIds,
-      title: `Task needs revision: ${task.code}`,
-      body: `${principal.fullName} requested revisions: ${trimmedFeedback.slice(0, 140)}`,
+      title: `Task needs revision: ${task.title}`,
+      body: `${formatName(principal.fullName)} requested revisions: ${trimmedFeedback.slice(0, 140)}`,
       link: `/pm/tasks/${taskId}`,
     });
   }
@@ -656,7 +716,7 @@ export async function flagRoadblock(principal: Principal, taskId: string, commen
   const task = await prisma.task.findUniqueOrThrow({
     where: { id: taskId },
     include: {
-      project: { select: { id: true, managerId: true, sponsorId: true, code: true } },
+      project: { select: { id: true, managerId: true, sponsorId: true, code: true, name: true } },
     },
   });
 
@@ -681,8 +741,8 @@ export async function flagRoadblock(principal: Principal, taskId: string, commen
     await notify(
       {
         userIds: [task.project.managerId, task.project.sponsorId].filter((id): id is string => Boolean(id)),
-        title: `Roadblock flagged on ${task.code}`,
-        body: `${principal.fullName}: ${trimmed.slice(0, 200)}`,
+        title: `Roadblock on ${task.project.name} · ${task.title}`,
+        body: `${formatName(principal.fullName)}: ${trimmed.slice(0, 200)}`,
         link: `/pm/tasks/${taskId}`,
       },
       tx,

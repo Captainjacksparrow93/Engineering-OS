@@ -1,8 +1,7 @@
-﻿'use client';
+'use client';
 
 import { useState, useTransition } from 'react';
 import { assignTaskAction } from '@/app/actions/pm';
-import { AvatarStack } from '@/components/ui';
 import { formatName } from '@/core/utils/strings';
 
 interface Colleague {
@@ -30,7 +29,11 @@ export function AssigneeCell({
   const [isPending, startTransition] = useTransition();
 
   if (!canAssign || !colleagues || colleagues.length === 0) {
-    return <AvatarStack people={assignees} />;
+    return (
+      <span className="text-body-sm font-medium text-ink">
+        {assignees[0] ? formatName(assignees[0].fullName) : <span className="text-muted font-normal">Unassigned</span>}
+      </span>
+    );
   }
 
   if (!isEditing) {
@@ -41,7 +44,9 @@ export function AssigneeCell({
         className="group flex items-center gap-1.5 rounded p-1 -m-1 transition-colors hover:bg-canvas-soft text-left"
         title="Click to assign or reassign"
       >
-        <AvatarStack people={assignees} />
+        <span className="text-body-sm font-medium text-ink">
+          {assignees[0] ? formatName(assignees[0].fullName) : <span className="text-muted font-normal">Unassigned</span>}
+        </span>
         <span className="opacity-0 group-hover:opacity-100 text-xs text-muted transition-opacity">
           ✎
         </span>

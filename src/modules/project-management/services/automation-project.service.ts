@@ -64,12 +64,16 @@ export async function getPMTeamData(companyId: string) {
     where: {
       companyId,
       status: 'ACTIVE',
-      department: { code: { in: ['TECH', 'DESIGN', 'DIR'] } },
+      department: { code: { in: ['TECH', 'DESIGN'] } },
       OR: [
         { fullName: { contains: 'Parth' } },
         { fullName: { contains: 'Paras' } },
         { designation: { contains: 'Project Manager' } },
         { grade: 'MANAGER' },
+      ],
+      NOT: [
+        { designation: { contains: 'Director', mode: 'insensitive' } },
+        { grade: 'DIRECTOR' },
       ],
     },
     select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true },
@@ -87,11 +91,12 @@ export async function getPMTeamData(companyId: string) {
     where: {
       companyId,
       status: 'ACTIVE',
-      department: { code: { in: ['TECH', 'DESIGN', 'DIR'] } },
+      department: { code: { in: ['TECH', 'DESIGN'] } },
       grade: { in: ['SENIOR_ENGINEER', 'ENGINEER', 'JUNIOR_ENGINEER', 'TRAINEE'] },
       NOT: [
         { designation: { contains: 'Project Manager' } },
-        { designation: { contains: 'Director' } },
+        { designation: { contains: 'Director', mode: 'insensitive' } },
+        { grade: 'DIRECTOR' },
       ],
     },
     select: {

@@ -12,7 +12,7 @@ import { formatName } from '@/core/utils/strings';
 
 const NEXT_STATUS: Record<string, Array<{ value: string; label: string; variant?: 'primary' | 'secondary' }>> = {
   DRAFT: [{ value: 'TODO', label: 'Release to the queue', variant: 'primary' }],
-  BLOCKED: [{ value: 'IN_PROGRESS', label: 'Start anyway', variant: 'secondary' }],
+  BLOCKED: [{ value: 'IN_PROGRESS', label: 'Resolve Roadblock & Resume', variant: 'primary' }],
   TODO: [{ value: 'IN_PROGRESS', label: 'Start work', variant: 'primary' }],
   IN_PROGRESS: [
     { value: 'IN_REVIEW', label: 'Send for review', variant: 'primary' },
