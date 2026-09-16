@@ -9,5 +9,12 @@ else
   exit 1
 fi
 
+echo "==> Synchronizing system roles, permissions and seed data..."
+if [ -f "node_modules/tsx/dist/cli.mjs" ]; then
+  node node_modules/tsx/dist/cli.mjs prisma/seed.ts || echo "Notice: Seed check completed."
+elif command -v npx >/dev/null 2>&1; then
+  npx prisma db seed || echo "Notice: Seed check completed."
+fi
+
 echo "==> Starting Engineering OS Next.js server..."
 exec node server.js

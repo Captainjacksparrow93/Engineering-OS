@@ -7,6 +7,7 @@ import { formatName } from '@/core/utils/strings';
 import { formatDate } from '@/core/utils/dates';
 import { Avatar, ProgressBar } from '@/components/ui';
 import { ProjectTimeline } from '@/components/project-timeline';
+import { getProjectTimelineAction } from '@/app/actions/pm';
 import type { DirectorDashboardData } from '@/modules/project-management/services/dashboard.service';
 import type { ProjectTimelineData } from '@/components/project-timeline';
 
@@ -29,7 +30,17 @@ export function DirectorDashboard({
 
   const handleSelectProject = async (projId: string) => {
     setSelectedProjectId(projId);
-    // Find project from data and synthesize timeline or fetch
+    try {
+      const liveTimeline = await getProjectTimelineAction(projId);
+      if (liveTimeline) {
+        setTimelineData(liveTimeline);
+        return;
+      }
+    } catch (err) {
+      console.error('Failed to load project timeline:', err);
+    }
+
+    // Fallback if fetch fails
     const p = data.projects.find((proj) => proj.id === projId);
     if (p) {
       setTimelineData({
@@ -42,38 +53,9 @@ export function DirectorDashboard({
         startDate: p.startDate,
         targetEndDate: p.targetEndDate,
         forecastEndDate: p.forecastEndDate,
-        totalSteps: 13,
-        completedSteps: Math.round((p.progressPercent / 100) * 13),
-        lanes: [
-          {
-            id: 'lane-1',
-            name: 'Deliverables',
-            steps: [
-              {
-                taskId: `${p.id}-t1`,
-                stepNumber: 1,
-                code: `${p.code}_01`,
-                title: 'Design & Engineering Kickoff',
-                status: 'COMPLETED',
-                plannedStart: p.startDate,
-                plannedEnd: p.startDate,
-                submittedAt: p.startDate,
-                completedAt: p.startDate,
-              },
-              {
-                taskId: `${p.id}-t2`,
-                stepNumber: 2,
-                code: `${p.code}_02`,
-                title: 'Verify PLC CPU & I/O Configuration',
-                status: p.progressPercent >= 50 ? 'COMPLETED' : 'IN_PROGRESS',
-                plannedStart: p.startDate,
-                plannedEnd: p.targetEndDate,
-                submittedAt: null,
-                completedAt: p.progressPercent >= 50 ? p.startDate : null,
-              },
-            ],
-          },
-        ],
+        totalSteps: 0,
+        completedSteps: 0,
+        lanes: [],
       });
     }
   };

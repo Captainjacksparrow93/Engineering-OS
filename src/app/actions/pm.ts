@@ -20,6 +20,7 @@ import {
   addProjectMember,
   completeAutomationProject,
   createProject,
+  getProjectTimeline,
   quickFind,
   reassignAllMemberTasks,
   removeProjectMember,
@@ -532,5 +533,17 @@ export async function quickFindAction(query: string) {
     return { success: false, error: toState(error).error ?? 'Search failed.' };
   }
 }
+
+export async function getProjectTimelineAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    const timeline = await getProjectTimeline(principal, projectId);
+    return timeline;
+  } catch (error) {
+    console.error('getProjectTimelineAction error:', error);
+    return null;
+  }
+}
+
 
 
