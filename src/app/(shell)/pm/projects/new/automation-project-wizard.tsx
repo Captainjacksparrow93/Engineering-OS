@@ -226,8 +226,6 @@ export function AutomationProjectWizard({
 
         setTaskAssignments(newAssignments);
         setRationales(newRationales);
-        // Ensure dropdowns can display the assigned engineers even if cross-squad
-        setFilterPMTeamOnly(false);
         setAutoAssignBanner({
           type: 'success',
           message: `Auto-assigned ${assignedCount} of ${tasksPayload.length} steps with optimal grade fit and capacity matching.`,
@@ -706,11 +704,26 @@ export function AutomationProjectWizard({
                                   >
                                     <option value="">[ Unassigned ]</option>
                                     {filterPMTeamOnly ? (
-                                      candidateEngineers.map((eng) => (
-                                        <option key={eng.id} value={eng.id}>
-                                          {formatName(eng.fullName)} ({eng.designation || eng.grade})
-                                        </option>
-                                      ))
+                                      <>
+                                        {selectedUserId &&
+                                          !candidateEngineers.some((e) => e.id === selectedUserId) &&
+                                          allEngineers.find((e) => e.id === selectedUserId) && (
+                                            <option value={selectedUserId}>
+                                              {formatName(
+                                                allEngineers.find((e) => e.id === selectedUserId)!.fullName,
+                                              )}{' '}
+                                              (
+                                              {allEngineers.find((e) => e.id === selectedUserId)!.designation ||
+                                                allEngineers.find((e) => e.id === selectedUserId)!.grade}
+                                              )
+                                            </option>
+                                          )}
+                                        {candidateEngineers.map((eng) => (
+                                          <option key={eng.id} value={eng.id}>
+                                            {formatName(eng.fullName)} ({eng.designation || eng.grade})
+                                          </option>
+                                        ))}
+                                      </>
                                     ) : (
                                       <>
                                         {[1, 2, 3, 4].map((lvl) => {
