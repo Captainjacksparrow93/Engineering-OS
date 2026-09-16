@@ -90,17 +90,15 @@ export async function getDescendantUserIds(companyId: string, managerId: string)
 
 
 export async function getPMTeamData(companyId: string) {
-  // Find PMs
+  // Find PMs: eligible active users holding PM_BASE or PROJECT_MANAGER or MANAGER in technical departments
   const managers = await prisma.user.findMany({
     where: {
       companyId,
       status: 'ACTIVE',
-      department: { code: { in: ['TECH', 'DESIGN'] } },
       OR: [
-        { fullName: { contains: 'Parth' } },
-        { fullName: { contains: 'Paras' } },
-        { designation: { contains: 'Project Manager' } },
-        { grade: 'MANAGER' },
+        { roleAssignments: { some: { role: { key: { in: ['PM_BASE', 'PROJECT_MANAGER'] } } } } },
+        { designation: { contains: 'Project Manager', mode: 'insensitive' } },
+        { grade: 'MANAGER', department: { code: { in: ['TECH', 'DESIGN'] } } },
       ],
       NOT: [
         { designation: { contains: 'Director', mode: 'insensitive' } },

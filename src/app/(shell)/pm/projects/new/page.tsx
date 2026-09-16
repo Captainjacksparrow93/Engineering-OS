@@ -8,6 +8,10 @@ import { AutomationProjectWizard } from './automation-project-wizard';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = {
+  title: 'New project',
+};
+
 export default async function NewProjectPage() {
   const principal = await requirePrincipal();
   if (!hasPermissionAnywhere(principal, 'pm.project.create')) redirect('/pm/projects');

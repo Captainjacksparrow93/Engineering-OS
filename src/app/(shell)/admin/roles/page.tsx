@@ -8,6 +8,10 @@ import { RolePermissionEditor } from './role-editor';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = {
+  title: 'Roles',
+};
+
 /**
  * Roles are bundles of permissions; the scope is chosen when the role is granted.
  * Editing a role changes what everyone holding it can do, everywhere it is granted -

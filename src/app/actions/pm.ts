@@ -20,6 +20,7 @@ import {
   addProjectMember,
   completeAutomationProject,
   createProject,
+  quickFind,
   reassignAllMemberTasks,
   removeProjectMember,
   updateProject,
@@ -519,6 +520,16 @@ export async function disapproveTaskReviewAction(taskId: string, feedback: strin
     return { success: true };
   } catch (error) {
     return { success: false, error: toState(error).error ?? 'Failed to send back task.' };
+  }
+}
+
+export async function quickFindAction(query: string) {
+  const principal = await requirePrincipal();
+  try {
+    const results = await quickFind(principal, query);
+    return { success: true, data: results };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Search failed.' };
   }
 }
 

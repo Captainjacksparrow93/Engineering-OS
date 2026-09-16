@@ -7,6 +7,10 @@ import { TemplateManagerClient } from './template-manager';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = {
+  title: 'Checklists',
+};
+
 export default async function ChecklistTemplatesPage() {
   const principal = await requirePrincipal();
 

@@ -22,7 +22,10 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Engineering OS',
+  title: {
+    template: '%s · Engineering OS',
+    default: 'Engineering OS',
+  },
   description: 'Unified operations platform for panel manufacturing - projects, people, plant.',
 };
 

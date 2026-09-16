@@ -6,6 +6,10 @@ import { MyWorkTable } from './my-work-table';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = {
+  title: 'My work',
+};
+
 /** The engineer's queue: active work vs completed deliverables. */
 export default async function MyWorkPage({
   searchParams,

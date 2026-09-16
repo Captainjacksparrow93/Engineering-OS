@@ -6,6 +6,7 @@ import { countPendingApprovals } from '@/modules/project-management/services/tas
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
 import { ShellContainer } from '@/components/shell/shell-container';
+import { FreshCountsListener } from '@/components/shell/fresh-counts-listener';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +46,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     >
 
       {children}
+      <FreshCountsListener />
     </ShellContainer>
   );
 }

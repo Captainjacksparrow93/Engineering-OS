@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Avatar } from '@/components/ui';
+import { QuickFind } from './quick-find';
 import { signOut } from '@/app/actions/auth';
 import type { Principal } from '@/core/rbac/types';
 import { formatName } from '@/core/utils/strings';
@@ -40,6 +41,7 @@ export function Topbar({ principal, unread }: { principal: Principal; unread: nu
       </div>
 
       <div className="flex items-center gap-sm md:gap-base">
+        <QuickFind />
         <Link
           href="/notifications"
           className="relative inline-flex items-center justify-center p-2 text-muted hover:text-ink hover:bg-surface-strong rounded-md transition-colors"

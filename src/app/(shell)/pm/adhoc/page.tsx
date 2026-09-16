@@ -9,6 +9,10 @@ import { AdhocForm } from './adhoc-form';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = {
+  title: 'Urgent task',
+};
+
 /**
  * Ad-hoc assignment.
  *

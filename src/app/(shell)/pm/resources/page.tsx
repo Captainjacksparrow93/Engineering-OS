@@ -1,4 +1,3 @@
-import { formatName } from '@/core/utils/strings';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
@@ -6,9 +5,14 @@ import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { prisma } from '@/core/db/prisma';
 import { getWorkloads, defaultWindow } from '@/modules/project-management/services/availability.service';
 import { formatDate } from '@/core/utils/dates';
-import { Avatar, Card, EmptyState, PageHeader, ProgressBar, Stat, StatusBadge } from '@/components/ui';
+import { PageHeader, Stat } from '@/components/ui';
+import { TeamLoadTable } from './team-load-table';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata = {
+  title: 'Team load',
+};
 
 /**
  * The resource board - the answer to "who is free?".
@@ -46,8 +50,8 @@ export default async function ResourcesPage({
 
   const free = workloads.filter((w) => w.status === 'FREE' || w.status === 'AVAILABLE');
   const overloaded = workloads.filter((w) => w.status === 'OVERLOADED');
-  const onLeave = workloads.filter((w) => w.status === 'ON_LEAVE');
-  const totalFree = Math.round(workloads.reduce((sum, w) => sum + Math.max(0, w.freeHours), 0));
+  const onLeave = workloads.filter((w) => w.status === 'ON_LEAVE' || w.leaveDays > 0);
+  const totalFreeDays = Math.round((workloads.reduce((sum, w) => sum + Math.max(0, w.freeHours), 0) / 8) * 10) / 10;
 
   return (
     <>
@@ -60,7 +64,6 @@ export default async function ResourcesPage({
           </Link>
         }
       />
-
 
       <form className="mb-4 flex flex-wrap items-end gap-2" action="/pm/resources">
         <div>
@@ -84,83 +87,14 @@ export default async function ResourcesPage({
         <button type="submit" className="btn btn-secondary mb-0.5">Apply</button>
       </form>
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid gap-3 grid-cols-2 lg:grid-cols-4">
         <Stat label="People in view" value={workloads.length} />
         <Stat label="With spare capacity" value={free.length} tone="success" />
         <Stat label="Overloaded" value={overloaded.length} tone={overloaded.length ? 'danger' : 'default'} />
-        <Stat label="Spare hours in window" value={`${totalFree}h`} hint={onLeave.length ? `${onLeave.length} on leave` : undefined} />
+        <Stat label="Spare capacity" value={`${totalFreeDays} days`} hint={onLeave.length ? `${onLeave.length} on leave` : undefined} />
       </div>
 
-      {workloads.length === 0 ? (
-        <EmptyState title="No people in scope" hint="Widen the department filter or ask an administrator for wider resource visibility." />
-      ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {workloads
-            .slice()
-            .sort((a, b) => a.utilizationPercent - b.utilizationPercent)
-            .map((workload) => (
-              <Card key={workload.person.id} bodyClassName="p-4">
-                <div className="mb-3 flex items-start gap-3">
-                  <Avatar name={formatName(workload.person.fullName)} color={workload.person.avatarColor} size={38} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-body-sm font-semibold text-ink">{formatName(workload.person.fullName)}</p>
-                    <p className="truncate text-caption text-muted">
-                      {workload.person.designation ?? workload.person.grade.replaceAll('_', ' ').toLowerCase()}
-                    </p>
-                  </div>
-                  <StatusBadge status={workload.status} />
-                </div>
-
-                <div className="mb-1 flex items-center justify-between text-caption text-muted">
-                  <span>
-                    {workload.committedHours}h committed of {workload.capacityHours}h
-                  </span>
-                  <span className={workload.utilizationPercent > 100 ? 'font-semibold text-error' : 'font-medium text-ink'}>
-                    {workload.utilizationPercent}%
-                  </span>
-                </div>
-                <ProgressBar
-                  value={Math.min(100, workload.utilizationPercent)}
-                  tone={workload.utilizationPercent > 100 ? 'danger' : workload.utilizationPercent < 60 ? 'success' : 'default'}
-                />
-
-                <div className="mt-3 flex flex-wrap gap-3 text-caption text-body">
-                  <span><strong className="text-ink">{workload.freeHours}h</strong> free</span>
-                  <span><strong className="text-ink">{workload.openTaskCount}</strong> open tasks</span>
-                  {workload.overdueTaskCount > 0 ? (
-                    <span className="text-error"><strong>{workload.overdueTaskCount}</strong> overdue</span>
-                  ) : null}
-                  {workload.leaveDays > 0 ? (
-                    <span className="text-muted"><strong className="text-body">{workload.leaveDays}</strong> leave day(s)</span>
-                  ) : null}
-                </div>
-
-                {workload.assignments.length ? (
-                  <ul className="mt-3 space-y-1 border-t border-hairline pt-2">
-                    {workload.assignments.slice(0, 4).map((assignment) => (
-                      <li key={assignment.taskId} className="flex items-center gap-2 text-caption">
-                        <Link href={`/pm/tasks/${assignment.taskId}`} className="min-w-0 flex-1 truncate text-body hover:text-ink">
-                          {assignment.taskTitle}
-                        </Link>
-                        <span className="text-caption text-muted-soft truncate max-w-[140px]" title={assignment.projectName || assignment.projectCode}>
-                          {assignment.projectName || assignment.projectCode}
-                        </span>
-                        <StatusBadge status={assignment.status} />
-                      </li>
-                    ))}
-                    {workload.assignments.length > 4 ? (
-                      <li className="text-caption text-muted-soft">+{workload.assignments.length - 4} more</li>
-                    ) : null}
-                  </ul>
-                ) : (
-                  <p className="mt-3 border-t border-hairline pt-2 text-caption text-success">
-                    No open tasks - available immediately.
-                  </p>
-                )}
-              </Card>
-            ))}
-        </div>
-      )}
+      <TeamLoadTable workloads={workloads} />
     </>
   );
 }

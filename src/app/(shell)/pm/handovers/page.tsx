@@ -13,6 +13,10 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = {
+  title: 'Handovers',
+};
+
 /**
  * The handover inbox. Tracks both task handovers (peer engineer transfers) and
  * project handovers (manager transfers). Nothing moves until the receiver accepts.

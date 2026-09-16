@@ -9,6 +9,10 @@ import { UsersTable } from './users-table';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = {
+  title: 'People',
+};
+
 /**
  * People and their access.
  *

@@ -6,6 +6,10 @@ import { MarkAllReadButton, MarkReadButton } from './mark-read';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = {
+  title: 'Notifications',
+};
+
 export default async function NotificationsPage() {
   const principal = await requirePrincipal();
   const notifications = await prisma.notification.findMany({

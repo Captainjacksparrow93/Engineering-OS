@@ -8,6 +8,10 @@ import { Avatar, Card, EmptyState, PageHeader } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = {
+  title: 'Audit trail',
+};
+
 // Human-friendly mapping for actions
 function formatAction(module: string, action: string): string {
   const fullKey = `${module}.${action}`;

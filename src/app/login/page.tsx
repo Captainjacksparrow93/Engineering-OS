@@ -5,6 +5,10 @@ import { QuickLoginButtons } from './quick-login-buttons';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = {
+  title: 'Sign in',
+};
+
 /** Editorial sign-in band: cream canvas, display type at weight 400, one orange CTA. */
 export default async function LoginPage() {
   const principal = await getPrincipal();

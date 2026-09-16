@@ -800,5 +800,87 @@ export async function getProjectTimeline(principal: Principal, projectId: string
   };
 }
 
+export interface QuickFindResult {
+  projects: Array<{
+    id: string;
+    code: string;
+    name: string;
+    clientName: string;
+    status: string;
+  }>;
+  tasks: Array<{
+    id: string;
+    code: string;
+    title: string;
+    status: string;
+    projectName: string;
+  }>;
+}
 
+export async function quickFind(principal: Principal, query: string): Promise<QuickFindResult> {
+  const q = query.trim();
+  if (q.length < 2) {
+    return { projects: [], tasks: [] };
+  }
 
+  const [projects, tasks] = await Promise.all([
+    prisma.project.findMany({
+      where: {
+        AND: [
+          projectVisibilityWhere(principal),
+          {
+            OR: [
+              { name: { contains: q, mode: 'insensitive' } },
+              { code: { contains: q, mode: 'insensitive' } },
+              { clientName: { contains: q, mode: 'insensitive' } },
+            ],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        clientName: true,
+        status: true,
+      },
+      take: 4,
+      orderBy: { updatedAt: 'desc' },
+    }),
+    prisma.task.findMany({
+      where: {
+        AND: [
+          { project: projectVisibilityWhere(principal) },
+          {
+            OR: [
+              { title: { contains: q, mode: 'insensitive' } },
+              { code: { contains: q, mode: 'insensitive' } },
+            ],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        status: true,
+        project: {
+          select: { name: true },
+        },
+      },
+      take: 4,
+      orderBy: { updatedAt: 'desc' },
+    }),
+  ]);
+
+  return {
+    projects,
+    tasks: tasks.map((t) => ({
+      id: t.id,
+      code: t.code,
+      title: t.title,
+      status: t.status,
+      projectName: t.project.name,
+    })),
+  };
+}
