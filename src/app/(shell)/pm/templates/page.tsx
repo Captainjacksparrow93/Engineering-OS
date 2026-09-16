@@ -19,13 +19,14 @@ export default async function ChecklistTemplatesPage() {
   return (
     <>
       <PageHeader
-        title="Checklist Templates Management"
-        subtitle="Manage the standard 13-task pipeline and default blocker rules for PLC, SCADA, and HMI. Accessible only to Directors and Department Heads."
+        title="Checklists"
+        subtitle="Standard task pipelines and step sequences for PLC, SCADA, and HMI templates."
         breadcrumb={[
-          { label: 'Project Management', href: '/pm/projects' },
-          { label: 'Checklist Templates' },
+          { label: 'Projects', href: '/pm/projects' },
+          { label: 'Checklists' },
         ]}
       />
+
       <TemplateManagerClient templates={templates} />
     </>
   );

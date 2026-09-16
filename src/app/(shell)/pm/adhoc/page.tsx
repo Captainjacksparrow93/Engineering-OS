@@ -1,4 +1,4 @@
-﻿import { redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { prisma } from '@/core/db/prisma';
@@ -40,9 +40,10 @@ export default async function AdhocPage({
   return (
     <>
       <PageHeader
-        title="Assign ad-hoc work"
-        subtitle="Unplanned work that has to be delivered now. Ranked directly by who is free right now."
+        title="Urgent task"
+        subtitle="Unplanned work that has to be delivered immediately. Ranked directly by available capacity."
       />
+
 
       {projects.length === 0 ? (
         <Alert tone="warning">

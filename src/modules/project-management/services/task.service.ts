@@ -1,13 +1,13 @@
 import type { TaskStatus as PrismaTaskStatus } from '@prisma/client';
 import { prisma, type Tx } from '@/core/db/prisma';
 import { DomainError, NotFoundError } from '@/core/rbac/errors';
-import { can } from '@/core/rbac/engine';
+import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
 import type { Principal } from '@/core/rbac/types';
 import { audit, diffOf } from '@/core/audit/audit';
 import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
-import { assertProjectPermission, assertTaskPermission, assertTaskVisible, loadTaskContext } from './access';
+import { assertProjectPermission, assertTaskPermission, assertTaskVisible, loadTaskContext, projectVisibilityWhere } from './access';
 import { addDependency } from './dependency.service';
 import type { CreateTaskInput } from '../validation/schemas';
 import { blockingReasons, completionBlockers, downstreamTaskIds, rollUpProgress, type Graph } from '../domain/scheduling';
@@ -792,4 +792,68 @@ export async function flagRoadblock(principal: Principal, taskId: string, commen
   await recomputeTaskDerivedState(task.projectId);
   return { success: true };
 }
+
+export async function countPendingApprovals(principal: Principal): Promise<number> {
+  const canReview = hasPermissionAnywhere(principal, 'pm.progress.review');
+  const isManager = principal.memberProjectIds.length > 0;
+  if (!canReview && !isManager) return 0;
+
+  const visibility = projectVisibilityWhere(principal);
+  return prisma.task.count({
+    where: {
+      status: 'IN_REVIEW',
+      project: visibility,
+    },
+  });
+}
+
+export async function listPendingApprovals(principal: Principal) {
+  const canReview = hasPermissionAnywhere(principal, 'pm.progress.review');
+  const isManager = principal.memberProjectIds.length > 0;
+  if (!canReview && !isManager) return [];
+
+  const visibility = projectVisibilityWhere(principal);
+  return prisma.task.findMany({
+    where: {
+      status: 'IN_REVIEW',
+      project: visibility,
+    },
+    include: {
+      project: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          clientName: true,
+        },
+      },
+      assignments: {
+        where: { status: 'ACTIVE' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              avatarColor: true,
+              designation: true,
+              grade: true,
+            },
+          },
+        },
+      },
+      progressLogs: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: {
+          note: true,
+          blocker: true,
+          createdAt: true,
+          user: { select: { fullName: true } },
+        },
+      },
+    },
+    orderBy: { updatedAt: 'desc' },
+  });
+}
+
 

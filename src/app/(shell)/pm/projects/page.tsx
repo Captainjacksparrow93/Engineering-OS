@@ -30,7 +30,7 @@ export default async function ProjectsPage({
         actions={
           canCreate ? (
             <Link href="/pm/projects/new" className="btn btn-primary">
-              Define new project
+              New project
             </Link>
           ) : null
         }
@@ -48,14 +48,19 @@ export default async function ProjectsPage({
             Status
           </label>
           <select id="status" name="status" defaultValue={params.status ?? ''} className="select w-44">
-            <option value="">All</option>
+            <option value="">All statuses</option>
             {['DRAFT', 'PLANNING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED'].map((status) => (
               <option key={status} value={status}>
-                {status.replaceAll('_', ' ').toLowerCase()}
+                {status === 'IN_PROGRESS'
+                  ? 'In progress'
+                  : status === 'ON_HOLD'
+                    ? 'On hold'
+                    : status.charAt(0) + status.slice(1).toLowerCase()}
               </option>
             ))}
           </select>
         </div>
+
         <button type="submit" className="btn btn-secondary mb-0.5">
           Apply
         </button>

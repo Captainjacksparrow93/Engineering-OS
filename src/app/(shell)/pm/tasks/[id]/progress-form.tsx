@@ -17,7 +17,7 @@ export function ProgressForm({ taskId, currentPercent }: { taskId: string; curre
   return (
     <section className="card border-hairline">
       <header className="card-header bg-canvas-soft">
-        <h2 className="card-title">Punch in progress</h2>
+        <h2 className="card-title">Update progress</h2>
         <span className="text-caption text-muted">Currently {currentPercent}%</span>
       </header>
       <form action={action} className="card-body">

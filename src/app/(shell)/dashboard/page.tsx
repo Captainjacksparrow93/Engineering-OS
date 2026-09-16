@@ -32,14 +32,15 @@ export default async function DashboardPage() {
           <div className="flex flex-wrap items-center gap-2">
             {canCreateProject && (
               <Link href="/pm/projects/new" className="btn btn-primary text-xs font-semibold">
-                + New Automation Project
+                New project
               </Link>
             )}
             {canManageTemplates && (
               <Link href="/pm/templates" className="btn btn-secondary text-xs font-medium">
-                Checklist Templates
+                Checklists
               </Link>
             )}
+
             <Link href="/pm/my-work" className="btn btn-secondary text-xs">
               My work
             </Link>

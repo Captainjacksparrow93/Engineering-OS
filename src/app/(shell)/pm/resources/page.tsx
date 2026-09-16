@@ -52,14 +52,15 @@ export default async function ResourcesPage({
   return (
     <>
       <PageHeader
-        title="Resource board"
+        title="Team load"
         subtitle={`Capacity between ${formatDate(from)} and ${formatDate(to)} (Sundays excluded).`}
         actions={
           <Link href="/pm/adhoc" className="btn btn-primary">
-            Assign ad-hoc work
+            Add urgent task
           </Link>
         }
       />
+
 
       <form className="mb-4 flex flex-wrap items-end gap-2" action="/pm/resources">
         <div>

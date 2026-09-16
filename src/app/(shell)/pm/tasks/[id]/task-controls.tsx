@@ -11,14 +11,14 @@ import { FormMessage, SubmitButton } from '@/components/form';
 import { formatName } from '@/core/utils/strings';
 
 const NEXT_STATUS: Record<string, Array<{ value: string; label: string; variant?: 'primary' | 'secondary' }>> = {
-  DRAFT: [{ value: 'TODO', label: 'Release to the queue', variant: 'primary' }],
-  BLOCKED: [{ value: 'IN_PROGRESS', label: 'Resolve Roadblock & Resume', variant: 'primary' }],
+  DRAFT: [{ value: 'TODO', label: 'Release to queue', variant: 'primary' }],
+  BLOCKED: [{ value: 'IN_PROGRESS', label: 'Problem solved – resume', variant: 'primary' }],
   TODO: [{ value: 'IN_PROGRESS', label: 'Start work', variant: 'primary' }],
   IN_PROGRESS: [
-    { value: 'COMPLETED', label: 'Mark complete', variant: 'primary' },
+    { value: 'IN_REVIEW', label: 'Submit for review', variant: 'primary' },
   ],
   IN_REVIEW: [
-    { value: 'COMPLETED', label: 'Approve & complete', variant: 'primary' },
+    { value: 'COMPLETED', label: 'Approve', variant: 'primary' },
     { value: 'IN_PROGRESS', label: 'Send back', variant: 'secondary' },
   ],
   COMPLETED: [{ value: 'IN_PROGRESS', label: 'Reopen', variant: 'secondary' }],
@@ -81,7 +81,7 @@ export function TaskControls({
             }}
             className="rounded-lg border border-error/20 bg-error/[0.04] p-3 space-y-2"
           >
-            <p className="text-caption font-semibold uppercase tracking-wider text-error">Raise a Roadblock</p>
+            <p className="text-caption font-semibold uppercase tracking-wider text-error">Report a problem</p>
             <textarea
               name="comment"
               required
@@ -90,7 +90,7 @@ export function TaskControls({
               placeholder="What is blocking this task? (e.g. Awaiting client drawing signoff)"
             />
             <button type="submit" className="btn btn-sm w-full bg-error text-white hover:opacity-90">
-              Flag Roadblock
+              Report a problem
             </button>
           </form>
         ) : null}

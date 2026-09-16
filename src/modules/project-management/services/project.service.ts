@@ -11,7 +11,9 @@ import { notify } from '@/core/notifications/notify';
 import { assertProjectPermission, assertProjectVisible, projectVisibilityWhere } from './access';
 import type { CreateProjectInput, UpdateProjectInput } from '../validation/schemas';
 import { computeSchedule, rollUpProgress, type Graph } from '../domain/scheduling';
+import { projectProgress } from '../domain/portfolio';
 import { formatName } from '@/core/utils/strings';
+
 
 /**
  * Project lifecycle.
@@ -269,6 +271,10 @@ export async function listProjects(principal: Principal, filters: ProjectListFil
     const blocked = rows.filter((r) => r.status === 'BLOCKED').reduce((sum, r) => sum + r._count._all, 0);
     const estimated = rows.reduce((sum, r) => sum + (r._sum.estimatedHours ?? 0), 0);
     const actual = rows.reduce((sum, r) => sum + (r._sum.actualHours ?? 0), 0);
+    const totalEstimated = rows.reduce((sum, r) => sum + (r._sum.estimatedHours ?? 0), 0);
+    const completedEstimated = rows.filter((r) => r.status === 'COMPLETED').reduce((sum, r) => sum + (r._sum.estimatedHours ?? 0), 0);
+    const progressPercent = total === 0 ? 0 : totalEstimated > 0 ? Math.round((completedEstimated / totalEstimated) * 100) : Math.round((completed / total) * 100);
+
     return {
       ...project,
       orderValue: project.orderValue ? Number(project.orderValue) : null,
@@ -278,7 +284,7 @@ export async function listProjects(principal: Principal, filters: ProjectListFil
         blockedCount: blocked,
         estimatedHours: Math.round(estimated),
         actualHours: Math.round(actual),
-        progressPercent: total === 0 ? 0 : Math.round((completed / total) * 100),
+        progressPercent,
       },
     };
   });
@@ -312,7 +318,9 @@ export async function getProjectWorkspace(principal: Principal, projectId: strin
       assignments: {
         where: { status: { in: ['ACTIVE', 'COMPLETED'] } },
         orderBy: { assignedAt: 'desc' },
-        include: { user: { select: { id: true, fullName: true, avatarColor: true } } },
+        include: {
+          user: { select: { id: true, fullName: true, avatarColor: true, designation: true, grade: true } },
+        },
       },
       _count: { select: { children: true, dependencies: true, handovers: true } },
     },
@@ -331,7 +339,7 @@ export async function getProjectWorkspace(principal: Principal, projectId: strin
       id: t.id,
       code: t.code,
       title: t.title,
-      status: t.status,
+      status: t.status as never,
       estimatedHours: t.estimatedHours,
       percentComplete: t.percentComplete,
       plannedStart: t.plannedStart,
@@ -351,20 +359,23 @@ export async function getProjectWorkspace(principal: Principal, projectId: strin
   try {
     schedule = computeSchedule(graph, project.startDate ?? new Date());
   } catch (error) {
-    // A cycle should be impossible (insert-time detection), but the workspace must
-    // still render so somebody can go in and break the loop.
     scheduleError = error instanceof Error ? error.message : 'Schedule could not be computed.';
   }
 
   const rollup = rollUpProgress(graph.tasks);
-  const openTasks = tasks.filter((t) => !['COMPLETED', 'CANCELLED'].includes(t.status));
+
+  const openTasks = tasks.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED');
   const estimatedHours = tasks.reduce((sum, t) => sum + t.estimatedHours, 0);
   const actualHours = tasks.reduce((sum, t) => sum + t.actualHours, 0);
 
   return {
-    project: { ...project, orderValue: project.orderValue ? Number(project.orderValue) : null },
+    project: {
+      ...project,
+      orderValue: project.orderValue ? Number(project.orderValue) : null,
+    },
     tasks: tasks.map((t) => ({
       ...t,
+      percentComplete: rollup.get(t.id) ?? t.percentComplete,
       rolledUpPercent: rollup.get(t.id) ?? t.percentComplete,
       schedule: schedule.find((s) => s.taskId === t.id) ?? null,
     })),
@@ -372,6 +383,7 @@ export async function getProjectWorkspace(principal: Principal, projectId: strin
     schedule,
     scheduleError,
     criticalTaskIds: schedule.filter((s) => s.isCritical).map((s) => s.taskId),
+
     summary: {
       taskCount: tasks.length,
       openCount: openTasks.length,
@@ -380,13 +392,11 @@ export async function getProjectWorkspace(principal: Principal, projectId: strin
       overdueCount: openTasks.filter((t) => t.plannedEnd && t.plannedEnd < new Date()).length,
       estimatedHours: Math.round(estimatedHours),
       actualHours: Math.round(actualHours),
-      progressPercent: tasks.length === 0 ? 0 : Math.round(
-        tasks.reduce((sum, t) => sum + (rollup.get(t.id) ?? 0) * t.estimatedHours, 0) /
-          Math.max(1, estimatedHours),
-      ),
+      progressPercent: projectProgress(tasks),
     },
     permissions: {
       canCreateTask: can(principal, 'pm.task.create', { projectId, departmentId: project.departmentId }) || project.managerId === principal.userId,
+      canCreateAdhocTask: can(principal, 'pm.task.adhoc.create', { projectId, departmentId: project.departmentId }) || project.managerId === principal.userId,
       canAssign: can(principal, 'pm.task.assign', { projectId, departmentId: project.departmentId }) || project.managerId === principal.userId,
       canManageDependencies:
         can(principal, 'pm.task.dependency.manage', { projectId, departmentId: project.departmentId }) || project.managerId === principal.userId,

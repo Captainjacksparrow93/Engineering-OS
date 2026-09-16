@@ -1,6 +1,6 @@
 # Engineering OS — Code Audit (for the implementing agent)
 
-Audit date: 2026-09-16 · Commit audited: `785beeb` (branch `main`)
+Audit date: 2026-09-16 · Commit audited: `785beeb` (branch `main`) · Owner decisions final as of 2026-09-16
 Baseline: `npm run typecheck` passes, `npm test` passes (55 tests), `npm audit --omit=dev` reports 3 high (Prisma CLI `deepmerge-ts`, build-time only).
 
 This file is a work order. Each item has: **Where**, **Problem**, **Fix**, **Done when**. Work top to bottom.
@@ -19,6 +19,8 @@ Line numbers refer to commit `785beeb` and may drift — search for the quoted c
 3. Keep diffs minimal. Fix root causes in the shared function, not in each caller.
 4. After each group: `npm run typecheck && npm test && npm run build` must pass.
 5. For every bug fix in a domain engine or service with branching logic, add one small Vitest test that fails without the fix where practical.
+6. **Section 0 is the source of truth.** If any later item conflicts with section 0 (owner decisions), section 0 wins. Items marked "ask owner" are collected in section I. Ask them when you reach that item, not all at once.
+7. **Scope is technical projects only** (0.1a). Don't build anything for other modules or non-technical departments.
 
 ---
 
@@ -37,16 +39,23 @@ The owner confirmed the intended workflow on 2026-09-16. **Everything else in th
 | Rajani Nagar (Head of Service) | **Same rights as Dilip** (create projects + edit checklists). |
 | Vasant (Sales), Kavin (Stores) | **Lose** their PM roles. |
 | Urgent (ad-hoc) tasks | PM (own projects), Heads, Directors. **Not** senior engineers. |
-| Planning a project (add/remove members, add tasks, change task dates or hours) | PM (own projects), Heads, Directors only. |
+| Planning a project (add/remove members, add tasks, change task dates or durations) | PM (own projects), Heads, Directors only. |
 | Project sponsor | **Just a label.** No rights, no special visibility, no special notifications. |
 | Team load for PMs | A PM sees **everyone in the TECH department** (not DESIGN), plus anyone on their own projects. |
 | Directors | All four Directors (`ACS-0001`–`ACS-0004`) have the same full rights. |
 | Upper management | **Every Director and every Technical Head (Dilip, Rajani) is kept in the loop on the whole app.** See 0.7. |
 | Review gate | A task that reaches 100% (or is submitted) goes to **IN_REVIEW**. Only the project's **PM**, a **Head** covering the project's department, or a **Director** may approve (→ COMPLETED) or send back (→ IN_PROGRESS). |
 | Juniors | May press **Start** and **Submit for review** on **their own** tasks. ("Mark complete" for engineers becomes "Submit for review".) |
-| Creating projects & editing checklist templates | **Director + Head of Technical only.** Other department heads (HR, Sales, Stores, Accounts, QC, Purchase, Production, IT) may not. |
+| Creating projects & editing checklist templates | **Directors + Technical Heads only** (Dilip Asediya, Rajani Nagar). Other department heads (HR, Sales, Stores, Accounts, QC, Purchase, Production, IT) may not. |
+| Step completion date | The date the step was **approved** (see 0.8). |
+| Hours | **Not tracked.** No hours entry, no effort figures (see 0.8). |
+| Language | English only. |
+| Notifications | In-app only. No email, WhatsApp, SMS or push. |
 
 ### 0.1a Out of scope for now (owner decision)
+
+**Language:** English only. No i18n framework or translation files.
+**Notifications:** in-app only (bell + notifications page). **No** email, WhatsApp, SMS or push. Don't add channels or dispatchers.
 
 Do **not** build these yet: leave entry/approval screens, change/reset password, editing employee manager/department, a cancel / on-hold project flow. (Team load keeps using leave rows already in the database. The senior "team" rule reads `User.managerId` as seeded.)
 
@@ -76,7 +85,8 @@ TASK
   any open ──Cancel──► CANCELLED ; CANCELLED ──Restore──► TODO   PM / Head / Director only
   Roadblock (any open status)       → BLOCKED with reason   holder, their senior, PM
   Handover (peer consent)           → holder or their senior requests; receiver accepts
-  Reassign (top-down, no consent)   → PM / Head / Director; senior only within their team
+  Reassign (top-down, no consent)   → PM / Head / Director on any task in scope
+  Reassign own task                 → senior engineer, a task they hold, to anyone (0.4 item 2a)
 ```
 
 Remove the direct shortcuts `TODO→COMPLETED`, `IN_PROGRESS→COMPLETED`, `TODO→IN_REVIEW` from `ALLOWED_TRANSITIONS` (`src/modules/project-management/services/task.service.ts:21`).
@@ -91,8 +101,8 @@ Permissions are still checked only through `can` / `assertProjectPermission` / `
    - `pm.task.reassign.own` — Reassign a task you hold to someone else. (`SENIOR_ENGINEER`; see 0.4 item 2a)
    - Remove `pm.task.adhoc.create` from any engineer role. It stays with `DIRECTOR`, `TECHNICAL_HEAD`, `DEPARTMENT_HEAD`, and `PROJECT_MANAGER` (project-scoped).
 2. **Role blueprints** (`SYSTEM_ROLES`):
-   - `DIRECTOR`: add `pm.template.manage`.
-   - **New** `TECHNICAL_HEAD`: everything `DEPARTMENT_HEAD` has **plus** `pm.project.create`, `pm.template.manage`.
+   - `DIRECTOR`: add `pm.template.manage`, `pm.oversight`.
+   - **New** `TECHNICAL_HEAD`: everything `DEPARTMENT_HEAD` has **plus** `pm.project.create`, `pm.template.manage`, `pm.oversight`.
    - `DEPARTMENT_HEAD`: **remove** `pm.project.create`. (Keeps department-scoped oversight but cannot create projects or edit templates.)
    - `PROJECT_MANAGER`: unchanged permission list, but **only ever granted at PROJECT scope** (the create-project and project-handover flows already do this).
    - **New** `PM_BASE` (granted GLOBAL to people eligible to manage projects): `pm.resource.read`, `pm.report.read`, `pm.handover.decide`. No project/task mutation rights. Also used to build the "eligible PM" dropdown in the wizard (replaces the name/grade matching in `getPMTeamData`, see D-4).
@@ -113,7 +123,7 @@ Permissions are still checked only through `can` / `assertProjectPermission` / `
 2. **Team-lead rule (new)**: if any ACTIVE assignee of the task is in the principal's report subtree (`User.managerId` descendants — load once per request, same BFS as `expandDepartmentSubtrees`), the principal gets `pm.task.read`, `pm.progress.log`, `pm.handover.request`. **No** `pm.task.assign` on team members' tasks. Add `reportIds: string[]` to `Principal` (`src/core/rbac/types.ts`) computed in `loadPrincipal`.
 2a. **Reassign own work (new, owner confirmed)**: a holder with the `SENIOR_ENGINEER` role may reassign a task **they currently hold** to **any active employee** in the company. Implement as a permission rather than a role check: add `pm.task.reassign.own` ("Reassign a task you hold to someone else") to `PERMISSIONS`, grant it to `SENIOR_ENGINEER`, and in `assignTask` allow the call when `can(principal, 'pm.task.reassign.own')` **and** the principal holds an ACTIVE OWNER assignment on the task (otherwise require `pm.task.assign` via `assertTaskPermission`). The previous owner (the senior) is released as today; audit `onBehalf: false, selfReassign: true`. Juniors do not get this; they use handover.
 3. **Manager rule** (`MANAGER_IMPLIED`): unchanged; confirm it contains `pm.progress.review`.
-4. **Visibility** (`projectVisibilityWhere`, `assertProjectVisible`): unchanged logic; with the new grants it yields: Director → all; Heads → their department subtree; PMs → **only** projects they manage/sponsor/are members of (never other PMs' projects); engineers → projects they are members of or hold a task on, shown as the **whole plan read-only**; seniors additionally → projects where someone in their team holds a task (add that clause). "Read-only" means `getProjectWorkspace` returns all tasks, and every `permissions.can*` flag is false unless the task-level rules grant it.
+4. **Visibility** (`projectVisibilityWhere`, `assertProjectVisible`): unchanged logic; with the new grants it yields: Director → all; Heads → their department subtree; PMs → **only** projects they manage or are members of (never other PMs' projects; sponsor gives nothing, 0.6); engineers → projects they are members of or hold a task on, shown as the **whole plan read-only**; seniors additionally → projects where someone in their team holds a task (add that clause). "Read-only" means `getProjectWorkspace` returns all tasks, and every `permissions.can*` flag is false unless the task-level rules grant it.
 5. **Status transitions** — in `changeTaskStatus` replace the single `pm.task.update` assert with a per-transition permission:
 
    | Transition | Permission (via `assertTaskPermission`) |
@@ -133,9 +143,9 @@ Permissions are still checked only through `can` / `assertProjectPermission` / `
 - New **Approvals** page `/pm/approvals`: list of IN_REVIEW tasks the viewer may review (PM: own projects; Head: department; Director: all), each with Approve / Send back. Sidebar item with a count badge, visible when the user holds `pm.progress.review` anywhere **or** manages any project. The dashboard "Awaiting approval" tile links here.
 - Templates page and "Checklists" nav: `pm.template.manage`. New-project page, "New project" buttons: `pm.project.create`.
 - Handover form on task page: show for holder and team lead (remove the `!permissions.canAssign` condition at `src/app/(shell)/pm/tasks/[id]/page.tsx:283`).
-- "Raise ad-hoc task" button (`projects/[id]/page.tsx:74`) must use `pm.task.adhoc.create` (currently `canCreateTask`, so seniors see a button that redirects them away).
+- "Raise ad-hoc task" button (`projects/[id]/page.tsx:74`, renamed **Add urgent task** per UX-2) must use `pm.task.adhoc.create` (currently `canCreateTask`, so seniors see a button that redirects them away).
 
-### 0.6a Sponsor becomes a label, and PM team load (owner decisions)
+### 0.6 Sponsor becomes a label, and PM team load (owner decisions)
 
 - Remove every sponsor-based right:
   - `completeAutomationProject` (`isSponsor`)
@@ -167,9 +177,41 @@ Permissions are still checked only through `can` / `assertProjectPermission` / `
 
 3. **Avoid notification overload** (this will be a lot of messages): on the notifications page and in the bell, group oversight notifications by project, e.g. "Monk Media One PLC – 6 updates today", and add a filter *Needs my action / Just for information*. Add a boolean `isOversight` to `core_notifications` (migration) so these can be filtered and grouped. Action-required notifications (approvals, handovers addressed to you) are never grouped away.
 4. Upper management's **Dashboard** (UX-3) already shows everything in their scope. Make sure its "Needs attention" list includes the same event types for Directors (all projects) and Technical Heads (their departments).
-5. Nobody else gets oversight notifications: other department heads, PMs on projects they don't manage, and sponsors (0.6a).
+5. Nobody else gets oversight notifications: other department heads, PMs on projects they don't manage, and sponsors (0.6).
 
-### 0.6 Done when (write these as tests where possible)
+### 0.8 Step dates and hours (owner decisions)
+
+**Problem today:** `Task.actualEnd` is overwritten. `logProgress` sets it at 100% and **clears it** below 100% (`progress.service.ts:63`), and `changeTaskStatus` clears it when a task goes back to IN_PROGRESS (`task.service.ts:188`). There's no reliable "when was this step finished" date.
+
+**Decision 1: a step's completion date = the date it was approved.** The timeline milestone (UX-3b) sits on the approval date. The submitted date is shown in the marker popup.
+
+1. Migration: add to `pm_tasks`:
+   - `submittedAt DateTime?` (last time it entered IN_REVIEW)
+   - `completedAt DateTime?` (set when approved → COMPLETED)
+   - `completedById String?`, a relation to `User`
+   
+   Keep `actualStart`.
+2. Only `changeTaskStatus` writes these:
+   - → IN_REVIEW: `submittedAt = now` (including the automatic move from logging 100%, 0.4 item 6)
+   - IN_REVIEW → COMPLETED: `completedAt = now`, `completedById = principal.userId`
+   - COMPLETED → IN_PROGRESS (reopen): clear `completedAt` / `completedById`; the audit trail keeps the history
+   - send back (IN_REVIEW → IN_PROGRESS): keep `submittedAt` (it's overwritten on the next submit)
+3. `logProgress` must **not** touch `actualEnd`, `submittedAt` or `completedAt` any more. Stop writing `actualEnd` everywhere and treat it as deprecated. In the same migration, backfill `completedAt = actualEnd` for tasks currently COMPLETED, then leave the old column unused. Don't drop it in this change.
+4. `getProjectTimeline` (UX-3b) reads `completedAt` / `completedById` / `submittedAt` straight from the task row. **No audit-log parsing needed.**
+5. "Average approval time" on the Director dashboard (UX-3a) = average of `completedAt − submittedAt` for tasks completed in the period.
+
+**Decision 2: hours are not tracked.** Remove actual-hours tracking from the product:
+- **Update progress form** (`progress-form.tsx`): remove the "Hours since last update" field. `progressSchema`: drop `hoursSpent` from the input.
+- `logProgress`: stop reading or writing `hoursSpent` / `actualHours`.
+- `changeTaskStatus` (`task.service.ts:198–209`): stop creating the synthetic progress log with `hoursSpent`.
+- **Project page:** remove the "Effort 0/928h" tile. **Projects list / `listProjects`**: remove `estimatedHours`/`actualHours` stats from the payload and UI.
+- **Task page:** remove "Effort: Xh spent of Yh".
+- **Handover:** remove "~Nh remaining" from notifications and UI. Show remaining % only. The `remainingHours` column may stay in the DB, unused.
+- Do **not** drop the DB columns (`actualHours`, `hoursSpent`, `remainingHours`) in this change. Leave them unused and note it with a `ponytail:` comment in `schema.prisma`.
+- **Keep `estimatedHours` internally.** Team load (capacity/committed/free), auto-assign and hours-weighted progress (UX-4) depend on it. It's derived from the template's `defaultDurationDays × 8` and is not something engineers enter. Where the UI shows planned effort to users, show it as **days** ("3 days"), not hours.
+- **Supersedes B-9** (lost updates on hours), which no longer applies. Skip it.
+
+### 0.9 Done when (write these as tests where possible)
 
 - Parth cannot open, list, update, assign or delete anything on a project managed by Paras (API and server action return 404).
 - Shivam can start/submit/log on his own tasks and his reports' tasks; gets 403 on a TECH task held by someone outside his team; cannot approve reviews.
@@ -184,6 +226,8 @@ Permissions are still checked only through `can` / `assertProjectPermission` / `
 - Logging 100% moves the task to IN_REVIEW; PM approves → COMPLETED and downstream unblocks.
 - HR/Sales/Stores heads cannot open `/pm/projects/new` or `/pm/templates` and cannot call the actions.
 - Engineers' Projects page lists the projects they work on.
+- A reopened step keeps no stale approval date; re-approving sets a new one. Logging progress never changes `submittedAt`/`completedAt`.
+- No screen shows hours spent or "Effort"; the progress form has no hours field.
 - `grep -rnE "grade === '(DIRECTOR|HEAD|MANAGER)'|roleKeys.includes" src` returns nothing.
 
 ---
@@ -211,9 +255,9 @@ Permissions are still checked only through `can` / `assertProjectPermission` / `
 - **Problem:** Checks `principal.grade === 'DIRECTOR' | 'HEAD'` or `roleKeys.includes(...)`. No project/department scoping and no company check → a Head of any department can approve reviews / complete **any** project.
 - **Fix:**
   - `approveTaskReview` / `disapproveTaskReview`: handled by section 0.4 item 5 (`pm.progress.review` via `assertTaskPermission`).
-  - `completeAutomationProject`: `await assertProjectPermission(principal, projectId, 'pm.project.update');` plus the "all leaf tasks closed" rule from 0.4 item 7. Keep the sponsor allowance only if the owner wants it — otherwise drop it.
+  - `completeAutomationProject`: `await assertProjectPermission(principal, projectId, 'pm.project.update');` plus the "all leaf tasks closed" rule from 0.4 item 7. Remove the sponsor allowance (owner: sponsor is just a label, 0.6).
   - Templates: use `pm.template.manage` from section 0.3 (held by `SUPER_ADMIN`, `DIRECTOR`, `TECHNICAL_HEAD` only). `assertTemplateAdmin` → `if (!hasPermissionAnywhere(principal, 'pm.template.manage')) throw new ForbiddenError(...)`. The templates page redirect and the sidebar "Checklists" item (`src/components/shell/sidebar.tsx`, currently `requires: 'pm.project.create'`) use the same permission.
-  - Sidebar "Other modules" block (`sidebar.tsx`, `isDirector` check) → `hasPermissionAnywhere(principal, 'admin.module.manage')`, or remove the block (see UX-2).
+  - Sidebar "Other modules" block (`sidebar.tsx`, `isDirector` check): **remove the block** (scope is technical projects only, 0.1a and UX-1).
   - Dashboard header buttons (`src/app/(shell)/dashboard/page.tsx:16–44`, `isDirectorOrHead`) → `pm.project.create` for "New project", `pm.template.manage` for "Checklists".
   - `dashboard.service.ts` `isManagement`: keep only the `can(...)` terms.
 - **Done when:** `grep -rnE "grade === '(DIRECTOR|HEAD)'|roleKeys.includes" src` returns nothing outside `src/core/rbac` tests.
@@ -249,8 +293,8 @@ Permissions are still checked only through `can` / `assertProjectPermission` / `
 ### B-1 "Complete project" notifies every employee when there is no sponsor
 - **Where:** `project.service.ts:672–683`
 - **Problem:** `OR: [{ id: project.sponsorId ?? undefined }, ...]` — in Prisma `{ id: undefined }` is an empty filter and matches **all** users.
-- **Fix:** Build the OR list conditionally: `...(project.sponsorId ? [{ id: project.sponsorId }] : [])`. Replace `{ grade: 'HEAD' }` with the role-assignment clause only (A-2 spirit), or a permission-based recipient lookup.
-- **Done when:** Completing a sponsor-less project notifies only department heads.
+- **Fix:** Replace the whole recipient query with `oversightRecipients(...)` from 0.7 plus the PM. No sponsor clause (0.6), no grade clause.
+- **Done when:** Completing a project notifies the PM, the four Directors and the Technical Heads covering it, and nobody else.
 
 ### B-2 Multi-unit automation projects reuse Unit 1's drafts
 - **Where:** `automation-project.service.ts:248–253`
@@ -294,9 +338,8 @@ Permissions are still checked only through `can` / `assertProjectPermission` / `
 - **Problems:** (a) `actualEndDate` is reset to "now" every time a completed project is re-saved (the edit form always sends `status`). (b) `managerId`/`departmentId`/`sponsorId` can be changed directly, bypassing the project-handover consent flow and leaving PROJECT-scoped role assignments stale.
 - **Fix:** (a) set `actualEndDate` only when status transitions *into* COMPLETED (`statusChanged && input.status === 'COMPLETED'`), clear it when moving out. (b) Remove `managerId`, `sponsorId`, `departmentId` from `updateProjectSchema` and from `updateProjectAction` (`src/app/actions/pm.ts:134`); manager changes go through `requestProjectHandover`. Check the edit UI still compiles and drop the manager field there.
 
-### B-9 Lost updates on hours
-- **Where:** `progress.service.ts:29–34, 56–65`
-- **Fix:** Drop the `existingLogs` read; use `actualHours: { increment: input.hoursSpent }` in the update; for the audit diff read the returned row's `actualHours`.
+### B-9 Lost updates on hours — SKIP
+Superseded by 0.8: hours are no longer tracked, so the `existingLogs` hours read in `progress.service.ts:29–34` is simply deleted as part of 0.8.
 
 ### B-10 Status changes that bypass the transition table
 - **Where:** `task.service.ts:757–760` (`flagRoadblock`), `progress.service.ts:49–54`, `task.service.ts:438–448` (`recomputeTaskDerivedState`)
@@ -357,11 +400,11 @@ Permissions are still checked only through `can` / `assertProjectPermission` / `
 ### D-4 Hardcoded people and company data in code
 - `src/modules/project-management/services/dashboard.service.ts:183–195` — teams defined by first-name lists. **Fix:** derive teams from the org chart (`managerId` descendants of each PM, same as C-2).
 - `src/app/(shell)/dashboard/page.tsx:197–240` — card titles "Team 1: Parth Nagar", "Team 2: Paras Prajapati". **Fix:** render from the derived team data (`formatName(manager.fullName)`).
-- `automation-project.service.ts:80–81` — PMs found by `fullName contains 'Parth'/'Paras'`. **Fix:** identify PMs by a PROJECT_MANAGER role assignment (any scope) or grade `MANAGER`; drop the name clauses.
+- `automation-project.service.ts:80–81` — PMs found by `fullName contains 'Parth'/'Paras'`. **Fix:** eligible PMs = active users holding the `PM_BASE` role (0.3); drop the name, designation and grade clauses.
 - `src/core/utils/strings.ts:3–8` — `'Admin Controller' → 'Satish Nagar'`, `Canteen`/`Kichen Cleaning` stripping, `Kumar` suffix stripping. **Fix:** correct the data (seed / user records) and reduce `formatName` to "first + last word". Ask owner before removing the `Kumar` rule.
 - `src/app/login/login-form.tsx:25` placeholder `name@vidyutswitchgear.com` → `name@acsengitech.com` (confirm with owner).
 - `src/core/ai/vertex.ts:31` hardcoded `C:\Users\Dhruv-Home\Downloads\Vertex AI Key.json` → remove; rely on `VERTEX_AI_SERVICE_ACCOUNT_JSON` / `GOOGLE_APPLICATION_CREDENTIALS`. Route env reads through `src/core/config.ts` (add both as optional) — `config.ts` says reading `process.env` elsewhere is a bug. Add `Vertex AI Key.json` and `vertex-key.json` to `.gitignore` and `.dockerignore`.
-- Department codes `['TECH', 'DESIGN']` hardcoded in `availability.service.ts:61, 279` and `automation-project.service.ts:78` → one exported constant (e.g. in `src/modules/project-management/domain/constants.ts`). Ask owner whether it should become config.
+- Department codes `['TECH', 'DESIGN']` hardcoded in `availability.service.ts:61, 279`, `automation-project.service.ts:78` and several pages (`tasks/[id]/page.tsx:68`, `projects/[id]/page.tsx:33`) → one exported constant in `src/modules/project-management/domain/constants.ts` (`TECHNICAL_DEPARTMENT_CODES`). PM team load uses TECH only (0.6). Not configurable for now (technical scope only).
 
 ### D-5 Error messages leak internals
 - **Where:** `run()` / `toState()` in `src/app/actions/pm.ts:56–67`, `src/app/actions/admin.ts:16–24`, and all `catch` blocks returning `error.message` in actions.
@@ -453,7 +496,7 @@ Target (items appear only if the rule in brackets holds):
 | Setup | **People**, **Roles**, **Audit trail** | existing admin permissions |
 
 - Remove the "Ad hoc" nav item. Keep ad-hoc as a button on Dashboard and on a project page ("Add urgent task").
-- Remove the 7 "SOON" module links from the sidebar. At most keep one "All modules" link for admins (`admin.module.manage`).
+- Remove the "Other modules" section entirely (all 7 "SOON" links and the "All modules" link). Scope is technical projects only (0.1a).
 - Root `/` and post-login redirect: to `/pm/my-work` for users without `pm.report.read`, else `/dashboard`. Both `src/app/page.tsx` and `signIn` / `quickSwitchPersona` redirects need this.
 - Header (`src/components/shell/*`): replace "Inbox" text with a bell icon + unread count. Hide the role pill below 768px.
 
@@ -476,11 +519,13 @@ Also make text case consistent: sentence case for labels and options. Status fil
 
 Observed: KPI tiles → "Live projects" table → large red "Roadblocks (0 active)" box even when empty → two hardcoded team cards (Het Patel appears in **both** teams; overloaded people are listed last) → "Recent activity" with test text ("ggg"), raw "Step 4:" prefixes and duplicate entries.
 
-Target (management):
-1. Four tiles, each a **link** to its filtered list: Overdue projects, Problems reported, Awaiting approval (→ `/pm/approvals`), Handovers waiting.
-2. **Needs attention** list (only when non-empty): problems, items awaiting approval, overdue tasks, pending handovers. One row each with a single action.
-3. **Projects** table (existing `LiveProjectsTable`).
-4. Team load summary: only people who are **overloaded** or **free**, sorted by load, grouped by the PM from the org chart (D-4). Link "See team load".
+This section is the **PM dashboard** (users with `pm.report.read` but without `pm.oversight`). Directors and Technical Heads get the Director dashboard (UX-3a) instead. Same components where possible.
+
+Target (PM):
+1. Four tiles, each a **link** to its filtered list: Overdue steps, Problems reported, Awaiting my approval (→ `/pm/approvals`), Handovers waiting. All limited to the PM's own projects.
+2. **Needs attention** list (only when non-empty): problems, items awaiting approval, overdue steps, pending handovers. One row each with a single action.
+3. **My projects** table with the same progress/health as everywhere (UX-4) and the project timeline (UX-3b) for the selected project.
+4. Team load summary: TECH people (0.6) who are **overloaded** or **free**, sorted by load. Link "See team load". No ₹ values on this dashboard.
 5. Remove "Recent activity" from the dashboard (it's in the audit trail), or cap it at 5, deduplicated, with `cleanTaskTitle` applied.
 - Engineers are redirected to My work (UX-1), so the engineer branch of the dashboard can be deleted. That removes the duplicate stats and table they see today.
 
@@ -518,7 +563,7 @@ Top to bottom:
    - tasks approved
    - sent back for rework
    - problems reported / solved
-   - average approval time (IN_REVIEW → COMPLETED)
+   - average approval time (`completedAt − submittedAt`, section 0.8)
 
 Definitions (put them in `src/modules/project-management/domain/portfolio.ts` as pure functions with unit tests):
 - **Forecast finish** = the later of `targetEndDate` and the latest early-finish date from `computeSchedule` (`domain/scheduling.ts`) for open leaf tasks, anchored at today for tasks not started. If the schedule can't be computed, fall back to `targetEndDate`.
@@ -528,7 +573,7 @@ Definitions (put them in `src/modules/project-management/domain/portfolio.ts` as
   - **On track**: otherwise.
   - **On hold**: projects with status ON_HOLD are shown separately and excluded from health counts.
 - **Time elapsed %** = (today − startDate) / (targetEndDate − startDate), clamped 0–100.
-- **Average approval time** comes from audit rows `task.status_changed` (to IN_REVIEW, then to COMPLETED) per task.
+- **Average approval time** = mean of `completedAt − submittedAt` over tasks completed in the period (section 0.8).
 
 Design-system rules (`docs/design-system.md`): Late = `error`, On track = `success`. There is **no third hue**, so *At risk* is an outlined neutral pill (`ink` text, `hairline` border). No shadows; hairline cards on `canvas`. `primary` (orange) only on the **New project** button. Numbers use tabular figures.
 
@@ -554,19 +599,19 @@ Done when: the numbers on this dashboard match the Projects list and project pag
 - Header: project name, PM, "N of M steps done", the project selector (dashboard only).
 - Axis: start date on the left, **target finish** on the right, a few date ticks in between (weekly, or daily for projects shorter than ~3 weeks). If the forecast finish (UX-3a definition) is later than target, extend the axis and mark **Forecast finish** in `error` text.
 - **One lane per unit** (PLC 1, PLC 2, SCADA 1…, i.e. each PHASE task), labelled on the left. A project with no phases gets a single lane.
-- **Completed step**: filled `ink` marker with the step number, positioned at the task's `actualEnd` date (the COMPLETED transition date). The lane is drawn solid from start up to the latest completed step.
+- **Completed step**: filled `ink` marker with the step number, positioned at the task's `completedAt` date (the approval date, 0.8). The lane is drawn solid from start up to the latest completed step.
 - **Upcoming steps**: hollow outlined markers at their `plannedEnd` date, muted. They show what's still ahead.
 - **Late steps**: an upcoming step whose `plannedEnd` has passed gets an `error` outline.
 - **Today**: a dashed vertical line labelled "Today".
 - Markers that fall on the same or nearby dates must not overlap: offset them vertically above/below the lane (as in the mockup), or group them into one marker with a count ("3") that expands on hover/tap.
-- **Hover / tap a marker**: small popover with step number and title (`cleanTaskTitle`), completed date (or planned date), who completed it, and "on time" / "N days late" versus `plannedEnd`. Clicking goes to the task page.
+- **Hover / tap a marker**: small popover with step number and title (`cleanTaskTitle`), submitted date, approved date (or planned date if open), who approved it, and "on time" / "N days late" (approval date vs `plannedEnd`). Clicking goes to the task page.
 - Legend below: Completed step · Upcoming step · Today.
 
 **Data:** one service call, e.g. `getProjectTimeline(principal, projectId)` in `project.service.ts`:
 - Starts with `assertProjectVisible`.
-- Returns start, target and forecast dates, plus lanes → steps `{ taskId, stepNumber, title, status, plannedEnd, completedAt, completedBy }`.
-- `completedAt` / `completedBy` come from `Task.actualEnd` and the audit row `task.status_changed` to COMPLETED (after section 0 this is the review approval). Step number comes from the task's order within its phase (or the template step number if stored; otherwise order by `code`).
-- A single query for tasks plus one for the audit rows. No per-task queries.
+- Returns start, target and forecast dates, plus lanes → steps `{ taskId, stepNumber, title, status, plannedEnd, submittedAt, completedAt, completedBy }`.
+- Milestone position = `Task.completedAt` (the **approval** date, section 0.8). The popup also shows `submittedAt` ("Submitted 15 Sept · Approved 16 Sept by Parth"). Step number comes from the task's order within its phase (or the template step number if stored; otherwise order by `code`).
+- A single query for tasks (with `completedBy` name). No audit-log queries, no per-task queries.
 
 **Build notes:**
 - Plain SVG in a client component (`src/components/project-timeline.tsx`). **No charting library.** Position by date → x with a small pure helper, unit-tested in `domain/` (clamping, same-day grouping).
@@ -581,7 +626,7 @@ Done when: the numbers on this dashboard match the Projects list and project pag
 Observed: *Monk Media One PLC* shows **27 %** on the dashboard and project page but **32 %** on the Projects list. *MMO HMI* shows **On hold** on the Projects list but counts as an active **Overdue** project on the dashboard.
 - Create one `projectProgress(tasks)` helper in `src/modules/project-management/domain/` (hours-weighted over leaf tasks). Use it in `listProjects`, `getProjectWorkspace` and `getDashboard`. Unit-test it.
 - Dashboard "active projects" and health must exclude `ON_HOLD` (or show "On hold" as its own health state). One `projectHealth()` helper, used in all three places.
-- Project page "Effort 0/928h": hide when no hours are logged, or show "No hours logged yet".
+- Project page "Effort 0/928h": remove (hours are not tracked, section 0.8).
 
 ### UX-5 My work (`src/app/(shell)/pm/my-work/*`)
 
@@ -597,7 +642,7 @@ Observed: the Actions card shows up to five competing actions at once: Mark comp
 - Top of page: status pill + **one primary button** for the next step (per section 0.5).
 - "Report a problem": secondary button that opens a small inline form. Not an always-open red box.
 - Manager-only actions (Reassign, Cancel, Delete, Reopen) go into a **"More"** menu.
-- Update progress form: replace the slider with quick choices **25 / 50 / 75 / 100 %** plus a custom number. Keep "Hours spent" and "What moved forward". Default date = today and hide the date field behind "Different day?".
+- Update progress form: replace the slider with quick choices **25 / 50 / 75 / 100 %** plus a custom number, and "What moved forward". **No hours field** (section 0.8). Default date = today and hide the date field behind "Different day?".
 - Show the step number and "Next step: <title>" / "Waiting on: <title>". "Downstream: 0 task(s) wait on this" is confusing, and on step 4 of a 13-step sequence it currently reads 0. Verify template dependencies are actually created (see UX-8).
 - No-access / missing task screen says "may have been deleted" and uses amber palette classes. Say "You don't have access to this task, or it no longer exists", use tokens, and link to My work.
 
@@ -622,7 +667,7 @@ Observed: one long page with 4 numbered sections. The step circles are orange, w
 ### UX-9 Team load (`src/app/(shell)/pm/resources/page.tsx`)
 
 Observed: 30 large cards in alphabetical order. (The current load figures are deliberate test assignments by the owner. This item is about layout, not data.) With real data, anyone overloaded ends up wherever their name falls alphabetically, so a manager has to scroll through every card to find them.
-- Default view: a **compact table** sorted by load (highest first), columns *Person · Load bar · Free hours · Open tasks · Leave*.
+- Default view: a **compact table** sorted by load (highest first), columns *Person · Load bar (%) · Free (days) · Open steps · Leave*. Show capacity in **days**, never hours (0.8).
 - Filter chips: *Overloaded / Busy / Free / On leave*, plus the existing date and department filters.
 - Clicking a person expands their task list inline.
 
@@ -647,6 +692,40 @@ Observed on the engineer dashboard: the user's name wraps next to a large role p
 - Every icon-only button (sidebar collapse, team-panel ⇄ / ✕) needs an `aria-label`.
 - The login screen placeholder uses another company's domain (D-4).
 
+### UX-13 Loading, errors and "not found" (none exist today)
+
+There's no `loading.tsx`, `error.tsx` or `not-found.tsx` anywhere under `src/app`. Every page is `force-dynamic`, so clicks show nothing until the server finishes, and a thrown `ForbiddenError`/`NotFoundError` shows the raw Next.js error screen.
+- Add `src/app/(shell)/loading.tsx`: a skeleton of page header + card, matching layout, using `surface-strong` blocks, no spinners. Add route-specific ones only for Dashboard, Project page and Task page.
+- Add `src/app/(shell)/error.tsx` (client) with plain copy ("Something went wrong loading this page. Try again.") plus a **Try again** button (`reset()`) and a link to My work. Never show `error.message` for unknown errors (D-5).
+- Add `src/app/(shell)/not-found.tsx`, and use `notFound()` in project/task pages when the service throws `NotFoundError` (replaces the inline "Task not found" block in `tasks/[id]/page.tsx:26–48`).
+
+### UX-14 Feedback after every action
+
+- There are no toasts. Actions return `{ success: 'Saved.' }`, which is generic and easy to miss. Add one small toast component (bottom of screen, auto-hide 4s, `role="status"`) and use specific messages: "Sent for review", "Approved – next step unlocked", "Handover sent to Sahil", "Problem reported to Parth".
+- `flagRoadblockAction` is called from an inline form action that **ignores the result** (`task-controls.tsx:73–80`), so failures are silent. Every action must show its error inline and success as a toast.
+- Every submit button shows a pending state and is protected against double-submit (`SubmitButton` already uses `useFormStatus`; apply it to the direct-call actions too: approve, send back, complete project, template edits).
+- Replace `window.confirm` (`src/components/form.tsx:31`, `template-manager.tsx:79`) with a small in-page confirm dialog that states the consequence ("Delete step 5? Later steps will be renumbered."). Use it only for destructive actions (delete, cancel, reopen).
+
+### UX-15 Page titles
+
+The browser tab reads "Engineering OS" on every page (only `src/app/layout.tsx` sets metadata), so several open tabs can't be told apart. Add `generateMetadata`/`metadata` per page: "My work · Engineering OS", "<Project name> · Engineering OS", "<Step title> · <Project> · Engineering OS". Use a `title.template` in the root layout.
+
+### UX-16 One date format
+
+Dates appear as "15 Sept 2026", "16-Sep-2026" (native date input), "20 Sept 2026 → 21 Sept 2026", and "in 14 days" / "1d late".
+- Display: `15 Sept` when in the current year, `15 Sept 2026` otherwise, through the existing `formatDate` in `src/core/utils/dates.ts` everywhere.
+- Relative: always "in 5 days", "today", "2 days late" (no "5d" / "1d"), through one helper.
+- Ranges: "20–21 Sept".
+- Date inputs stay native (`<input type="date">`). Default to sensible values (today; the project's target date).
+
+### UX-17 Quick find
+
+There's no way to jump to a project or step except by clicking through lists. Add a search box in the header (and `Ctrl+K`) that finds **projects** (name, code, client) and **steps** (title, code) the user can see, via one service function that applies `projectVisibilityWhere`. Show up to 8 results grouped by type, keyboard navigable. Nothing more (no filters, no recent history) for now.
+
+### UX-18 Keep counts fresh
+
+The Approvals and Handovers badges, the bell count and the dashboard only update on navigation. On window focus, and every 60s while visible, call `router.refresh()` for the shell's counts (a small client component in the layout; skip when `document.hidden`). No websockets.
+
 ### UX done when
 
 - A junior engineer can go from login → their task → Start → Update progress → Submit for review without seeing a button that fails, and without passing through an empty or unrelated screen.
@@ -658,19 +737,36 @@ Observed on the engineer dashboard: the user's name wraps next to a large role p
 
 ---
 
+## I. Open questions for the owner (ask when you reach the item)
+
+| Item | Question | Default if the owner has no preference |
+|---|---|---|
+| UX-3a | Should the Projects table keep the ₹ **Value** column, and should "Needs attention" rank late projects by order value? | Keep the column; rank by days late × value |
+| B-3 | Should a handover receiver also need the `pm.handover.decide` permission, or is being the receiver enough? | Receiver is enough |
+| B-12 | Fix the outbox claim now, or skip draining while no subscribers exist? | Skip draining when there are no subscribers |
+| C-3 | May employee names and grades be sent to Google Vertex AI for the auto-assign rationale? | Send ids and grades only, no names |
+| D-4 | Remove the "Kumar" name-shortening rule in `formatName`? Change the login placeholder to `name@acsengitech.com`? | Keep the rule; change the placeholder |
+| F-1 | Does `prisma/seed.ts` need to run inside the Docker container? | No |
+| F-3 | Which deploy script is actually used? Which of `AGENTS.md` / `GEMINI.md` / `CLAUDE.md` is the source of truth? | Ask; don't delete until answered |
+| UX-12 | OK to wipe and reseed the local database to remove test data? | Don't wipe; clean the seed file only |
+| Section 0 | Run the grant changes on a copy of the database first? | Yes, then check each persona |
+
+---
+
 ## Suggested order of work
 
 1. **Section 0** — target workflow: roles/permissions, seed grants and reconciliation, relationship rules, status transitions, auto project status, review gate. Includes A-2, A-3 and the `/pm/approvals` page.
 2. A-1, B-1, B-2, B-3, B-5 (small, high-impact bug fixes)
 3. A-4, A-5, B-7, B-8 (validation and write-path consistency)
 4. **UX-1, UX-2, UX-4** (navigation, names, one source for numbers). These make everything after them simpler.
-5. **UX-5, UX-6** (My work and Task page: the engineer's daily path)
-6. **UX-3, UX-3a, UX-3b, UX-7, UX-10** (Dashboards incl. Director dashboard, Project page, Projects list)
-7. **UX-8, UX-9, UX-11, UX-12** (wizard, team load, phone layout, polish)
-8. B-4, B-9, B-10, B-11, B-13
-9. C-1, C-2, C-3
-10. D-1 … D-5
-11. E (design system — also apply while touching each screen in steps 4–7)
-12. F, G
+5. **UX-5, UX-6** (My work and Task page: the engineer's daily path), together with **0.8** step dates / no hours
+6. **UX-13, UX-14, UX-16** (loading/error states, action feedback, one date format), shared pieces every later screen uses
+7. **UX-3, UX-3a, UX-3b, UX-7, UX-10** (PM dashboard, Director dashboard, project timeline, Project page, Projects list)
+8. **UX-8, UX-9, UX-11, UX-12, UX-15, UX-17, UX-18** (wizard, team load, phone layout, polish, titles, quick find, fresh counts)
+9. B-4, B-10, B-11, B-13 (B-9 skipped, see 0.8)
+10. C-1, C-2, C-3
+11. D-1 … D-5
+12. E (design system — also apply while touching each screen in steps 4–8)
+13. F, G
 
 After each step: `npm run typecheck && npm test && npm run build`, then summarize changes for the owner in plain language and wait for "go" before the next step.

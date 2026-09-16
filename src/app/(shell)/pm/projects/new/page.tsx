@@ -1,4 +1,4 @@
-﻿import { redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { PageHeader } from '@/components/ui';
@@ -20,10 +20,11 @@ export default async function NewProjectPage() {
   return (
     <>
       <PageHeader
-        title="Create Automation Project"
-        subtitle="Configure order details, select automation scope (PLC/SCADA/HMI), assign the Project Manager, and schedule the 13 sequential checklist tasks."
-        breadcrumb={[{ label: 'Projects', href: '/pm/projects' }, { label: 'New Automation Project' }]}
+        title="New project"
+        subtitle="Configure order details, select automation scope (PLC/SCADA/HMI), assign the Project Manager, and auto-assign team capacity."
+        breadcrumb={[{ label: 'Projects', href: '/pm/projects' }, { label: 'New project' }]}
       />
+
       <AutomationProjectWizard
         managers={managers}
         teamsByPM={teamsByPM}

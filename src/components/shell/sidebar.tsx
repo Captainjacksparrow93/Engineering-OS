@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import clsx from 'clsx';
-import { MODULES } from '@/core/modules/registry';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import type { PermissionKey } from '@/core/rbac/permissions';
 import type { Principal } from '@/core/rbac/types';
@@ -103,17 +102,18 @@ const Icons = {
 const WORKSPACE_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: Icons.Dashboard },
   { label: 'My work', href: '/pm/my-work', icon: Icons.MyWork },
+  { label: 'Approvals', href: '/pm/approvals', requires: 'pm.progress.review', icon: Icons.Audit },
   { label: 'Handovers', href: '/pm/handovers', icon: Icons.Handovers },
-  { label: 'Ad hoc', href: '/pm/adhoc', requires: 'pm.task.adhoc.create', icon: Icons.AdHoc },
+  { label: 'Urgent task', href: '/pm/adhoc', requires: 'pm.task.adhoc.create', icon: Icons.AdHoc },
 ];
 
 const MANAGEMENT_NAV: NavItem[] = [
   { label: 'Projects', href: '/pm/projects', requires: 'pm.project.read', icon: Icons.Projects },
-  { label: 'Resource', href: '/pm/resources', requires: 'pm.resource.read', icon: Icons.Resources },
+  { label: 'Team load', href: '/pm/resources', requires: 'pm.resource.read', icon: Icons.Resources },
 ];
 
 const ADMIN_NAV: NavItem[] = [
-  { label: 'Checklists', href: '/pm/templates', requires: 'pm.project.create', icon: Icons.MyWork },
+  { label: 'Checklists', href: '/pm/templates', requires: 'pm.template.manage', icon: Icons.MyWork },
   { label: 'People', href: '/admin/users', requires: 'admin.user.read', icon: Icons.People },
   { label: 'Roles & permissions', href: '/admin/roles', requires: 'admin.role.read', icon: Icons.Roles },
   { label: 'Audit trail', href: '/admin/audit', requires: 'admin.audit.read', icon: Icons.Audit },
@@ -122,16 +122,21 @@ const ADMIN_NAV: NavItem[] = [
 export function Sidebar({
   principal,
   pendingHandovers = 0,
+  pendingApprovals = 0,
 }: {
   principal: Principal;
   pendingHandovers?: number;
+  pendingApprovals?: number;
 }) {
   const { isCollapsed, toggleCollapsed } = useShell();
 
-  const visible = (item: NavItem) => !item.requires || hasPermissionAnywhere(principal, item.requires);
+  const visible = (item: NavItem) => {
+    if (item.href === '/pm/approvals') {
+      return hasPermissionAnywhere(principal, 'pm.progress.review') || principal.memberProjectIds.length > 0;
+    }
+    return !item.requires || hasPermissionAnywhere(principal, item.requires);
+  };
   const adminItems = ADMIN_NAV.filter(visible);
-  const upcoming = MODULES.filter((m) => m.status === 'COMING_SOON');
-  const canManageModules = hasPermissionAnywhere(principal, 'admin.module.manage');
 
   return (
     <aside
@@ -145,13 +150,14 @@ export function Sidebar({
         {!isCollapsed ? (
           <div className="flex items-center justify-between w-full">
             <Link href="/dashboard" className="flex items-baseline gap-xxs" title="Engineering OS · ACS Engitech Pvt Ltd">
-              <span className="text-display-sm text-primary font-bold">Engineering</span>
+              <span className="text-display-sm text-primary">Engineering</span>
               <span className="text-display-sm text-ink">OS</span>
             </Link>
             <button
               type="button"
               onClick={toggleCollapsed}
               title="Collapse sidebar (Ctrl+B)"
+              aria-label="Collapse sidebar"
               className="inline-flex items-center justify-center rounded-md border border-hairline p-1.5 text-muted hover:bg-surface-strong hover:text-ink transition-colors"
             >
               {Icons.Collapse}
@@ -162,6 +168,7 @@ export function Sidebar({
             type="button"
             onClick={toggleCollapsed}
             title="Expand sidebar (Ctrl+B)"
+            aria-label="Expand sidebar"
             className="inline-flex items-center justify-center rounded-md border border-hairline p-1.5 text-muted hover:bg-surface-strong hover:text-ink transition-colors"
           >
             {Icons.Expand}
@@ -185,7 +192,13 @@ export function Sidebar({
                 href={item.href}
                 label={item.label}
                 icon={item.icon}
-                badge={item.href === '/pm/handovers' ? pendingHandovers : undefined}
+                badge={
+                  item.href === '/pm/handovers'
+                    ? pendingHandovers
+                    : item.href === '/pm/approvals'
+                      ? pendingApprovals
+                      : undefined
+                }
                 collapsed={isCollapsed}
               />
             ))}
@@ -206,7 +219,6 @@ export function Sidebar({
                 href={item.href}
                 label={item.label}
                 icon={item.icon}
-                badge={item.href === '/pm/handovers' ? pendingHandovers : undefined}
                 collapsed={isCollapsed}
               />
             ))}
@@ -225,31 +237,8 @@ export function Sidebar({
             ))}
           </div>
         ) : null}
-
-        {canManageModules ? (
-          <>
-            {!isCollapsed ? (
-              <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Other modules</p>
-            ) : (
-              <div className="my-2 border-t border-hairline-soft" />
-            )}
-            <NavLink href="/modules" label="All modules" icon={Icons.Modules} collapsed={isCollapsed} />
-
-            {!isCollapsed ? (
-              upcoming.map((module) => (
-                <Link
-                  key={module.key}
-                  href={module.route}
-                  className="flex items-center justify-between gap-xs rounded-sm px-sm py-1.5 text-nav-link text-muted-soft hover:bg-canvas-soft hover:text-body"
-                >
-                  <span className="truncate">{module.name}</span>
-                  <span className="shrink-0 text-caption-uppercase uppercase text-muted-soft">soon</span>
-                </Link>
-              ))
-            ) : null}
-          </>
-        ) : null}
       </nav>
+
 
       {/* Bottom Footer */}
       <div className="border-t border-hairline shrink-0 px-3 py-2.5 flex items-center h-[41px] bg-canvas text-caption text-muted-soft">
