@@ -10,6 +10,8 @@ const schema = z.object({
   SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(43_200),
   APP_URL: z.string().url().default('http://localhost:3000'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  VERTEX_AI_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
 });
 
 let cached: z.infer<typeof schema> | null = null;

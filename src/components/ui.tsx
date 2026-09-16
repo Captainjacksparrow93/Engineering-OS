@@ -34,7 +34,7 @@ export function Avatar({
 
   // The stored per-person colour is used at low opacity only: enough to tell people
   // apart at a glance without introducing saturated colour into a restrained palette.
-  const tint = color ? `${color}22` : '#e6e5e0';
+  const tint = color ? `${color}22` : 'var(--color-surface-strong)';
 
   return (
     <span

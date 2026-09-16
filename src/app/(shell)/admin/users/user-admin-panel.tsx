@@ -181,7 +181,7 @@ export function UserAdminPanel({
             <p className="hint">Scoped to their department automatically.</p>
           </div>
           <div className="flex items-end">
-            <SubmitButton variant="primary" className="w-full font-semibold shadow-sm">
+            <SubmitButton variant="primary" className="w-full font-semibold">
               Create account
             </SubmitButton>
           </div>
@@ -242,7 +242,7 @@ export function UserAdminPanel({
             </select>
           </div>
           <div className="flex items-end">
-            <SubmitButton variant="primary" className="w-full font-semibold shadow-sm">
+            <SubmitButton variant="primary" className="w-full font-semibold">
               Grant
             </SubmitButton>
           </div>
@@ -273,7 +273,7 @@ export function UserAdminPanel({
             <p className="hint">Suspending or exiting revokes every live session immediately.</p>
           </div>
           <div className="flex items-end">
-            <SubmitButton variant="primary" className="w-full font-semibold shadow-sm" confirm="Change this account's status?">
+            <SubmitButton variant="primary" className="w-full font-semibold" confirm="Change this account's status?">
               Apply
             </SubmitButton>
           </div>

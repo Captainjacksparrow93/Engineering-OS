@@ -176,7 +176,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
                           <p className="font-medium text-ink text-sm inline-flex items-center gap-2">
                             <span>{item.title}</span>
                             {item.isSimulationSignoff && (
-                              <span className="badge bg-purple-100 text-purple-800 text-xs">Sign-off Gate</span>
+                              <span className="badge badge-neutral text-xs">Sign-off Gate</span>
                             )}
                           </p>
                         </div>
@@ -195,12 +195,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
                           <option value="TRAINEE">Trainee Engineer</option>
                         </select>
                       ) : (
-                        <span className={`badge text-xs ${
-                          item.recommendedSeniority === 'ASST_MANAGER' ? 'bg-indigo-100 text-indigo-800' :
-                          item.recommendedSeniority === 'SENIOR' ? 'bg-blue-100 text-blue-800' :
-                          item.recommendedSeniority === 'JUNIOR' ? 'bg-emerald-100 text-emerald-800' :
-                          'bg-amber-100 text-amber-800'
-                        }`}>
+                        <span className="badge badge-neutral text-xs">
                           {SENIORITY_LABELS[item.recommendedSeniority] ?? item.recommendedSeniority}
                         </span>
                       )}
@@ -276,7 +271,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
       {/* Add Subtask Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="card w-full max-w-lg bg-surface shadow-2xl animate-in fade-in zoom-in-95">
+          <div className="card w-full max-w-lg bg-surface animate-in fade-in zoom-in-95">
             <header className="card-header flex items-center justify-between border-b border-hairline pb-3">
               <h3 className="card-title text-base font-semibold">Add Subtask to {activeTemplate?.name}</h3>
               <button

@@ -16,6 +16,7 @@ import {
   type WorkloadAssignment,
   type WorkloadPerson,
 } from '../domain/availability';
+import { TECHNICAL_DEPARTMENT_CODES } from '../domain/constants';
 import { generateWithGemini } from '@/core/ai/vertex';
 
 export interface ScopeSelection {
@@ -98,7 +99,7 @@ export async function getPMTeamData(companyId: string) {
       OR: [
         { roleAssignments: { some: { role: { key: { in: ['PM_BASE', 'PROJECT_MANAGER'] } } } } },
         { designation: { contains: 'Project Manager', mode: 'insensitive' } },
-        { grade: 'MANAGER', department: { code: { in: ['TECH', 'DESIGN'] } } },
+        { grade: 'MANAGER', department: { code: { in: [...TECHNICAL_DEPARTMENT_CODES] } } },
       ],
       NOT: [
         { designation: { contains: 'Director', mode: 'insensitive' } },

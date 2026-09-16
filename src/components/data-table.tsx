@@ -355,7 +355,7 @@ export function DataTable<T>({
 
       {/* Column Customizer Popover */}
       {settingsOpen ? (
-        <div className="absolute right-0 top-full z-30 mt-1 w-60 rounded-lg border border-hairline bg-surface p-3 shadow-lg">
+        <div className="absolute right-0 top-full z-30 mt-1 w-60 rounded-lg border border-hairline bg-surface p-3">
           <div className="flex items-center justify-between pb-2 border-b border-hairline">
             <span className="text-caption font-semibold text-ink">Customize Columns</span>
             <button

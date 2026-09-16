@@ -14,6 +14,7 @@ import {
   type Workload,
   type WorkloadAssignment,
 } from '../domain/availability';
+import { TECHNICAL_DEPARTMENT_CODES } from '../domain/constants';
 
 /**
  * The resource board.
@@ -59,7 +60,7 @@ export async function getWorkloads(principal: Principal, query: AvailabilityQuer
     where: {
       companyId: principal.companyId,
       status: 'ACTIVE',
-      department: { code: { in: ['TECH', 'DESIGN'] } },
+      department: { code: { in: [...TECHNICAL_DEPARTMENT_CODES] } },
       NOT: [{ designation: { contains: 'Director' } }, { grade: 'DIRECTOR' }],
       ...visibilityFilter(principal, query),
       ...(query.projectId ? { projectMembers: { some: { projectId: query.projectId } } } : {}),
@@ -281,7 +282,7 @@ export async function peersForHandover(principal: Principal, taskId: string) {
     where: {
       companyId: principal.companyId,
       status: 'ACTIVE',
-      department: { code: { in: ['TECH', 'DESIGN'] } },
+      department: { code: { in: [...TECHNICAL_DEPARTMENT_CODES] } },
       NOT: [{ designation: { contains: 'Director' } }, { grade: 'DIRECTOR' }],
       id: { notIn: [...held, principal.userId] },
       OR: [

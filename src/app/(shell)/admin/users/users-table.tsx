@@ -315,7 +315,7 @@ export function UsersTable({
 
           {/* Slide-out Drawer */}
           <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-            <div className="w-screen max-w-md bg-surface border-l border-hairline shadow-2xl flex flex-col">
+            <div className="w-screen max-w-md bg-surface border-l border-hairline flex flex-col">
               {/* Header */}
               <div className="flex items-center justify-between p-base border-b border-hairline bg-canvas-soft">
                 <div className="flex items-center gap-3 min-w-0">

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as jose from 'jose';
+import { config } from '@/core/config';
 
 interface ServiceAccountKey {
   project_id: string;
@@ -15,20 +16,21 @@ let cachedToken: { token: string; expiresAt: number } | null = null;
 function loadServiceAccountKey(): ServiceAccountKey | null {
   if (cachedKey) return cachedKey;
 
+  const cfg = config();
+
   // 1. Check environment variable for raw JSON
-  if (process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON) {
+  if (cfg.VERTEX_AI_SERVICE_ACCOUNT_JSON) {
     try {
-      cachedKey = JSON.parse(process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON);
+      cachedKey = JSON.parse(cfg.VERTEX_AI_SERVICE_ACCOUNT_JSON);
       return cachedKey;
     } catch {
       // ignore
     }
   }
 
-  // 2. Check GOOGLE_APPLICATION_CREDENTIALS or default Windows downloads location
+  // 2. Check configured credentials path or local repo key
   const potentialPaths = [
-    process.env.GOOGLE_APPLICATION_CREDENTIALS,
-    'C:\\Users\\Dhruv-Home\\Downloads\\Vertex AI Key.json',
+    cfg.GOOGLE_APPLICATION_CREDENTIALS,
     path.join(process.cwd(), 'Vertex AI Key.json'),
     path.join(process.cwd(), 'vertex-key.json'),
   ].filter(Boolean) as string[];
@@ -48,7 +50,7 @@ function loadServiceAccountKey(): ServiceAccountKey | null {
   return null;
 }
 
-async function getAccessToken(key: ServiceAccountKey): Promise<string | null> {
+async function getAccessToken(key: ServiceAccountKey, timeoutMs: number = 5000): Promise<string | null> {
   const now = Math.floor(Date.now() / 1000);
   if (cachedToken && cachedToken.expiresAt > now + 60) {
     return cachedToken.token;
@@ -66,6 +68,9 @@ async function getAccessToken(key: ServiceAccountKey): Promise<string | null> {
       .setExpirationTime(now + 3600)
       .sign(pkcs8Key);
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
     const tokenRes = await fetch(key.token_uri || 'https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -73,7 +78,10 @@ async function getAccessToken(key: ServiceAccountKey): Promise<string | null> {
         grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
         assertion: jwt,
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timer);
 
     if (!tokenRes.ok) {
       return null;

@@ -52,12 +52,12 @@ export default async function HandoversPage() {
               {incomingProjects.length > 0 ? (
                 <div className="space-y-3">
                   {incomingProjects.map((handover) => (
-                    <div key={handover.id} className="rounded-lg border-2 border-primary/30 bg-primary/[0.04] p-3.5 shadow-sm">
+                    <div key={handover.id} className="rounded-lg border-2 border-primary/30 bg-primary/[0.04] p-3.5">
                       <div className="mb-2 flex items-start gap-2.5">
                         <Avatar name={formatName(handover.fromUser.fullName)} color={handover.fromUser.avatarColor} size={32} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className="badge bg-primary text-white font-semibold text-xs uppercase tracking-wider">Project Handover</span>
+                            <span className="badge bg-ink text-canvas font-semibold text-xs uppercase tracking-wider">Project Handover</span>
                             <PriorityBadge priority={handover.project.priority} />
                           </div>
                           <p className="text-body-sm text-ink font-semibold">
