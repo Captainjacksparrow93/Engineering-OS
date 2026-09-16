@@ -3,15 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { requirePrincipal } from '@/core/auth/session';
 import { assignRole, createUser, revokeRole, setRolePermissions, setUserStatus } from '@/modules/admin/services/admin.service';
-import { toState, type ActionState } from './pm';
+import { toState, value, type ActionState } from '@/core/utils/actions';
 import type { ScopeType } from '@prisma/client';
 
-const value = (form: FormData, key: string) => {
-  const raw = form.get(key);
-  if (raw === null) return undefined;
-  const text = String(raw).trim();
-  return text === '' ? undefined : text;
-};
 
 async function run(fn: () => Promise<unknown>, paths: string[]): Promise<ActionState> {
   try {
