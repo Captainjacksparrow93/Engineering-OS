@@ -2,16 +2,18 @@
 
 import { redirect } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
+import { createAutomationProjectSchema } from '@/modules/project-management/validation/schemas';
 import {
   createAutomationProject,
   type CreateAutomationProjectInput,
 } from '@/modules/project-management/services/automation-project.service';
 
-export async function createAutomationProjectAction(input: CreateAutomationProjectInput) {
+export async function createAutomationProjectAction(rawInput: CreateAutomationProjectInput) {
   const principal = await requirePrincipal();
   let projectId: string | null = null;
 
   try {
+    const input = createAutomationProjectSchema.parse(rawInput);
     const project = await createAutomationProject(principal, input);
     projectId = project.id;
   } catch (error) {

@@ -32,7 +32,9 @@ export const createProjectSchema = z.object({
   departmentId: z.string().optional(),
 });
 
-export const updateProjectSchema = createProjectSchema.partial().omit({ code: true });
+export const updateProjectSchema = createProjectSchema
+  .partial()
+  .omit({ code: true, managerId: true, sponsorId: true, departmentId: true });
 
 export const createTaskSchema = z
   .object({
@@ -117,6 +119,88 @@ export const availabilityQuerySchema = z.object({
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
 });
 
+export const createAutomationProjectSchema = z.object({
+  name: z.string().trim().min(3, 'Project name is too short').max(160),
+  code: z
+    .string()
+    .trim()
+    .regex(/^[A-Z0-9][A-Z0-9-]{2,19}$/, 'Use 3-20 uppercase letters, digits or dashes')
+    .optional(),
+  clientName: z.string().trim().min(2, 'Client name is required').max(160),
+  poNumber: z.string().trim().max(60).optional(),
+  orderValue: z.coerce.number().nonnegative().optional(),
+  managerId: z.string().min(1, 'Pick a project manager'),
+  departmentId: z.string().optional(),
+  startDate: z.string().optional(),
+  targetEndDate: z.string().optional(),
+  scopes: z
+    .array(
+      z.object({
+        templateCode: z.string().min(1),
+        name: z.string().min(1),
+        quantity: z.coerce.number().int().min(1).max(20),
+      }),
+    )
+    .min(1, 'Select at least one automation scope')
+    .max(20),
+  tasks: z
+    .array(
+      z.object({
+        templateCode: z.string().min(1),
+        unitIndex: z.coerce.number().int().min(1).max(20).optional(),
+        stepNumber: z.coerce.number().int().min(1).max(100),
+        title: z.string().trim().min(1).max(200),
+        assigneeId: z.string().optional(),
+        plannedStart: z.string().optional(),
+        plannedEnd: z.string().optional(),
+        estimatedHours: z.coerce.number().min(0.5).max(1000).optional(),
+      }),
+    )
+    .max(500),
+});
+
+export const autoAssignTeamSchema = z.object({
+  managerId: z.string().min(1),
+  startDate: z.string().optional(),
+  scopes: z
+    .array(
+      z.object({
+        templateCode: z.string().min(1),
+        name: z.string().min(1),
+        quantity: z.coerce.number().int().min(1).max(20),
+      }),
+    )
+    .max(20),
+  tasks: z
+    .array(
+      z.object({
+        templateCode: z.string().min(1),
+        unitIndex: z.coerce.number().int().min(1).max(20).optional(),
+        stepNumber: z.coerce.number().int().min(1).max(100),
+        title: z.string().trim().min(1).max(200),
+        assigneeId: z.string().optional(),
+        plannedStart: z.string().optional(),
+        plannedEnd: z.string().optional(),
+        estimatedHours: z.coerce.number().min(0.5).max(1000).optional(),
+      }),
+    )
+    .max(500),
+});
+
+export const templateItemSchema = z.object({
+  title: z.string().trim().min(3, 'Title is too short').max(200),
+  description: z.string().trim().max(4000).optional(),
+  recommendedSeniority: z.string().trim().optional(),
+  defaultDurationDays: z.coerce.number().min(0.5).max(365).optional(),
+  dependsOnStep: z.coerce.number().int().min(1).max(100).nullable().optional(),
+});
+
+export const updateTemplateItemSchema = templateItemSchema.partial();
+
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
+export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type ProgressInput = z.infer<typeof progressSchema>;
+export type CreateAutomationProjectInputSchema = z.infer<typeof createAutomationProjectSchema>;
+export type AutoAssignTeamInputSchema = z.infer<typeof autoAssignTeamSchema>;
+export type TemplateItemInputSchema = z.infer<typeof templateItemSchema>;

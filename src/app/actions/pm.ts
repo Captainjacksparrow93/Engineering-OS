@@ -6,6 +6,7 @@ import { requirePrincipal } from '@/core/auth/session';
 import { drainOutbox } from '@/core/events/bus';
 import {
   assignTaskSchema,
+  autoAssignTeamSchema,
   changeTaskStatusSchema,
   createProjectSchema,
   createTaskSchema,
@@ -131,7 +132,6 @@ export async function updateProjectAction(_prev: ActionState, form: FormData): P
       status: value(form, 'status'),
       startDate: value(form, 'startDate') ?? '',
       targetEndDate: value(form, 'targetEndDate') ?? '',
-      managerId: value(form, 'managerId'),
     });
     return updateProject(principal, projectId, input);
   });
@@ -519,9 +519,10 @@ export async function reassignMemberTasksAction(_prev: ActionState, form: FormDa
   return state;
 }
 
-export async function autoAssignAutomationTeamAction(input: import('@/modules/project-management/services/automation-project.service').AutoAssignTeamInput) {
+export async function autoAssignAutomationTeamAction(rawInput: unknown) {
   const principal = await requirePrincipal();
   try {
+    const input = autoAssignTeamSchema.parse(rawInput);
     const { autoAssignAutomationTeam } = await import('@/modules/project-management/services/automation-project.service');
     const result = await autoAssignAutomationTeam(principal, input);
     return { success: true, assignments: result.assignments };

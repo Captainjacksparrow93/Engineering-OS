@@ -19,19 +19,20 @@ import { generateWithGemini } from '@/core/ai/vertex';
 
 export interface ScopeSelection {
   templateCode: string; // "PLC" | "SCADA" | "HMI"
+  name?: string;
   quantity: number;
 }
 
 export interface TaskAssignmentDraft {
   templateCode: string;
-  unitIndex: number; // 1, 2, ...
+  unitIndex?: number; // 1, 2, ...
   stepNumber: number;
   title: string;
   assigneeId?: string;
-  plannedStart: string; // YYYY-MM-DD
-  plannedEnd: string;   // YYYY-MM-DD
-  durationDays: number;
-  estimatedHours: number;
+  plannedStart?: string; // YYYY-MM-DD
+  plannedEnd?: string;   // YYYY-MM-DD
+  durationDays?: number;
+  estimatedHours?: number;
 }
 
 export interface CreateAutomationProjectInput {
@@ -43,6 +44,7 @@ export interface CreateAutomationProjectInput {
   targetEndDate?: string;
   startDate?: string;
   managerId: string;
+  departmentId?: string;
   scopes: ScopeSelection[];
   tasks: TaskAssignmentDraft[];
 }
@@ -130,8 +132,31 @@ export async function createAutomationProject(principal: Principal, input: Creat
   });
   if (!manager) throw new DomainError('Selected Project Manager not found or inactive.');
 
-  assertCan(principal, 'pm.project.create', { departmentId: manager.departmentId ?? principal.departmentId });
+  const departmentId = input.departmentId || manager.departmentId || principal.departmentId;
+  assertCan(principal, 'pm.project.create', { departmentId: departmentId ?? undefined });
 
+  // Validate all assignees belong to company and are active
+  const assigneeIds = input.tasks
+    .map((t) => t.assigneeId)
+    .filter((id): id is string => Boolean(id) && id !== manager.id);
+
+  if (assigneeIds.length > 0) {
+    const uniqueIds = Array.from(new Set(assigneeIds));
+    const validUsers = await prisma.user.findMany({
+      where: {
+        id: { in: uniqueIds },
+        companyId: principal.companyId,
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+    const validSet = new Set(validUsers.map((u) => u.id));
+    for (const id of uniqueIds) {
+      if (!validSet.has(id)) {
+        throw new DomainError(`Assignee ${id} is not an active employee in your company.`);
+      }
+    }
+  }
 
   // Generate code if missing or sanitize provided code
   let code = input.code?.trim().toUpperCase();
@@ -170,7 +195,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
         targetEndDate: targetEnd,
         managerId: manager.id,
         sponsorId: principal.userId,
-        departmentId: manager.departmentId,
+        departmentId: departmentId ?? null,
       },
     });
 
@@ -337,16 +362,17 @@ export interface AutoAssignTeamInput {
   managerId: string;
   startDate?: string;
   targetEndDate?: string;
+  scopes?: ScopeSelection[];
   tasks: Array<{
-    id: string;
+    id?: string;
     templateCode: string;
-    unitIndex: number;
+    unitIndex?: number;
     stepNumber: number;
     title: string;
-    recommendedSeniority: string;
-    plannedStart: string;
-    plannedEnd: string;
-    estimatedHours: number;
+    recommendedSeniority?: string;
+    plannedStart?: string;
+    plannedEnd?: string;
+    estimatedHours?: number;
   }>;
 }
 
@@ -491,10 +517,10 @@ export async function autoAssignAutomationTeam(
   });
 
   // 6. Map step requirements
-  const stepRequirements: SmartStepRequirement[] = input.tasks.map((t) => ({
-    id: t.id,
+  const stepRequirements: SmartStepRequirement[] = input.tasks.map((t, idx) => ({
+    id: t.id || `${t.templateCode}-${t.unitIndex ?? 1}-${t.stepNumber}-${idx}`,
     stepNumber: t.stepNumber,
-    templateInstanceId: `${t.templateCode}-${t.unitIndex}`,
+    templateInstanceId: `${t.templateCode}-${t.unitIndex ?? 1}`,
     name: t.title,
     recommendedSeniority: t.recommendedSeniority || 'SENIOR',
     estimatedHours: t.estimatedHours || 8,

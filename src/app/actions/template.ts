@@ -1,7 +1,11 @@
-﻿'use server';
+'use server';
 
 import { revalidatePath } from 'next/cache';
 import { requirePrincipal } from '@/core/auth/session';
+import {
+  templateItemSchema,
+  updateTemplateItemSchema,
+} from '@/modules/project-management/validation/schemas';
 import {
   updateTemplateItem,
   addTemplateItem,
@@ -10,17 +14,12 @@ import {
 
 export async function updateTemplateItemAction(
   itemId: string,
-  data: {
-    title?: string;
-    description?: string;
-    recommendedSeniority?: string;
-    defaultDurationDays?: number;
-    dependsOnStep?: number | null;
-  },
+  data: unknown,
 ) {
   const principal = await requirePrincipal();
   try {
-    const updated = await updateTemplateItem(principal, itemId, data);
+    const validated = updateTemplateItemSchema.parse(data);
+    const updated = await updateTemplateItem(principal, itemId, validated);
     revalidatePath('/pm/templates');
     return { success: true, item: updated };
   } catch (error) {
@@ -30,17 +29,12 @@ export async function updateTemplateItemAction(
 
 export async function addTemplateItemAction(
   templateId: string,
-  data: {
-    title: string;
-    description?: string;
-    recommendedSeniority?: string;
-    defaultDurationDays?: number;
-    dependsOnStep?: number | null;
-  },
+  data: unknown,
 ) {
   const principal = await requirePrincipal();
   try {
-    const created = await addTemplateItem(principal, templateId, data);
+    const validated = templateItemSchema.parse(data);
+    const created = await addTemplateItem(principal, templateId, validated);
     revalidatePath('/pm/templates');
     return { success: true, item: created };
   } catch (error) {
@@ -50,6 +44,9 @@ export async function addTemplateItemAction(
 
 export async function deleteTemplateItemAction(itemId: string) {
   const principal = await requirePrincipal();
+  if (!itemId || typeof itemId !== 'string') {
+    return { success: false, error: 'Valid item ID is required.' };
+  }
   try {
     await deleteTemplateItem(principal, itemId);
     revalidatePath('/pm/templates');

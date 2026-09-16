@@ -9,7 +9,7 @@ import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
 import { assertProjectPermission, assertProjectVisible, projectVisibilityWhere } from './access';
-import type { CreateProjectInput } from '../validation/schemas';
+import type { CreateProjectInput, UpdateProjectInput } from '../validation/schemas';
 import { computeSchedule, rollUpProgress, type Graph } from '../domain/scheduling';
 import { formatName } from '@/core/utils/strings';
 
@@ -22,14 +22,14 @@ import { formatName } from '@/core/utils/strings';
  * without anyone editing a global role.
  */
 export async function createProject(principal: Principal, input: CreateProjectInput) {
-  // Department heads may create projects inside their department; directors anywhere.
-  assertCan(principal, 'pm.project.create', { departmentId: input.departmentId ?? principal.departmentId });
-
   const manager = await prisma.user.findFirst({
     where: { id: input.managerId, companyId: principal.companyId, status: 'ACTIVE' },
     select: { id: true, fullName: true, departmentId: true },
   });
   if (!manager) throw new DomainError('The selected project manager is not an active employee.');
+
+  const departmentId = input.departmentId || manager.departmentId || principal.departmentId;
+  assertCan(principal, 'pm.project.create', { departmentId: departmentId ?? undefined });
 
   const code = input.code ?? (await nextProjectCode(principal.companyId));
   const existing = await prisma.project.findUnique({ where: { code } });
@@ -59,7 +59,7 @@ export async function createProject(principal: Principal, input: CreateProjectIn
         targetEndDate: input.targetEndDate ?? null,
         managerId: manager.id,
         sponsorId: input.sponsorId || principal.userId,
-        departmentId: input.departmentId || manager.departmentId,
+        departmentId: departmentId ?? null,
       },
     });
 
@@ -146,7 +146,7 @@ async function nextProjectCode(companyId: string): Promise<string> {
 export async function updateProject(
   principal: Principal,
   projectId: string,
-  input: Partial<CreateProjectInput>,
+  input: UpdateProjectInput,
 ) {
   await assertProjectPermission(principal, projectId, 'pm.project.update');
   const before = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
@@ -163,19 +163,24 @@ export async function updateProject(
     status: input.status,
     startDate: input.startDate,
     targetEndDate: input.targetEndDate,
-    managerId: input.managerId,
-    sponsorId: input.sponsorId,
-    departmentId: input.departmentId,
   };
 
-  const statusChanged = input.status && input.status !== before.status;
+  const statusChanged = Boolean(input.status && input.status !== before.status);
+  let actualEndDate = before.actualEndDate;
+  if (statusChanged) {
+    if (input.status === 'COMPLETED') {
+      actualEndDate = new Date();
+    } else if (before.status === 'COMPLETED') {
+      actualEndDate = null;
+    }
+  }
 
   return prisma.$transaction(async (tx) => {
     const updated = await tx.project.update({
       where: { id: projectId },
       data: {
         ...data,
-        actualEndDate: input.status === 'COMPLETED' ? new Date() : before.actualEndDate,
+        actualEndDate,
       },
     });
 

@@ -30,11 +30,19 @@ The owner confirmed the intended workflow on 2026-09-16. **Everything else in th
 
 | Topic | Decision |
 |---|---|
-| Project Managers | Control **only the projects they manage**. No rights on other PMs' projects. |
+| Project Managers | Control **only the projects they manage**. They **cannot see** other PMs' projects, not even read-only. Their company-wide `PROJECT_MANAGER` grant is removed. |
 | Senior engineers | Act **only on tasks assigned to them and to their team**. "Team" = people who report to them directly or indirectly (`User.managerId` chain). |
+| Senior engineers — reassigning | May reassign **their own tasks** to **anyone, from any team**. They may **not** reassign tasks held by other people (team members' tasks go through handover or the PM). |
+| Engineers viewing a project | On projects they work on, they see the **whole plan read-only**: all tasks and who holds them. They can change only what the task rules allow. |
+| Rajani Nagar (Head of Service) | **Same rights as Dilip** (create projects + edit checklists). |
+| Vasant (Sales), Kavin (Stores) | **Lose** their PM roles. |
 | Review gate | A task that reaches 100% (or is submitted) goes to **IN_REVIEW**. Only the project's **PM**, a **Head** covering the project's department, or a **Director** may approve (→ COMPLETED) or send back (→ IN_PROGRESS). |
 | Juniors | May press **Start** and **Submit for review** on **their own** tasks. ("Mark complete" for engineers becomes "Submit for review".) |
 | Creating projects & editing checklist templates | **Director + Head of Technical only.** Other department heads (HR, Sales, Stores, Accounts, QC, Purchase, Production, IT) may not. |
+
+### 0.1a Out of scope for now (owner decision)
+
+Do **not** build these yet: leave entry/approval screens, change/reset password, editing employee manager/department, a cancel / on-hold project flow. (Team load keeps using leave rows already in the database. The senior "team" rule reads `User.managerId` as seeded.)
 
 ### 0.2 Target lifecycle
 
@@ -79,18 +87,19 @@ Permissions are still checked only through `can` / `assertProjectPermission` / `
 3. **Seed grants** (`prisma/seed.ts`, user list ~line 145–1100):
    - `ACS-0061` Dilip Asediya → `TECHNICAL_HEAD` at DEPARTMENT `TECH` and DEPARTMENT `DESIGN` (replaces his two `DEPARTMENT_HEAD` grants).
    - `ACS-0063` Parth, `ACS-0074` Paras, `ACS-0070` Dhrupin, `ACS-0075` Munaf → `PM_BASE` GLOBAL (replaces `PROJECT_MANAGER` GLOBAL).
-   - Non-technical `PROJECT_MANAGER` DEPARTMENT grants (`ACS-0011` Sales, `ACS-0025` Stores) → `PM_BASE` GLOBAL or remove — **ask owner**.
+   - `ACS-0011` Vasant Patel (Sales) and `ACS-0025` Kavin Patel (Stores): **remove** their `PROJECT_MANAGER` DEPARTMENT grants (owner confirmed). Give them the same base role as their department peers.
    - Every `SENIOR_ENGINEER` / `JUNIOR_ENGINEER` DEPARTMENT grant → same role at GLOBAL scope (with the reduced permission list above).
    - Other heads keep `DEPARTMENT_HEAD` (now without `pm.project.create`).
-   - `ACS-0062` Rajani Nagar (Head of Service, TECH) — `DEPARTMENT_HEAD` (no create) unless owner says otherwise.
+   - `ACS-0062` Rajani Nagar (Head of Service, TECH) → `TECHNICAL_HEAD` at DEPARTMENT `TECH` (owner confirmed: same rights as Dilip).
    - The live database already contains the old grants. Make the seed **reconcile** role assignments for seeded users (delete assignments not in the seed list for that user, except PROJECT-scoped ones) and re-sync role permissions, so running `npm run db:seed` on an existing DB applies the new model. Do not delete PROJECT-scoped `PROJECT_MANAGER` grants created by the app.
 
 ### 0.4 Relationship rules (code, in `src/modules/project-management/services/access.ts`)
 
 1. **Holder rule** (`HOLDER_IMPLIED`, line ~215): keep `pm.task.read`, `pm.progress.log`, `pm.handover.request`. Holder = ACTIVE assignment on the task.
-2. **Team-lead rule (new)**: if any ACTIVE assignee of the task is in the principal's report subtree (`User.managerId` descendants — load once per request, same BFS as `expandDepartmentSubtrees`), the principal gets `pm.task.read`, `pm.progress.log`, `pm.handover.request`, and `pm.task.assign` **restricted so the new assignee must be the principal or someone in their subtree** (enforce in `assignTask`). Add `reportIds: string[]` to `Principal` (`src/core/rbac/types.ts`) computed in `loadPrincipal`.
+2. **Team-lead rule (new)**: if any ACTIVE assignee of the task is in the principal's report subtree (`User.managerId` descendants — load once per request, same BFS as `expandDepartmentSubtrees`), the principal gets `pm.task.read`, `pm.progress.log`, `pm.handover.request`. **No** `pm.task.assign` on team members' tasks. Add `reportIds: string[]` to `Principal` (`src/core/rbac/types.ts`) computed in `loadPrincipal`.
+2a. **Reassign own work (new, owner confirmed)**: a holder with the `SENIOR_ENGINEER` role may reassign a task **they currently hold** to **any active employee** in the company. Implement as a permission rather than a role check: add `pm.task.reassign.own` ("Reassign a task you hold to someone else") to `PERMISSIONS`, grant it to `SENIOR_ENGINEER`, and in `assignTask` allow the call when `can(principal, 'pm.task.reassign.own')` **and** the principal holds an ACTIVE OWNER assignment on the task (otherwise require `pm.task.assign` via `assertTaskPermission`). The previous owner (the senior) is released as today; audit `onBehalf: false, selfReassign: true`. Juniors do not get this; they use handover.
 3. **Manager rule** (`MANAGER_IMPLIED`): unchanged; confirm it contains `pm.progress.review`.
-4. **Visibility** (`projectVisibilityWhere`, `assertProjectVisible`): unchanged logic; with the new grants it yields: Director → all; Heads → their department subtree; PMs → projects they manage/sponsor/are members of; engineers → projects they are members of or hold a task on; seniors additionally → projects where someone in their team holds a task (add that clause).
+4. **Visibility** (`projectVisibilityWhere`, `assertProjectVisible`): unchanged logic; with the new grants it yields: Director → all; Heads → their department subtree; PMs → **only** projects they manage/sponsor/are members of (never other PMs' projects); engineers → projects they are members of or hold a task on, shown as the **whole plan read-only**; seniors additionally → projects where someone in their team holds a task (add that clause). "Read-only" means `getProjectWorkspace` returns all tasks, and every `permissions.can*` flag is false unless the task-level rules grant it.
 5. **Status transitions** — in `changeTaskStatus` replace the single `pm.task.update` assert with a per-transition permission:
 
    | Transition | Permission (via `assertTaskPermission`) |
@@ -114,8 +123,11 @@ Permissions are still checked only through `can` / `assertProjectPermission` / `
 
 ### 0.6 Done when (write these as tests where possible)
 
-- Parth cannot update/assign/delete a task on a project managed by Paras (API and server action return 403/404).
+- Parth cannot open, list, update, assign or delete anything on a project managed by Paras (API and server action return 404).
 - Shivam can start/submit/log on his own tasks and his reports' tasks; gets 403 on a TECH task held by someone outside his team; cannot approve reviews.
+- Shivam can reassign a task he holds to an engineer on another PM's team; he cannot reassign a task held by one of his reports.
+- An engineer on a project sees all its tasks, with no edit controls on tasks they don't hold.
+- Rajani and Dilip can create projects and edit checklists; Vasant and Kavin have no PM grants.
 - A junior can Start and Submit for review on their own task; cannot mark COMPLETED.
 - Logging 100% moves the task to IN_REVIEW; PM approves → COMPLETED and downstream unblocks.
 - HR/Sales/Stores heads cannot open `/pm/projects/new` or `/pm/templates` and cannot call the actions.
@@ -465,7 +477,7 @@ Observed: one long page with 4 numbered sections. The step circles are orange, w
 
 ### UX-9 Team load (`src/app/(shell)/pm/resources/page.tsx`)
 
-Observed: 30 large cards in alphabetical order. The 2 overloaded people are buried among "FREE / 0 %" cards.
+Observed: 30 large cards in alphabetical order. (The current load figures are deliberate test assignments by the owner. This item is about layout, not data.) With real data, anyone overloaded ends up wherever their name falls alphabetically, so a manager has to scroll through every card to find them.
 - Default view: a **compact table** sorted by load (highest first), columns *Person · Load bar · Free hours · Open tasks · Leave*.
 - Filter chips: *Overloaded / Busy / Free / On leave*, plus the existing date and department filters.
 - Clicking a person expands their task list inline.
