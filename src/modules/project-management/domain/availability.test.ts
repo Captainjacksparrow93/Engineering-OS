@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  allocateTeamForSteps,
+  applyHardRules,
   assignmentHoursInWindow,
   computeWorkload,
+  gradeFloor,
   rankCandidates,
+  scoreForStep,
   type CapacityWindow,
   type WorkloadAssignment,
   type WorkloadPerson,
@@ -182,3 +186,138 @@ describe('rankCandidates', () => {
     expect(ranked[0]!.reasons.join(' ')).toMatch(/Short by|Missing/);
   });
 });
+
+describe('Smart Team Allocation Engine', () => {
+  const stepDates = {
+    plannedStart: new Date('2026-09-01T00:00:00.000Z'),
+    plannedEnd: new Date('2026-09-05T00:00:00.000Z'),
+  };
+
+  const traineeCandidate = {
+    id: 'u-trainee',
+    fullName: 'Jigar Trainee',
+    employeeCode: 'EMP-01',
+    grade: 'TRAINEE',
+    status: 'ACTIVE',
+    freeHours: 40,
+    totalCapacityHours: 40,
+    workingDays: 5,
+    leaveDays: 0,
+    leaves: [],
+  };
+
+  const seniorCandidate = {
+    id: 'u-senior',
+    fullName: 'Shivam Senior',
+    employeeCode: 'EMP-02',
+    grade: 'SENIOR_ENGINEER',
+    status: 'ACTIVE',
+    freeHours: 40,
+    totalCapacityHours: 40,
+    workingDays: 5,
+    leaveDays: 0,
+    leaves: [],
+  };
+
+  it('enforces correct grade floors', () => {
+    expect(gradeFloor('JUNIOR')).toBe(1); // TRAINEE
+    expect(gradeFloor('SENIOR')).toBe(3); // ENGINEER
+    expect(gradeFloor('ASST_MANAGER')).toBe(4); // SENIOR_ENGINEER
+  });
+
+  it('rejects a trainee from SENIOR steps via hard eligibility rule (Layer 1)', () => {
+    const seniorStep = {
+      id: 'step-10',
+      stepNumber: 10,
+      name: 'Safety PLC Interlocks',
+      recommendedSeniority: 'SENIOR',
+      estimatedHours: 8,
+      ...stepDates,
+    };
+
+    expect(applyHardRules(traineeCandidate, seniorStep)).toBe(false);
+    expect(applyHardRules(seniorCandidate, seniorStep)).toBe(true);
+  });
+
+  it('rejects candidate on approved leave during the step window', () => {
+    const onLeaveSenior = {
+      ...seniorCandidate,
+      leaves: [
+        {
+          startDate: new Date('2026-09-01T00:00:00.000Z'),
+          endDate: new Date('2026-09-04T00:00:00.000Z'),
+        },
+      ],
+    };
+    const step = {
+      id: 'step-1',
+      stepNumber: 1,
+      name: 'IO List',
+      recommendedSeniority: 'JUNIOR',
+      estimatedHours: 8,
+      ...stepDates,
+    };
+
+    expect(applyHardRules(onLeaveSenior, step)).toBe(false);
+  });
+
+  it('consumes capacity sequentially and distributes load across squad', () => {
+    const candidates = [
+      { ...seniorCandidate, id: 'sr-1', employeeCode: 'EMP-A', freeHours: 16 },
+      { ...seniorCandidate, id: 'sr-2', employeeCode: 'EMP-B', freeHours: 16 },
+    ];
+
+    const steps = [
+      { id: 's1', stepNumber: 1, name: 'Step 1', recommendedSeniority: 'SENIOR', estimatedHours: 16, ...stepDates },
+      { id: 's2', stepNumber: 2, name: 'Step 2', recommendedSeniority: 'SENIOR', estimatedHours: 16, ...stepDates },
+    ];
+
+    const results = allocateTeamForSteps(candidates, steps);
+    expect(results[0].assignedUserId).toBe('sr-1');
+    // sr-1's capacity is consumed by step 1 (16h -> 0h), so step 2 is assigned to sr-2!
+    expect(results[1].assignedUserId).toBe('sr-2');
+  });
+
+  it('produces deterministic output on repeated runs', () => {
+    const candidates = [
+      { ...seniorCandidate, id: 'sr-1', employeeCode: 'EMP-A', freeHours: 24 },
+      { ...seniorCandidate, id: 'sr-2', employeeCode: 'EMP-B', freeHours: 24 },
+    ];
+    const steps = [
+      { id: 's1', stepNumber: 1, name: 'Step 1', recommendedSeniority: 'SENIOR', estimatedHours: 8, ...stepDates },
+      { id: 's2', stepNumber: 2, name: 'Step 2', recommendedSeniority: 'SENIOR', estimatedHours: 8, ...stepDates },
+    ];
+
+    const run1 = allocateTeamForSteps(candidates, steps);
+    const run2 = allocateTeamForSteps(candidates, steps);
+
+    expect(run1.map((r) => r.assignedUserId)).toEqual(run2.map((r) => r.assignedUserId));
+    expect(run1.map((r) => r.score)).toEqual(run2.map((r) => r.score));
+  });
+
+  it('calculates multi-factor score correctly for step requirements', () => {
+    const candidate = {
+      ...seniorCandidate,
+      freeHours: 40,
+      totalCapacityHours: 48,
+      activeProjectsCount: 1,
+    };
+    const step = {
+      id: 's1',
+      stepNumber: 1,
+      name: 'Step 1',
+      recommendedSeniority: 'SENIOR',
+      estimatedHours: 8,
+      ...stepDates,
+    };
+
+    const result = scoreForStep(candidate, step, {
+      pmSquadUserIds: new Set([candidate.id]),
+      assignedSteps: [],
+    });
+    expect(result.score).toBeGreaterThan(70);
+    expect(result.breakdown.M).toBe(100);
+    expect(result.breakdown.A).toBeGreaterThan(0);
+  });
+});
+

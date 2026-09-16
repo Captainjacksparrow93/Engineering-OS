@@ -519,3 +519,14 @@ export async function reassignMemberTasksAction(_prev: ActionState, form: FormDa
   return state;
 }
 
+export async function autoAssignAutomationTeamAction(input: import('@/modules/project-management/services/automation-project.service').AutoAssignTeamInput) {
+  const principal = await requirePrincipal();
+  try {
+    const { autoAssignAutomationTeam } = await import('@/modules/project-management/services/automation-project.service');
+    const result = await autoAssignAutomationTeam(principal, input);
+    return { success: true, assignments: result.assignments };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Auto-assignment failed.' };
+  }
+}
+

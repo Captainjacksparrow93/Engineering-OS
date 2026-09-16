@@ -4,6 +4,7 @@ import { formatName } from '@/core/utils/strings';
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { createAutomationProjectAction } from '@/app/actions/automation-project';
+import { autoAssignAutomationTeamAction } from '@/app/actions/pm';
 
 interface TemplateItem {
   id: string;
@@ -41,6 +42,7 @@ interface Manager {
 }
 
 const SENIORITY_ORDER: Record<string, number> = {
+  LEAD_ENGINEER: 1,
   MANAGER: 1,
   ASST_MANAGER: 1,
   SENIOR_ENGINEER: 2,
@@ -90,7 +92,12 @@ export function AutomationProjectWizard({
 
   // Task assignments: key = `${templateCode}_${stepNumber}` -> assigneeId
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
-  
+  const [isAutoAssigning, setIsAutoAssigning] = useState(false);
+  const [rationales, setRationales] = useState<
+    Record<string, { rationale: string; isWeakMatch: boolean; score: number }>
+  >({});
+  const [autoAssignBanner, setAutoAssignBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   // Task durations: key = `${templateCode}_${stepNumber}` -> durationDays
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +143,102 @@ export function AutomationProjectWizard({
   const setTaskAssignee = (tplCode: string, step: number, userId: string) => {
     const key = `${tplCode}_${step}`;
     setTaskAssignments((prev) => ({ ...prev, [key]: userId }));
+  };
+
+  const handleAutoAssign = async () => {
+    setIsAutoAssigning(true);
+    setAutoAssignBanner(null);
+
+    try {
+      const tasksPayload: Array<{
+        id: string;
+        templateCode: string;
+        unitIndex: number;
+        stepNumber: number;
+        title: string;
+        recommendedSeniority: string;
+        plannedStart: string;
+        plannedEnd: string;
+        estimatedHours: number;
+      }> = [];
+
+      Object.entries(selectedScopes)
+        .filter(([_, val]) => val.enabled && val.qty > 0)
+        .forEach(([tplCode, scope]) => {
+          const tpl = templates.find((t) => t.code === tplCode);
+          if (!tpl) return;
+          for (let unit = 1; unit <= scope.qty; unit++) {
+            tpl.items.forEach((item) => {
+              const key = `${tplCode}_${item.stepNumber}`;
+              tasksPayload.push({
+                id: key,
+                templateCode: tplCode,
+                unitIndex: unit,
+                stepNumber: item.stepNumber,
+                title: item.title,
+                recommendedSeniority: item.recommendedSeniority || 'SENIOR',
+                plannedStart: startDate,
+                plannedEnd: targetEndDate || startDate,
+                estimatedHours: 8,
+              });
+            });
+          }
+        });
+
+      if (tasksPayload.length === 0) {
+        setAutoAssignBanner({
+          type: 'error',
+          message: 'Please enable at least one automation scope package before auto-assigning.',
+        });
+        return;
+      }
+
+      const res = await autoAssignAutomationTeamAction({
+        managerId: selectedPMId,
+        startDate,
+        targetEndDate,
+        tasks: tasksPayload,
+      });
+
+      if (res.success && res.assignments) {
+        const newAssignments: Record<string, string> = { ...taskAssignments };
+        const newRationales: Record<string, { rationale: string; isWeakMatch: boolean; score: number }> = {};
+        let assignedCount = 0;
+
+        for (const a of res.assignments) {
+          if (a.assignedUserId) {
+            newAssignments[a.stepId] = a.assignedUserId;
+            assignedCount++;
+          }
+          newRationales[a.stepId] = {
+            rationale: a.rationale,
+            isWeakMatch: a.isWeakMatch,
+            score: a.score,
+          };
+        }
+
+        setTaskAssignments(newAssignments);
+        setRationales(newRationales);
+        // Ensure dropdowns can display the assigned engineers even if cross-squad
+        setFilterPMTeamOnly(false);
+        setAutoAssignBanner({
+          type: 'success',
+          message: `Auto-assigned ${assignedCount} of ${tasksPayload.length} steps with optimal grade fit and capacity matching.`,
+        });
+      } else {
+        setAutoAssignBanner({
+          type: 'error',
+          message: res.error || 'Failed to auto-assign team.',
+        });
+      }
+    } catch {
+      setAutoAssignBanner({
+        type: 'error',
+        message: 'An unexpected error occurred during auto-assignment.',
+      });
+    } finally {
+      setIsAutoAssigning(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -467,15 +570,52 @@ export function AutomationProjectWizard({
 
       {/* Step 4: 13 Sequential Tasks Breakdown per Unit */}
       <section className="card">
-        <header className="card-header border-b border-hairline pb-3">
+        <header className="card-header border-b border-hairline pb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
               4
             </span>
             <h2 className="card-title text-base font-semibold">13 Sequential Checklist Tasks & Assignments</h2>
           </div>
+          <button
+            type="button"
+            onClick={handleAutoAssign}
+            disabled={isAutoAssigning}
+            className="btn btn-secondary btn-sm flex items-center gap-1.5 font-semibold text-xs"
+          >
+            {isAutoAssigning ? (
+              <>
+                <span className="spinner h-3.5 w-3.5 border-2 border-ink border-t-transparent animate-spin rounded-full" />
+                <span>Analyzing team capacity…</span>
+              </>
+            ) : (
+              <>
+                <span>⚡</span>
+                <span>Auto-assign team</span>
+              </>
+            )}
+          </button>
         </header>
         <div className="card-body space-y-8 pt-4">
+          {autoAssignBanner && (
+            <div
+              className={`rounded-lg border p-3 text-xs flex items-center justify-between gap-2 ${
+                autoAssignBanner.type === 'success'
+                  ? 'border-success/30 bg-success/[0.06] text-ink'
+                  : 'border-error/30 bg-error/[0.06] text-ink'
+              }`}
+            >
+              <span>{autoAssignBanner.message}</span>
+              <button
+                type="button"
+                onClick={() => setAutoAssignBanner(null)}
+                className="text-muted hover:text-ink font-bold text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {Object.entries(selectedScopes)
             .filter(([_, val]) => val.enabled && val.qty > 0)
             .map(([tplCode, scope]) => {
@@ -580,6 +720,19 @@ export function AutomationProjectWizard({
                                     </>
                                   )}
                                 </select>
+                                {rationales[key] && (
+                                  <div className="mt-1 flex items-center justify-end">
+                                    <span
+                                      className={`inline-block text-[11px] px-2 py-0.5 rounded font-medium ${
+                                        rationales[key].isWeakMatch
+                                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                          : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                      }`}
+                                    >
+                                      {rationales[key].rationale}
+                                    </span>
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           );

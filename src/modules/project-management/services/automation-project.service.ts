@@ -3,8 +3,18 @@ import { assertCan } from '@/core/rbac/guard';
 import { DomainError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
-import { addWorkingDays } from '@/core/utils/dates';
+import { addDays, addWorkingDays, startOfDay } from '@/core/utils/dates';
 import { recomputeTaskDerivedState } from './task.service';
+import {
+  allocateTeamForSteps,
+  computeWorkload,
+  type LeavePeriod,
+  type SmartCandidate,
+  type SmartStepRequirement,
+  type WorkloadAssignment,
+  type WorkloadPerson,
+} from '../domain/availability';
+import { generateWithGemini } from '@/core/ai/vertex';
 
 export interface ScopeSelection {
   templateCode: string; // "PLC" | "SCADA" | "HMI"
@@ -322,4 +332,211 @@ export async function createAutomationProject(principal: Principal, input: Creat
   return createdProject;
 }
 
+export interface AutoAssignTeamInput {
+  managerId: string;
+  startDate?: string;
+  targetEndDate?: string;
+  tasks: Array<{
+    id: string;
+    templateCode: string;
+    unitIndex: number;
+    stepNumber: number;
+    title: string;
+    recommendedSeniority: string;
+    plannedStart: string;
+    plannedEnd: string;
+    estimatedHours: number;
+  }>;
+}
 
+export async function autoAssignAutomationTeam(
+  principal: Principal,
+  input: AutoAssignTeamInput,
+) {
+  assertCan(principal, 'pm.project.create');
+
+  if (!input.tasks || input.tasks.length === 0) {
+    return { assignments: [] };
+  }
+
+  // 1. Fetch PM Squad hierarchy
+  const descendantIds = input.managerId ? await getDescendantUserIds(input.managerId) : [];
+  const squadSet = new Set(descendantIds);
+
+  // 2. Determine capacity window
+  const windowStart = input.startDate ? startOfDay(new Date(input.startDate)) : startOfDay(new Date());
+  const windowEnd = input.targetEndDate ? startOfDay(new Date(input.targetEndDate)) : addDays(windowStart, 30);
+  const window = { from: windowStart, to: windowEnd };
+
+  // 3. Fetch candidate engineers
+  const users = await prisma.user.findMany({
+    where: {
+      companyId: principal.companyId,
+      status: 'ACTIVE',
+      grade: { notIn: ['MANAGER', 'HEAD', 'DIRECTOR'] },
+    },
+    include: {
+      department: { select: { id: true, name: true } },
+    },
+    orderBy: { fullName: 'asc' },
+  });
+
+  const userIds = users.map((u) => u.id);
+
+  // 4. Fetch assignments & approved leaves in window
+  const [activeAssignments, approvedLeaves] = await Promise.all([
+    prisma.taskAssignment.findMany({
+      where: {
+        userId: { in: userIds },
+        status: 'ACTIVE',
+        task: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+      },
+      include: {
+        task: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            projectId: true,
+            priority: true,
+            status: true,
+            percentComplete: true,
+            plannedStart: true,
+            plannedEnd: true,
+            project: { select: { code: true, name: true } },
+          },
+        },
+      },
+    }),
+    prisma.leave.findMany({
+      where: {
+        userId: { in: userIds },
+        status: 'APPROVED',
+        startDate: { lte: windowEnd },
+        endDate: { gte: windowStart },
+      },
+      select: {
+        userId: true,
+        startDate: true,
+        endDate: true,
+      },
+    }),
+  ]);
+
+  const assignmentsByUser = new Map<string, WorkloadAssignment[]>();
+  for (const a of activeAssignments) {
+    const list = assignmentsByUser.get(a.userId) || [];
+    list.push({
+      taskId: a.taskId,
+      taskCode: a.task.code,
+      taskTitle: a.task.title,
+      projectId: a.task.projectId,
+      projectCode: a.task.project?.code || '',
+      projectName: a.task.project?.name,
+      priority: (a.task.priority || 'MEDIUM') as never,
+      status: a.task.status as never,
+      allocatedHours: a.allocatedHours,
+      percentComplete: a.task.percentComplete,
+      plannedStart: a.task.plannedStart,
+      plannedEnd: a.task.plannedEnd,
+    });
+    assignmentsByUser.set(a.userId, list);
+  }
+
+  const leavesByUser = new Map<string, LeavePeriod[]>();
+  for (const l of approvedLeaves) {
+    const list = leavesByUser.get(l.userId) || [];
+    list.push({ startDate: l.startDate, endDate: l.endDate });
+    leavesByUser.set(l.userId, list);
+  }
+
+  // 5. Compute workload for each candidate
+  const candidates: SmartCandidate[] = users.map((user) => {
+    const personWorkloadData: WorkloadPerson = {
+      id: user.id,
+      fullName: user.fullName,
+      employeeCode: user.employeeCode,
+      grade: user.grade,
+      designation: user.designation,
+      departmentId: user.departmentId,
+      departmentName: user.department?.name ?? null,
+      skills: user.skills,
+      dailyCapacityHours: 8,
+      avatarColor: user.avatarColor || '#e6e5e0',
+    };
+
+    const workload = computeWorkload(
+      personWorkloadData,
+      assignmentsByUser.get(user.id) || [],
+      leavesByUser.get(user.id) || [],
+      window,
+    );
+
+    return {
+      id: user.id,
+      fullName: user.fullName,
+      employeeCode: user.employeeCode,
+      grade: user.grade,
+      designation: user.designation,
+      status: user.status,
+      freeHours: workload.freeHours,
+      totalCapacityHours: workload.capacityHours,
+      workingDays: workload.workingDays,
+      leaveDays: workload.leaveDays,
+      leaves: leavesByUser.get(user.id) || [],
+    };
+  });
+
+  // 6. Map step requirements
+  const stepRequirements: SmartStepRequirement[] = input.tasks.map((t) => ({
+    id: t.id,
+    stepNumber: t.stepNumber,
+    templateInstanceId: `${t.templateCode}-${t.unitIndex}`,
+    name: t.title,
+    recommendedSeniority: t.recommendedSeniority || 'SENIOR',
+    estimatedHours: t.estimatedHours || 8,
+    plannedStart: t.plannedStart ? new Date(t.plannedStart) : windowStart,
+    plannedEnd: t.plannedEnd ? new Date(t.plannedEnd) : windowEnd,
+  }));
+
+  // 7. Deterministic Allocation
+  const allocations = allocateTeamForSteps(candidates, stepRequirements, squadSet);
+
+  // 8. Optional AI Rationale Enrichment with Vertex AI Gemini 2.5 Flash
+  try {
+    const prompt = `You are an industrial automation lead engineer. Summarize these task assignments in short, crisp badges (1 sentence each).
+Team: ${users.map((u) => `${u.fullName} (${u.grade})`).join(', ')}
+Assignments:
+${allocations.map((a) => `- Step ${a.stepId}: Assigned to ${a.assignedUserName || 'None'} (Score: ${a.score}%, Breakdown: M=${a.factorBreakdown.M}, A=${a.factorBreakdown.A}, C=${a.factorBreakdown.C}, Q=${a.factorBreakdown.Q})`).join('\n')}
+
+Format as JSON map from stepId to short rationale string e.g. {"PLC-1-1": "95% · senior grade match, 6.5h/day free in squad"}`;
+
+    const aiResponse = await generateWithGemini(prompt, { maxOutputTokens: 1024, timeoutMs: 3000 });
+    if (aiResponse) {
+      const match = aiResponse.match(/\{[\S\s]*\}/);
+      if (match) {
+        const rationales = JSON.parse(match[0]) as Record<string, string>;
+        for (const a of allocations) {
+          if (rationales[a.stepId]) {
+            a.rationale = rationales[a.stepId];
+          }
+        }
+      }
+    }
+  } catch {
+    // Fail gracefully to deterministic rationales
+  }
+
+  return {
+    assignments: allocations.map((a) => ({
+      stepId: a.stepId,
+      assignedUserId: a.assignedUserId,
+      assignedUserName: a.assignedUserName,
+      score: a.score,
+      factorBreakdown: a.factorBreakdown,
+      escalationRung: a.escalationRung,
+      rationale: a.rationale,
+      isWeakMatch: a.isWeakMatch,
+    })),
+  };
+}
