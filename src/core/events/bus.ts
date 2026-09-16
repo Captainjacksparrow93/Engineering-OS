@@ -49,7 +49,16 @@ export async function publish(event: DomainEventInput, tx: Tx): Promise<void> {
  * Drains pending events. Called after a request's transaction commits, and by a cron
  * worker as a safety net for anything the request-path drain missed.
  */
+// ponytail: in-memory outbox drain; if no handlers are registered, marks pending processed in bulk
 export async function drainOutbox(limit = 50): Promise<number> {
+  if (handlers.size === 0) {
+    const updated = await prisma.domainEvent.updateMany({
+      where: { status: 'PENDING' },
+      data: { status: 'PROCESSED', processedAt: new Date() },
+    });
+    return updated.count;
+  }
+
   const pending = await prisma.domainEvent.findMany({
     where: { status: 'PENDING' },
     orderBy: { createdAt: 'asc' },

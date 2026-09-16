@@ -26,13 +26,6 @@ export async function logProgress(principal: Principal, input: ProgressInput) {
     throw new DomainError('Progress cannot be logged against a closed task.');
   }
 
-  const existingLogs = await prisma.taskProgressLog.findMany({
-    where: { taskId: input.taskId },
-    select: { hoursSpent: true },
-  });
-  const priorHours = existingLogs.reduce((sum, l) => sum + l.hoursSpent, 0);
-  const nextActualHours = priorHours + input.hoursSpent;
-
   const result = await prisma.$transaction(async (tx) => {
     const log = await tx.taskProgressLog.create({
       data: {
@@ -53,11 +46,11 @@ export async function logProgress(principal: Principal, input: ProgressInput) {
           ? 'IN_PROGRESS'
           : task.status;
 
-    await tx.task.update({
+    const updatedTask = await tx.task.update({
       where: { id: input.taskId },
       data: {
         percentComplete: input.percentComplete,
-        actualHours: nextActualHours,
+        actualHours: { increment: input.hoursSpent },
         status: nextStatus,
         actualStart: task.actualStart ?? new Date(),
         actualEnd: input.percentComplete >= 100 ? task.actualEnd ?? new Date() : null,
@@ -74,7 +67,7 @@ export async function logProgress(principal: Principal, input: ProgressInput) {
         diff: {
           percentComplete: { from: task.percentComplete, to: input.percentComplete },
           hoursSpent: input.hoursSpent,
-          totalActualHours: nextActualHours,
+          totalActualHours: updatedTask.actualHours,
           blocker: input.blocker ?? null,
         },
       },
@@ -144,29 +137,4 @@ export async function logProgress(principal: Principal, input: ProgressInput) {
 
   await recomputeTaskDerivedState(task.projectId);
   return result;
-}
-
-/** Progress punched by one person over a date range - the basis of a timesheet view. */
-export async function progressFeed(
-  principal: Principal,
-  options: { userId?: string; projectId?: string; from?: Date; to?: Date; limit?: number } = {},
-) {
-  return prisma.taskProgressLog.findMany({
-    where: {
-      ...(options.userId ? { userId: options.userId } : {}),
-      ...(options.projectId ? { task: { projectId: options.projectId } } : {}),
-      ...(options.from || options.to
-        ? { loggedFor: { ...(options.from ? { gte: options.from } : {}), ...(options.to ? { lte: options.to } : {}) } }
-        : {}),
-      task: { project: { companyId: principal.companyId } },
-    },
-    include: {
-      user: { select: { id: true, fullName: true, avatarColor: true } },
-      task: {
-        select: { id: true, code: true, title: true, status: true, project: { select: { id: true, code: true } } },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: options.limit ?? 50,
-  });
 }

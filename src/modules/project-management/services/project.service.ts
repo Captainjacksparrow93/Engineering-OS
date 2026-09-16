@@ -501,6 +501,16 @@ export async function reassignAllMemberTasks(
 
   await assertProjectPermission(principal, projectId, 'pm.project.member.manage');
 
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, name: true, managerId: true },
+  });
+  if (!project) throw new NotFoundError('Project not found.');
+
+  if (fromUserId === project.managerId) {
+    throw new DomainError('Cannot bulk-reassign the Project Manager. Use the Project Handover flow instead.');
+  }
+
   const [toUser, fromUser] = await Promise.all([
     prisma.user.findFirst({ where: { id: toUserId, companyId: principal.companyId, status: 'ACTIVE' } }),
     prisma.user.findFirst({ where: { id: fromUserId, companyId: principal.companyId } }),
@@ -523,49 +533,45 @@ export async function reassignAllMemberTasks(
     const assignments = await tx.taskAssignment.findMany({
       where: {
         userId: fromUserId,
-        task: { projectId },
+        status: 'ACTIVE',
+        task: { projectId, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
       },
       select: { id: true, taskId: true, role: true },
     });
 
     let count = 0;
     for (const assignment of assignments) {
+      await tx.taskAssignment.update({
+        where: { id: assignment.id },
+        data: { status: 'RELEASED', releasedAt: new Date() },
+      });
+
       const existing = await tx.taskAssignment.findFirst({
         where: { taskId: assignment.taskId, userId: toUserId, role: assignment.role, status: 'ACTIVE' },
       });
 
       if (!existing) {
-        await tx.taskAssignment.update({
-          where: { id: assignment.id },
-          data: { userId: toUserId },
-        });
-      } else {
-        await tx.taskAssignment.delete({
-          where: { id: assignment.id },
+        await tx.taskAssignment.create({
+          data: {
+            taskId: assignment.taskId,
+            userId: toUserId,
+            role: assignment.role,
+            status: 'ACTIVE',
+          },
         });
       }
       count++;
     }
 
-    // If fromUser is not the Project Manager, remove them from projectMember if 0 tasks left
-    const fromMember = await tx.projectMember.findUnique({
-      where: { projectId_userId: { projectId, userId: fromUserId } },
+    // If fromUser is not the Project Manager, remove them from projectMember if 0 active tasks left
+    const remaining = await tx.taskAssignment.count({
+      where: { userId: fromUserId, task: { projectId }, status: 'ACTIVE' },
     });
-    if (fromMember && fromMember.role !== 'MANAGER') {
-      const remaining = await tx.taskAssignment.count({
-        where: { userId: fromUserId, task: { projectId } },
+    if (remaining === 0) {
+      await tx.projectMember.deleteMany({
+        where: { projectId, userId: fromUserId, role: { not: 'MANAGER' } },
       });
-      if (remaining === 0) {
-        await tx.projectMember.delete({
-          where: { projectId_userId: { projectId, userId: fromUserId } },
-        });
-      }
     }
-
-    const project = await tx.project.findUnique({
-      where: { id: projectId },
-      select: { name: true },
-    });
 
     await audit(
       {
@@ -583,7 +589,7 @@ export async function reassignAllMemberTasks(
       {
         userIds: [toUserId],
         title: 'Project tasks assigned',
-        body: `${formatName(principal.fullName)} reassigned ${count} task(s) on "${project?.name ?? 'Project'}" to you.`,
+        body: `${formatName(principal.fullName)} reassigned ${count} task(s) on "${project.name}" to you.`,
         link: `/pm/projects/${projectId}`,
       },
       tx,

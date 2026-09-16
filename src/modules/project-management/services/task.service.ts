@@ -179,8 +179,8 @@ export async function changeTaskStatus(
   }
 
   const updated = await prisma.$transaction(async (tx) => {
-    const result = await tx.task.update({
-      where: { id: taskId },
+    const updateResult = await tx.task.updateMany({
+      where: { id: taskId, status: task.status },
       data: {
         status,
         percentComplete: status === 'COMPLETED' ? 100 : task.percentComplete,
@@ -188,6 +188,12 @@ export async function changeTaskStatus(
         actualEnd: status === 'COMPLETED' ? new Date() : status === 'IN_PROGRESS' ? null : task.actualEnd,
       },
     });
+
+    if (updateResult.count === 0) {
+      throw new DomainError('The task status was changed by another user or process. Please reload and try again.');
+    }
+
+    const result = await tx.task.findUniqueOrThrow({ where: { id: taskId } });
 
     if (status === 'COMPLETED') {
       await tx.taskAssignment.updateMany({
@@ -443,7 +449,11 @@ export async function recomputeTaskDerivedState(projectId: string, tx: Tx = pris
         select: { blocker: true },
       });
       const hasRoadblock = Boolean(latestLog?.blocker);
-      const shouldBe = blockers.length > 0 || hasRoadblock ? 'BLOCKED' : 'TODO';
+      const shouldBe = blockers.length > 0 || hasRoadblock
+        ? 'BLOCKED'
+        : task.actualStart || task.percentComplete > 0
+          ? 'IN_PROGRESS'
+          : 'TODO';
       if (shouldBe !== task.status) updates.status = shouldBe;
     }
 
@@ -471,6 +481,7 @@ export async function loadProjectGraph(projectId: string, tx: Tx = prisma): Prom
       percentComplete: true,
       plannedStart: true,
       plannedEnd: true,
+      actualStart: true,
       parentId: true,
     },
   });

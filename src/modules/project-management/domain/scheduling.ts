@@ -20,6 +20,7 @@ export interface GraphTask {
   percentComplete: number;
   plannedStart: Date | null;
   plannedEnd: Date | null;
+  actualStart?: Date | null;
   parentId?: string | null;
 }
 
