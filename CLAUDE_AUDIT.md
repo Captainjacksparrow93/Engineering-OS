@@ -22,6 +22,108 @@ Line numbers refer to commit `785beeb` and may drift — search for the quoted c
 
 ---
 
+## 0. TARGET WORKFLOW — the foundation (do this first)
+
+The owner confirmed the intended workflow on 2026-09-16. **Everything else in this file builds on it.** Today the permission *grants* in `prisma/seed.ts` are far wider than this design (PMs hold `PROJECT_MANAGER` at GLOBAL scope; engineers hold their roles at DEPARTMENT scope), and several screens hide that with grade/role-name checks. Fix the grants and the rules below, and many A-items shrink.
+
+### 0.1 Owner decisions (source of truth)
+
+| Topic | Decision |
+|---|---|
+| Project Managers | Control **only the projects they manage**. No rights on other PMs' projects. |
+| Senior engineers | Act **only on tasks assigned to them and to their team**. "Team" = people who report to them directly or indirectly (`User.managerId` chain). |
+| Review gate | A task that reaches 100% (or is submitted) goes to **IN_REVIEW**. Only the project's **PM**, a **Head** covering the project's department, or a **Director** may approve (→ COMPLETED) or send back (→ IN_PROGRESS). |
+| Juniors | May press **Start** and **Submit for review** on **their own** tasks. ("Mark complete" for engineers becomes "Submit for review".) |
+| Creating projects & editing checklist templates | **Director + Head of Technical only.** Other department heads (HR, Sales, Stores, Accounts, QC, Purchase, Production, IT) may not. |
+
+### 0.2 Target lifecycle
+
+```
+PROJECT
+  Director / Head of Technical creates project (wizard)
+    → status PLANNING; PM gets PROJECT-scoped PROJECT_MANAGER grant (already implemented)
+  First task started                → project auto-moves PLANNING → IN_PROGRESS
+  All leaf tasks COMPLETED/CANCELLED → "Complete project" enabled (PM / Head / Director)
+    → COMPLETED (server refuses if any leaf task is still open)
+  Project handover PM → PM          → receiver accepts (existing flow; see B-3)
+
+TASK
+  TODO ──(dependencies open)──► BLOCKED   (automatic, recompute)
+  TODO/BLOCKED(unblocked) ──Start──► IN_PROGRESS            holder, their senior, PM
+  IN_PROGRESS ──Submit for review / log 100%──► IN_REVIEW   holder, their senior, PM
+  IN_REVIEW ──Approve──► COMPLETED                          PM / Head / Director only
+  IN_REVIEW ──Send back (feedback required)──► IN_PROGRESS  PM / Head / Director only
+  COMPLETED ──Reopen──► IN_PROGRESS                         PM / Head / Director only
+  any open ──Cancel──► CANCELLED ; CANCELLED ──Restore──► TODO   PM / Head / Director only
+  Roadblock (any open status)       → BLOCKED with reason   holder, their senior, PM
+  Handover (peer consent)           → holder or their senior requests; receiver accepts
+  Reassign (top-down, no consent)   → PM / Head / Director; senior only within their team
+```
+
+Remove the direct shortcuts `TODO→COMPLETED`, `IN_PROGRESS→COMPLETED`, `TODO→IN_REVIEW` from `ALLOWED_TRANSITIONS` (`src/modules/project-management/services/task.service.ts:21`).
+
+### 0.3 Target role → permission design
+
+Permissions are still checked only through `can` / `assertProjectPermission` / `assertTaskPermission`. Changes:
+
+1. **New permission keys** in `src/core/rbac/permissions.ts`:
+   - `pm.template.manage` — Edit master checklist templates.
+2. **Role blueprints** (`SYSTEM_ROLES`):
+   - `DIRECTOR`: add `pm.template.manage`.
+   - **New** `TECHNICAL_HEAD`: everything `DEPARTMENT_HEAD` has **plus** `pm.project.create`, `pm.template.manage`.
+   - `DEPARTMENT_HEAD`: **remove** `pm.project.create`. (Keeps department-scoped oversight but cannot create projects or edit templates.)
+   - `PROJECT_MANAGER`: unchanged permission list, but **only ever granted at PROJECT scope** (the create-project and project-handover flows already do this).
+   - **New** `PM_BASE` (granted GLOBAL to people eligible to manage projects): `pm.resource.read`, `pm.report.read`, `pm.handover.decide`. No project/task mutation rights. Also used to build the "eligible PM" dropdown in the wizard (replaces the name/grade matching in `getPMTeamData`, see D-4).
+   - `SENIOR_ENGINEER` and `JUNIOR_ENGINEER`: reduce to `pm.handover.decide` only, granted GLOBAL. All task rights come from the relationship rules in 0.4. (Do **not** keep them at DEPARTMENT scope — a DEPARTMENT grant makes every task in TECH editable and every TECH project visible.)
+   - `pm.progress.review`: held by `DIRECTOR` (GLOBAL), `TECHNICAL_HEAD`/`DEPARTMENT_HEAD` (DEPARTMENT), and implied for the project's manager (`MANAGER_IMPLIED` already contains it). **Not** held by engineers.
+3. **Seed grants** (`prisma/seed.ts`, user list ~line 145–1100):
+   - `ACS-0061` Dilip Asediya → `TECHNICAL_HEAD` at DEPARTMENT `TECH` and DEPARTMENT `DESIGN` (replaces his two `DEPARTMENT_HEAD` grants).
+   - `ACS-0063` Parth, `ACS-0074` Paras, `ACS-0070` Dhrupin, `ACS-0075` Munaf → `PM_BASE` GLOBAL (replaces `PROJECT_MANAGER` GLOBAL).
+   - Non-technical `PROJECT_MANAGER` DEPARTMENT grants (`ACS-0011` Sales, `ACS-0025` Stores) → `PM_BASE` GLOBAL or remove — **ask owner**.
+   - Every `SENIOR_ENGINEER` / `JUNIOR_ENGINEER` DEPARTMENT grant → same role at GLOBAL scope (with the reduced permission list above).
+   - Other heads keep `DEPARTMENT_HEAD` (now without `pm.project.create`).
+   - `ACS-0062` Rajani Nagar (Head of Service, TECH) — `DEPARTMENT_HEAD` (no create) unless owner says otherwise.
+   - The live database already contains the old grants. Make the seed **reconcile** role assignments for seeded users (delete assignments not in the seed list for that user, except PROJECT-scoped ones) and re-sync role permissions, so running `npm run db:seed` on an existing DB applies the new model. Do not delete PROJECT-scoped `PROJECT_MANAGER` grants created by the app.
+
+### 0.4 Relationship rules (code, in `src/modules/project-management/services/access.ts`)
+
+1. **Holder rule** (`HOLDER_IMPLIED`, line ~215): keep `pm.task.read`, `pm.progress.log`, `pm.handover.request`. Holder = ACTIVE assignment on the task.
+2. **Team-lead rule (new)**: if any ACTIVE assignee of the task is in the principal's report subtree (`User.managerId` descendants — load once per request, same BFS as `expandDepartmentSubtrees`), the principal gets `pm.task.read`, `pm.progress.log`, `pm.handover.request`, and `pm.task.assign` **restricted so the new assignee must be the principal or someone in their subtree** (enforce in `assignTask`). Add `reportIds: string[]` to `Principal` (`src/core/rbac/types.ts`) computed in `loadPrincipal`.
+3. **Manager rule** (`MANAGER_IMPLIED`): unchanged; confirm it contains `pm.progress.review`.
+4. **Visibility** (`projectVisibilityWhere`, `assertProjectVisible`): unchanged logic; with the new grants it yields: Director → all; Heads → their department subtree; PMs → projects they manage/sponsor/are members of; engineers → projects they are members of or hold a task on; seniors additionally → projects where someone in their team holds a task (add that clause).
+5. **Status transitions** — in `changeTaskStatus` replace the single `pm.task.update` assert with a per-transition permission:
+
+   | Transition | Permission (via `assertTaskPermission`) |
+   |---|---|
+   | `TODO/BLOCKED → IN_PROGRESS`, `IN_PROGRESS → IN_REVIEW` | `pm.progress.log` (holder / team-lead implied) |
+   | `IN_REVIEW → COMPLETED`, `IN_REVIEW → IN_PROGRESS`, `COMPLETED → IN_PROGRESS` | `pm.progress.review` |
+   | `→ CANCELLED`, `CANCELLED → TODO`, `DRAFT → TODO` | `pm.task.update` |
+
+   Then `approveTaskReview` / `disapproveTaskReview` become thin wrappers (feedback required on send-back) and their grade checks are deleted (supersedes A-2 for these two).
+6. **Progress logging** (`logProgress`): when `percentComplete === 100` and status is `IN_PROGRESS`, set status `IN_REVIEW` and notify the PM (the notification already exists). Enforce server-side: percent cannot decrease; no logging on tasks that have children (both are documented in `docs/project-management.md` but not enforced).
+7. **Project auto-status**: in `changeTaskStatus` / `logProgress`, when a task moves to IN_PROGRESS and the project is `PLANNING`, set project `IN_PROGRESS` (audit + event). In `completeAutomationProject` and `updateProject(status: 'COMPLETED')`, refuse with `DomainError` while any leaf task is not COMPLETED/CANCELLED.
+8. **Project list**: `listProjects` uses `projectVisibilityWhere` (A-3). Engineers then see the projects they work on instead of "0 projects".
+
+### 0.5 Screens that must follow the new rules
+
+- `task-controls.tsx` `NEXT_STATUS`: engineers see **Start** (TODO), **Submit for review** (IN_PROGRESS); reviewers see **Approve** / **Send back** (IN_REVIEW, send back asks for feedback) and **Reopen** (COMPLETED). Buttons render from server-computed `permissions` in `getTaskDetail` (add `canStart`, `canSubmit`, `canReview`, `canCancel`) — never show a button the server will reject.
+- New **Approvals** page `/pm/approvals`: list of IN_REVIEW tasks the viewer may review (PM: own projects; Head: department; Director: all), each with Approve / Send back. Sidebar item with a count badge, visible when the user holds `pm.progress.review` anywhere **or** manages any project. The dashboard "Awaiting approval" tile links here.
+- Templates page and "Checklists" nav: `pm.template.manage`. New-project page, "New project" buttons: `pm.project.create`.
+- Handover form on task page: show for holder and team lead (remove the `!permissions.canAssign` condition at `src/app/(shell)/pm/tasks/[id]/page.tsx:283`).
+- "Raise ad-hoc task" button (`projects/[id]/page.tsx:74`) must use `pm.task.adhoc.create` (currently `canCreateTask`, so seniors see a button that redirects them away).
+
+### 0.6 Done when (write these as tests where possible)
+
+- Parth cannot update/assign/delete a task on a project managed by Paras (API and server action return 403/404).
+- Shivam can start/submit/log on his own tasks and his reports' tasks; gets 403 on a TECH task held by someone outside his team; cannot approve reviews.
+- A junior can Start and Submit for review on their own task; cannot mark COMPLETED.
+- Logging 100% moves the task to IN_REVIEW; PM approves → COMPLETED and downstream unblocks.
+- HR/Sales/Stores heads cannot open `/pm/projects/new` or `/pm/templates` and cannot call the actions.
+- Engineers' Projects page lists the projects they work on.
+- `grep -rnE "grade === '(DIRECTOR|HEAD|MANAGER)'|roleKeys.includes" src` returns nothing.
+
+---
+
 ## A. Security & authorization
 
 ### A-0 (INFO ONLY — no change unless the owner asks) Persona login reachable in production
@@ -44,9 +146,11 @@ Line numbers refer to commit `785beeb` and may drift — search for the quoted c
   - (also `listProjects`, see A-3, and `dashboard.service.ts:12–18` `isManagement`)
 - **Problem:** Checks `principal.grade === 'DIRECTOR' | 'HEAD'` or `roleKeys.includes(...)`. No project/department scoping and no company check → a Head of any department can approve reviews / complete **any** project.
 - **Fix:**
-  - `approveTaskReview` / `disapproveTaskReview`: replace the custom check with `await assertTaskPermission(principal, taskId, 'pm.progress.review');` (`pm.progress.review` is already in `MANAGER_IMPLIED`, so the project manager keeps access; department heads get it through their DEPARTMENT-scoped grant). Confirm in `src/core/rbac/permissions.ts` that `DEPARTMENT_HEAD` and `DIRECTOR` roles include `pm.progress.review`; add it to their role definitions if missing (and to seed).
-  - `completeAutomationProject`: `await assertProjectPermission(principal, projectId, 'pm.project.update');` Keep the sponsor allowance only if the owner wants it — otherwise drop it.
-  - Templates: add a permission key, e.g. `pm.template.manage` ("Edit master checklist templates"), in `src/core/rbac/permissions.ts`, grant it to `SUPER_ADMIN`, `DIRECTOR`, `DEPARTMENT_HEAD`; make sure the seed/permission sync picks it up. `assertTemplateAdmin` → `if (!hasPermissionAnywhere(principal, 'pm.template.manage')) throw new ForbiddenError(...)`. The templates page uses the same check for the redirect. Sidebar link visibility (if any) should use the same permission.
+  - `approveTaskReview` / `disapproveTaskReview`: handled by section 0.4 item 5 (`pm.progress.review` via `assertTaskPermission`).
+  - `completeAutomationProject`: `await assertProjectPermission(principal, projectId, 'pm.project.update');` plus the "all leaf tasks closed" rule from 0.4 item 7. Keep the sponsor allowance only if the owner wants it — otherwise drop it.
+  - Templates: use `pm.template.manage` from section 0.3 (held by `SUPER_ADMIN`, `DIRECTOR`, `TECHNICAL_HEAD` only). `assertTemplateAdmin` → `if (!hasPermissionAnywhere(principal, 'pm.template.manage')) throw new ForbiddenError(...)`. The templates page redirect and the sidebar "Checklists" item (`src/components/shell/sidebar.tsx`, currently `requires: 'pm.project.create'`) use the same permission.
+  - Sidebar "Other modules" block (`sidebar.tsx`, `isDirector` check) → `hasPermissionAnywhere(principal, 'admin.module.manage')`, or remove the block (see UX-2).
+  - Dashboard header buttons (`src/app/(shell)/dashboard/page.tsx:16–44`, `isDirectorOrHead`) → `pm.project.create` for "New project", `pm.template.manage` for "Checklists".
   - `dashboard.service.ts` `isManagement`: keep only the `can(...)` terms.
 - **Done when:** `grep -rnE "grade === '(DIRECTOR|HEAD)'|roleKeys.includes" src` returns nothing outside `src/core/rbac` tests.
 
@@ -256,15 +360,161 @@ Minimum:
 
 ---
 
+## H. UX audit — goal: very simple, easy to navigate
+
+Method: the running app (`localhost:3000`) was walked as Director and as Senior Engineer (Shivam), at desktop 1366px and phone 375px, plus a read of every screen's code. The owner's goal is a **very simple, easy-to-navigate UI**. All UX changes must still follow `docs/design-system.md` (section E).
+
+### Principles to apply everywhere
+
+1. **Each role lands on the screen they need.** Engineers: their work. PMs: their projects plus what needs their decision. Director/Heads: what needs attention.
+2. **One primary action per screen**, clearly labelled with the next workflow step (Start, Submit for review, Approve).
+3. **Never show a button or menu the user can't use.** Every visible action must succeed server-side (drive it from the `permissions` objects).
+4. **One name per thing**, used in nav, buttons, page titles and breadcrumbs.
+5. **Same number everywhere.** Progress, status and health come from one function.
+6. **Hide empty and "coming soon" content** instead of showing boxes that say nothing.
+
+### UX-1 Navigation per role (sidebar `src/components/shell/sidebar.tsx`)
+
+Target (items appear only if the rule in brackets holds):
+
+| Group | Item | Who |
+|---|---|---|
+| Work | **My work** | everyone (engineers' home) |
+| Work | **Approvals** (badge = count) | `pm.progress.review` anywhere or manages a project (new page, section 0.5) |
+| Work | **Handovers** (badge) | everyone |
+| Manage | **Dashboard** | `pm.report.read` anywhere (PM / Head / Director home) |
+| Manage | **Projects** | everyone (engineers see projects they work on) |
+| Manage | **Team load** (rename of "Resource") | `pm.resource.read` |
+| Setup | **Checklists** | `pm.template.manage` |
+| Setup | **People**, **Roles**, **Audit trail** | existing admin permissions |
+
+- Remove the "Ad hoc" nav item. Keep ad-hoc as a button on Dashboard and on a project page ("Add urgent task").
+- Remove the 7 "SOON" module links from the sidebar. At most keep one "All modules" link for admins (`admin.module.manage`).
+- Root `/` and post-login redirect: to `/pm/my-work` for users without `pm.report.read`, else `/dashboard`. Both `src/app/page.tsx` and `signIn` / `quickSwitchPersona` redirects need this.
+- Header (`src/components/shell/*`): replace "Inbox" text with a bell icon + unread count. Hide the role pill below 768px.
+
+### UX-2 Consistent names (rename everywhere, including titles and breadcrumbs)
+
+| Today (mixed) | Use |
+|---|---|
+| "Define new project", "+ New Automation Project", "Create Automation Project", "New Automation Project" | **New project** |
+| "Resource", "Resource board", "Team load" | **Team load** |
+| "Checklists", "Checklist Templates", "Checklist Templates Management" | **Checklists** |
+| "Ad hoc", "Raise ad-hoc task", "Assign ad-hoc work", "Create unassigned" | **Add urgent task** (button); page title **Urgent task** |
+| "Punch in progress", "Record progress" | **Update progress** |
+| "Mark complete" (engineer) | **Submit for review** |
+| "Flag Roadblock", "Raise a Roadblock", "Resolve Roadblock & Resume" | **Report a problem** / **Problem solved – resume** |
+| "My Work", "My work" | **My work** |
+
+Also make text case consistent: sentence case for labels and options. Status filter options currently lowercase (`draft`, `in progress`); team role options lowercase (`lead`, `engineer`); the ALL-CAPS field labels are hard to scan. Use one status-label map (e.g. `src/components/ui.tsx`) for pills, filters and selects.
+
+### UX-3 Dashboard (`src/app/(shell)/dashboard/page.tsx`, `dashboard.service.ts`)
+
+Observed: KPI tiles → "Live projects" table → large red "Roadblocks (0 active)" box even when empty → two hardcoded team cards (Het Patel appears in **both** teams; overloaded people are listed last) → "Recent activity" with test text ("ggg"), raw "Step 4:" prefixes and duplicate entries.
+
+Target (management):
+1. Four tiles, each a **link** to its filtered list: Overdue projects, Problems reported, Awaiting approval (→ `/pm/approvals`), Handovers waiting.
+2. **Needs attention** list (only when non-empty): problems, items awaiting approval, overdue tasks, pending handovers. One row each with a single action.
+3. **Projects** table (existing `LiveProjectsTable`).
+4. Team load summary: only people who are **overloaded** or **free**, sorted by load, grouped by the PM from the org chart (D-4). Link "See team load".
+5. Remove "Recent activity" from the dashboard (it's in the audit trail), or cap it at 5, deduplicated, with `cleanTaskTitle` applied.
+- Engineers are redirected to My work (UX-1), so the engineer branch of the dashboard can be deleted. That removes the duplicate stats and table they see today.
+
+### UX-4 Numbers must agree
+
+Observed: *Monk Media One PLC* shows **27 %** on the dashboard and project page but **32 %** on the Projects list. *MMO HMI* shows **On hold** on the Projects list but counts as an active **Overdue** project on the dashboard.
+- Create one `projectProgress(tasks)` helper in `src/modules/project-management/domain/` (hours-weighted over leaf tasks). Use it in `listProjects`, `getProjectWorkspace` and `getDashboard`. Unit-test it.
+- Dashboard "active projects" and health must exclude `ON_HOLD` (or show "On hold" as its own health state). One `projectHealth()` helper, used in all three places.
+- Project page "Effort 0/928h": hide when no hours are logged, or show "No hours logged yet".
+
+### UX-5 My work (`src/app/(shell)/pm/my-work/*`)
+
+Observed: identical rows ("DI Mapping" twice, "DQ Mapping" twice) because the PLC 1 / PLC 2 unit isn't shown.
+- Show the parent phase/unit under the task name (e.g. "DI Mapping · PLC 2").
+- Group rows by **To do now** (IN_PROGRESS / unblocked TODO), **Waiting** (BLOCKED, IN_REVIEW), **Later**. Keep sort by due date inside each group.
+- Put the next-step button on each row (Start / Submit for review), so simple updates don't need the task page.
+- Colour: "Due this week" is rendered red although nothing is overdue. Red (`error`) only for overdue/problems.
+
+### UX-6 Task page (`src/app/(shell)/pm/tasks/[id]/*`)
+
+Observed: the Actions card shows up to five competing actions at once: Mark complete, Cancel task, an always-open red "Raise a roadblock" box with a filled red button, a Reassign form, and Delete task.
+- Top of page: status pill + **one primary button** for the next step (per section 0.5).
+- "Report a problem": secondary button that opens a small inline form. Not an always-open red box.
+- Manager-only actions (Reassign, Cancel, Delete, Reopen) go into a **"More"** menu.
+- Update progress form: replace the slider with quick choices **25 / 50 / 75 / 100 %** plus a custom number. Keep "Hours spent" and "What moved forward". Default date = today and hide the date field behind "Different day?".
+- Show the step number and "Next step: <title>" / "Waiting on: <title>". "Downstream: 0 task(s) wait on this" is confusing, and on step 4 of a 13-step sequence it currently reads 0. Verify template dependencies are actually created (see UX-8).
+- No-access / missing task screen says "may have been deleted" and uses amber palette classes. Say "You don't have access to this task, or it no longer exists", use tokens, and link to My work.
+
+### UX-7 Project page (`src/app/(shell)/pm/projects/[id]/*`)
+
+- Status and priority are editable dropdowns inside the subtitle, so it's easy to change them by accident, and they allow "Completed" with open tasks. Show read-only pills. Status changes happen through workflow buttons (Start is automatic; **Complete project** appears only when all tasks are closed, per 0.4 item 7). Priority edit moves into an "Edit project" dialog for PM/Head/Director.
+- Task table: 28+ rows flat. Make each unit (PLC 1, PLC 2, SCADA 1…) a **collapsible group** with its own progress, show the step number, and add filter chips *All / Open / Waiting for approval / Problems*.
+- Header actions: keep **Add urgent task** (primary for managers) and **Team load**. Move "Handover project" into a "More" menu.
+- Team panel "Add member": the dropdown lists 28 people including heads. Use a searchable select and exclude people already on the project.
+- "All tasks are 100% complete!" banner (`page.tsx:83`) uses `emerald-*` palette classes and is based on % instead of task status. Base it on status (all leaf tasks COMPLETED/CANCELLED). Show it only to users who can complete the project, and use `success` tokens.
+
+### UX-8 New project wizard (`src/app/(shell)/pm/projects/new/automation-project-wizard.tsx`, 735 lines)
+
+Observed: one long page with 4 numbered sections. The step circles are orange, which breaks the "orange is scarce" rule. Section 4 renders an assignee plus two dates for every step of every unit (13 × units rows).
+- Split into **3 steps with Back/Next**: (1) Order details, (2) Scope & project manager, (3) Review team & dates.
+- In step 3, **run auto-assign automatically** and show a compact summary per unit ("PLC 1 – 13 steps – Shivam, Sahil – 15 → 30 Sept"). Show per-step rows only after "Edit assignments".
+- PM dropdown: only `PM_BASE` holders (0.3). Explain the "Show PM team members only" checkbox in one line, or remove it and always filter to the PM's team with a "Show everyone" link.
+- Numbered step markers use `ink`/`surface-strong`, not `primary`.
+- Split the component (form state hook + 3 step components) as part of this change.
+- Verify multi-unit drafts (B-2) and that the 13-step dependencies are created. In the demo data, step 12 is completed while steps 5–11 are still To do.
+
+### UX-9 Team load (`src/app/(shell)/pm/resources/page.tsx`)
+
+Observed: 30 large cards in alphabetical order. The 2 overloaded people are buried among "FREE / 0 %" cards.
+- Default view: a **compact table** sorted by load (highest first), columns *Person · Load bar · Free hours · Open tasks · Leave*.
+- Filter chips: *Overloaded / Busy / Free / On leave*, plus the existing date and department filters.
+- Clicking a person expands their task list inline.
+
+### UX-10 Projects list (`src/app/(shell)/pm/projects/page.tsx`)
+
+- Engineers currently see "0 projects – Projects you manage appear here" while working on a project. Fixed by 0.4 item 8. The empty-state text must match the role ("Projects you work on appear here").
+- Filter by status with chips instead of a select + Apply button, and search as you type (debounced) instead of "Apply".
+- Show the same progress number as everywhere else (UX-4) and the health pill.
+
+### UX-11 Phone layout (375px)
+
+Observed on the engineer dashboard: the user's name wraps next to a large role pill; the four stat tiles stack vertically and fill the whole first screen; the task table overflows sideways.
+- Stat tiles in a **2 × 2 grid** below 640px.
+- Tables (`DataTable`, My work, projects, team load) render as **stacked cards** below 640px: title, one meta line, status pill, primary action.
+- Header: avatar + bell only; name and role move into the menu sheet.
+- Tap targets ≥ 44px for row actions.
+
+### UX-12 Demo data and small polish
+
+- Seed/demo data contains test notes ("ggg"), clients named "Dhruv", and duplicate progress entries. Clean `prisma/seed.ts` so demos look real (ask owner before wiping the local DB).
+- Table sort indicators are text glyphs (`⇅`, `▲`). Use the icon style used in the sidebar, with `aria-sort` on the header cell.
+- Every icon-only button (sidebar collapse, team-panel ⇄ / ✕) needs an `aria-label`.
+- The login screen placeholder uses another company's domain (D-4).
+
+### UX done when
+
+- A junior engineer can go from login → their task → Start → Update progress → Submit for review without seeing a button that fails, and without passing through an empty or unrelated screen.
+- A PM can see everything waiting for their approval in one place and approve it in one click per task.
+- Every screen named in UX-2 uses the same label in nav, title and breadcrumb.
+- Progress and health for a project are identical on Dashboard, Projects and the project page.
+- At 375px no page scrolls sideways (tables become cards).
+- The design-system checklist in `docs/design-system.md` passes for every changed screen.
+
+---
+
 ## Suggested order of work
 
-1. A-1, B-1, B-2, B-3, B-5 (small, high-impact bug fixes)
-2. A-2 + A-3 + A-5 together (move all auth into permissions / `access.ts`)
-3. A-4, B-7, B-8 (validation and write-path consistency)
-4. B-4, B-9, B-10, B-11, B-13
-5. C-1, C-2, C-3
-6. D-1 … D-5
-7. E (design system)
-8. F, G
+1. **Section 0** — target workflow: roles/permissions, seed grants and reconciliation, relationship rules, status transitions, auto project status, review gate. Includes A-2, A-3 and the `/pm/approvals` page.
+2. A-1, B-1, B-2, B-3, B-5 (small, high-impact bug fixes)
+3. A-4, A-5, B-7, B-8 (validation and write-path consistency)
+4. **UX-1, UX-2, UX-4** (navigation, names, one source for numbers). These make everything after them simpler.
+5. **UX-5, UX-6** (My work and Task page: the engineer's daily path)
+6. **UX-3, UX-7, UX-10** (Dashboard, Project page, Projects list)
+7. **UX-8, UX-9, UX-11, UX-12** (wizard, team load, phone layout, polish)
+8. B-4, B-9, B-10, B-11, B-13
+9. C-1, C-2, C-3
+10. D-1 … D-5
+11. E (design system — also apply while touching each screen in steps 4–7)
+12. F, G
 
-After each step: `npm run typecheck && npm test && npm run build`, then summarize changes for the owner in plain language.
+After each step: `npm run typecheck && npm test && npm run build`, then summarize changes for the owner in plain language and wait for "go" before the next step.

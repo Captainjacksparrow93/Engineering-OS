@@ -1,6 +1,7 @@
 import { formatName } from '@/core/utils/strings';
 import Link from 'next/link';
 import { requirePrincipal } from '@/core/auth/session';
+import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { getDashboard } from '@/modules/project-management/services/dashboard.service';
 import { formatDate } from '@/core/utils/dates';
 import { Avatar, Card, PageHeader, Stat } from '@/components/ui';
@@ -13,11 +14,8 @@ export default async function DashboardPage() {
   const principal = await requirePrincipal();
   const data = await getDashboard(principal);
 
-  const isDirectorOrHead =
-    principal.grade === 'DIRECTOR' ||
-    principal.grade === 'HEAD' ||
-    principal.roleKeys.includes('DIRECTOR') ||
-    principal.roleKeys.includes('DEPARTMENT_HEAD');
+  const canCreateProject = hasPermissionAnywhere(principal, 'pm.project.create');
+  const canManageTemplates = hasPermissionAnywhere(principal, 'pm.template.manage');
 
   const greetingName = formatName(principal.fullName).split(' ')[0] || principal.fullName;
 
@@ -32,16 +30,16 @@ export default async function DashboardPage() {
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {isDirectorOrHead ? (
-              <>
-                <Link href="/pm/projects/new" className="btn btn-primary text-xs font-semibold">
-                  + New Automation Project
-                </Link>
-                <Link href="/pm/templates" className="btn btn-secondary text-xs font-medium">
-                  Checklist Templates
-                </Link>
-              </>
-            ) : null}
+            {canCreateProject && (
+              <Link href="/pm/projects/new" className="btn btn-primary text-xs font-semibold">
+                + New Automation Project
+              </Link>
+            )}
+            {canManageTemplates && (
+              <Link href="/pm/templates" className="btn btn-secondary text-xs font-medium">
+                Checklist Templates
+              </Link>
+            )}
             <Link href="/pm/my-work" className="btn btn-secondary text-xs">
               My work
             </Link>

@@ -8,7 +8,7 @@ import { audit, diffOf } from '@/core/audit/audit';
 import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
-import { assertProjectPermission, assertProjectVisible } from './access';
+import { assertProjectPermission, assertProjectVisible, projectVisibilityWhere } from './access';
 import type { CreateProjectInput } from '../validation/schemas';
 import { computeSchedule, rollUpProgress, type Graph } from '../domain/scheduling';
 import { formatName } from '@/core/utils/strings';
@@ -215,46 +215,12 @@ export interface ProjectListFilters {
 }
 
 export async function listProjects(principal: Principal, filters: ProjectListFilters = {}) {
-  const isDirector =
-    can(principal, 'pm.project.read.all') ||
-    principal.grade === 'DIRECTOR' ||
-    principal.roleKeys.includes('DIRECTOR');
-
-  const isHead =
-    principal.grade === 'HEAD' ||
-    principal.roleKeys.includes('DEPARTMENT_HEAD');
-
-  const deptIds = Array.from(
-    new Set([
-      ...principal.coveredDepartmentIds,
-      ...(principal.departmentId ? [principal.departmentId] : []),
-    ]),
-  );
-
-  let scopeWhere: Prisma.ProjectWhereInput = {};
-  if (filters.managerId) {
-    scopeWhere = { managerId: filters.managerId };
-  } else if (isDirector) {
-    scopeWhere = {};
-  } else if (isHead) {
-    scopeWhere = {
-      OR: [
-        ...(deptIds.length > 0 ? [{ departmentId: { in: deptIds } }] : []),
-        { managerId: principal.userId },
-        { sponsorId: principal.userId },
-      ],
-    };
-  } else {
-    // Project Managers and engineers strictly see only projects they directly manage
-    scopeWhere = { managerId: principal.userId };
-  }
-
   const whereClauses: Prisma.ProjectWhereInput[] = [
-    { companyId: principal.companyId },
+    projectVisibilityWhere(principal),
   ];
 
-  if (Object.keys(scopeWhere).length > 0) {
-    whereClauses.push(scopeWhere);
+  if (filters.managerId) {
+    whereClauses.push({ managerId: filters.managerId });
   }
 
   if (filters.status) {
@@ -640,24 +606,14 @@ function gradeToRoleKey(grade: string): string {
  * Final Step Gate: Mark project as COMPLETED and dispatch automated notification to the Department Head.
  */
 export async function completeAutomationProject(principal: Principal, projectId: string) {
+  await assertProjectPermission(principal, projectId, 'pm.project.update');
+
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: projectId },
     include: {
       manager: { select: { id: true, fullName: true } },
     },
   });
-
-  const isManager = project.managerId === principal.userId;
-  const isSponsor = project.sponsorId === principal.userId;
-  const isHeadOrDirector =
-    principal.grade === 'DIRECTOR' ||
-    principal.grade === 'HEAD' ||
-    principal.roleKeys.includes('DIRECTOR') ||
-    principal.roleKeys.includes('DEPARTMENT_HEAD');
-
-  if (!isManager && !isSponsor && !isHeadOrDirector) {
-    throw new DomainError('Only the Project Manager or Department Head can mark this project as completed.');
-  }
 
   const updated = await prisma.$transaction(async (tx) => {
     const res = await tx.project.update({

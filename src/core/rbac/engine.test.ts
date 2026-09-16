@@ -79,4 +79,11 @@ describe('hasPermissionAnywhere', () => {
     expect(hasPermissionAnywhere(p, 'pm.resource.read')).toBe(true);
     expect(can(p, 'pm.resource.read')).toBe(false);
   });
+
+  it('correctly checks pm.template.manage', () => {
+    const pWithTemplate = principal([{ permission: 'pm.template.manage', scopeType: 'GLOBAL', scopeId: null }]);
+    expect(hasPermissionAnywhere(pWithTemplate, 'pm.template.manage')).toBe(true);
+    const pWithoutTemplate = principal([{ permission: 'pm.task.read', scopeType: 'GLOBAL', scopeId: null }]);
+    expect(hasPermissionAnywhere(pWithoutTemplate, 'pm.template.manage')).toBe(false);
+  });
 });

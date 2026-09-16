@@ -627,6 +627,8 @@ export async function addComment(principal: Principal, taskId: string, body: str
  * Marks task COMPLETED, auto-unlocks downstream tasks, and checks if the entire project is completed.
  */
 export async function approveTaskReview(principal: Principal, taskId: string, feedback?: string) {
+  await assertTaskPermission(principal, taskId, 'pm.progress.review');
+
   const task = await prisma.task.findUniqueOrThrow({
     where: { id: taskId },
     include: {
@@ -634,17 +636,6 @@ export async function approveTaskReview(principal: Principal, taskId: string, fe
       assignments: { where: { status: 'ACTIVE' } },
     },
   });
-
-  const isManager = task.project.managerId === principal.userId;
-  const isHeadOrDirector =
-    principal.grade === 'DIRECTOR' ||
-    principal.grade === 'HEAD' ||
-    principal.roleKeys.includes('DIRECTOR') ||
-    principal.roleKeys.includes('DEPARTMENT_HEAD');
-
-  if (!isManager && !isHeadOrDirector) {
-    throw new DomainError('Only the Project Manager or Department Head can approve task reviews.');
-  }
 
   const updatedTask = await changeTaskStatus(principal, taskId, 'COMPLETED', feedback);
 
@@ -680,6 +671,8 @@ export async function approveTaskReview(principal: Principal, taskId: string, fe
  * Reverts task to IN_PROGRESS, adds corrective feedback comment, and notifies assignee.
  */
 export async function disapproveTaskReview(principal: Principal, taskId: string, feedback: string) {
+  await assertTaskPermission(principal, taskId, 'pm.progress.review');
+
   const task = await prisma.task.findUniqueOrThrow({
     where: { id: taskId },
     include: {
@@ -687,17 +680,6 @@ export async function disapproveTaskReview(principal: Principal, taskId: string,
       assignments: { where: { status: 'ACTIVE' } },
     },
   });
-
-  const isManager = task.project.managerId === principal.userId;
-  const isHeadOrDirector =
-    principal.grade === 'DIRECTOR' ||
-    principal.grade === 'HEAD' ||
-    principal.roleKeys.includes('DIRECTOR') ||
-    principal.roleKeys.includes('DEPARTMENT_HEAD');
-
-  if (!isManager && !isHeadOrDirector) {
-    throw new DomainError('Only the Project Manager or Department Head can disapprove task reviews.');
-  }
 
   const updatedTask = await changeTaskStatus(principal, taskId, 'IN_PROGRESS', feedback);
 

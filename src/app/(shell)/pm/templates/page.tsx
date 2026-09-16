@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
+import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { PageHeader } from '@/components/ui';
 import { listChecklistTemplates } from '@/modules/project-management/services/template.service';
 import { TemplateManagerClient } from './template-manager';
@@ -9,13 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function ChecklistTemplatesPage() {
   const principal = await requirePrincipal();
 
-  const isDirectorOrHead =
-    principal.grade === 'DIRECTOR' ||
-    principal.grade === 'HEAD' ||
-    principal.roleKeys.includes('DIRECTOR') ||
-    principal.roleKeys.includes('DEPARTMENT_HEAD');
-
-  if (!isDirectorOrHead) {
+  if (!hasPermissionAnywhere(principal, 'pm.template.manage')) {
     redirect('/pm/projects');
   }
 

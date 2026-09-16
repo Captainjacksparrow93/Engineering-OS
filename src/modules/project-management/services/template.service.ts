@@ -1,16 +1,12 @@
 import { prisma } from '@/core/db/prisma';
-import { DomainError } from '@/core/rbac/errors';
+import { hasPermissionAnywhere } from '@/core/rbac/engine';
+import { ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
 
 function assertTemplateAdmin(principal: Principal) {
-  const isDirectorOrHead =
-    principal.grade === 'DIRECTOR' ||
-    principal.grade === 'HEAD' ||
-    principal.roleKeys.includes('DIRECTOR') ||
-    principal.roleKeys.includes('DEPARTMENT_HEAD');
-  if (!isDirectorOrHead) {
-    throw new DomainError('Only Directors and Department Heads can edit master checklist templates.');
+  if (!hasPermissionAnywhere(principal, 'pm.template.manage')) {
+    throw new ForbiddenError('Only users with template management permissions can edit master checklist templates.');
   }
 }
 

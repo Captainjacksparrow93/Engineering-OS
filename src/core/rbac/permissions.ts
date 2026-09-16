@@ -37,6 +37,8 @@ export const PERMISSIONS = {
   'pm.progress.log': 'Punch in progress on a task you hold',
   'pm.progress.review': 'Review, approve or reject reported progress',
 
+  'pm.template.manage': 'Create, edit and delete master checklist templates',
+
   'pm.handover.request': 'Hand remaining work to a peer',
   'pm.handover.decide': 'Accept or reject a handover addressed to you',
   'pm.handover.override': 'Force a handover through on behalf of others',
@@ -89,6 +91,7 @@ export const SYSTEM_ROLES: Record<
       'pm.task.adhoc.create',
       'pm.task.dependency.manage',
       'pm.progress.review',
+      'pm.template.manage',
       'pm.handover.override',
       'pm.handover.decide',
       'pm.resource.read',
@@ -111,6 +114,7 @@ export const SYSTEM_ROLES: Record<
       'pm.task.adhoc.create',
       'pm.task.dependency.manage',
       'pm.progress.review',
+      'pm.template.manage',
       'pm.handover.override',
       'pm.handover.decide',
       'pm.resource.read',

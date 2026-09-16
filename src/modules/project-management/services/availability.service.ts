@@ -5,6 +5,7 @@ import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
 import { ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { addDays, startOfDay } from '@/core/utils/dates';
+import { assertTaskVisible } from './access';
 import {
   computeWorkload,
   rankCandidates,
@@ -205,6 +206,8 @@ export async function suggestAssignees(
 
 /** Peers a person may hand work to: same department first, then anyone on the project. */
 export async function handoverCandidates(principal: Principal, taskId: string) {
+  await assertTaskVisible(principal, taskId);
+
   const task = await prisma.task.findUniqueOrThrow({
     where: { id: taskId },
     select: {
@@ -266,6 +269,8 @@ async function safeSuggest(
 
 /** Peers visible to someone without resource-read rights: their own project team. */
 export async function peersForHandover(principal: Principal, taskId: string) {
+  await assertTaskVisible(principal, taskId);
+
   const task = await prisma.task.findUniqueOrThrow({
     where: { id: taskId },
     select: { projectId: true, assignments: { where: { status: 'ACTIVE' }, select: { userId: true } } },

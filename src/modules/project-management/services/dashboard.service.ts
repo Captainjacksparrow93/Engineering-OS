@@ -11,11 +11,7 @@ export async function getDashboard(principal: Principal) {
   const visibility = projectVisibilityWhere(principal);
   const isManagement =
     can(principal, 'pm.report.read') ||
-    can(principal, 'pm.project.read.all') ||
-    principal.grade === 'DIRECTOR' ||
-    principal.grade === 'HEAD' ||
-    principal.roleKeys.includes('DIRECTOR') ||
-    principal.roleKeys.includes('DEPARTMENT_HEAD');
+    can(principal, 'pm.project.read.all');
 
   const [
     projects,

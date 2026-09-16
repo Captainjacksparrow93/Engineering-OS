@@ -131,7 +131,7 @@ export function Sidebar({
   const visible = (item: NavItem) => !item.requires || hasPermissionAnywhere(principal, item.requires);
   const adminItems = ADMIN_NAV.filter(visible);
   const upcoming = MODULES.filter((m) => m.status === 'COMING_SOON');
-  const isDirector = principal.grade === 'DIRECTOR' || principal.roleKeys.includes('DIRECTOR');
+  const canManageModules = hasPermissionAnywhere(principal, 'admin.module.manage');
 
   return (
     <aside
@@ -226,7 +226,7 @@ export function Sidebar({
           </div>
         ) : null}
 
-        {isDirector ? (
+        {canManageModules ? (
           <>
             {!isCollapsed ? (
               <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Other modules</p>
