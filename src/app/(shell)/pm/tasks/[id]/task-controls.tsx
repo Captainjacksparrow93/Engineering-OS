@@ -15,8 +15,7 @@ const NEXT_STATUS: Record<string, Array<{ value: string; label: string; variant?
   BLOCKED: [{ value: 'IN_PROGRESS', label: 'Resolve Roadblock & Resume', variant: 'primary' }],
   TODO: [{ value: 'IN_PROGRESS', label: 'Start work', variant: 'primary' }],
   IN_PROGRESS: [
-    { value: 'IN_REVIEW', label: 'Send for review', variant: 'primary' },
-    { value: 'COMPLETED', label: 'Mark complete', variant: 'secondary' },
+    { value: 'COMPLETED', label: 'Mark complete', variant: 'primary' },
   ],
   IN_REVIEW: [
     { value: 'COMPLETED', label: 'Approve & complete', variant: 'primary' },

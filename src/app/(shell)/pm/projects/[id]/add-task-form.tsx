@@ -117,12 +117,6 @@ export function AddTaskForm({
             </select>
           </div>
 
-          <div className="field">
-            <label className="label" htmlFor="requiredSkills">Required skills</label>
-            <input id="requiredSkills" name="requiredSkills" className="input" placeholder="schematics, EPLAN" />
-            <p className="hint">Comma separated. Used to rank candidates.</p>
-          </div>
-
           <div className="field sm:col-span-2 lg:col-span-3">
             <label className="label" htmlFor="description">Description</label>
             <textarea id="description" name="description" rows={2} className="textarea" />

@@ -172,10 +172,6 @@ export function UserAdminPanel({
             <input id="dailyCapacityHours" name="dailyCapacityHours" type="number" min="1" max="16" step="0.5" defaultValue={8} className="input" />
           </div>
           <div className="field">
-            <label className="label" htmlFor="skills">Skills</label>
-            <input id="skills" name="skills" className="input" placeholder="schematics, EPLAN, AutoCAD" />
-          </div>
-          <div className="field">
             <label className="label" htmlFor="roleKey">Base role</label>
             <select id="roleKey" name="roleKey" className="select" defaultValue="JUNIOR_ENGINEER">
               {roles.map((role) => (

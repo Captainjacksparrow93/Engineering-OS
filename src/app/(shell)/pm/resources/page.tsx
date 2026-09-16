@@ -79,10 +79,6 @@ export default async function ResourcesPage({
             ))}
           </select>
         </div>
-        <div>
-          <label className="label" htmlFor="skills">Skills</label>
-          <input id="skills" name="skills" defaultValue={params.skills ?? ''} className="input w-52" placeholder="EPLAN, wiring" />
-        </div>
         {params.projectId ? <input type="hidden" name="projectId" value={params.projectId} /> : null}
         <button type="submit" className="btn btn-secondary mb-0.5">Apply</button>
       </form>
@@ -138,14 +134,6 @@ export default async function ResourcesPage({
                     <span className="text-muted"><strong className="text-body">{workload.leaveDays}</strong> leave day(s)</span>
                   ) : null}
                 </div>
-
-                {workload.person.skills.length ? (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {workload.person.skills.map((skill) => (
-                      <span key={skill} className="badge bg-surface-strong text-body">{skill}</span>
-                    ))}
-                  </div>
-                ) : null}
 
                 {workload.assignments.length ? (
                   <ul className="mt-3 space-y-1 border-t border-hairline pt-2">

@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { requirePrincipal } from '@/core/auth/session';
 import { listMyTasks } from '@/modules/project-management/services/task.service';
-import { formatDate, daysUntil } from '@/core/utils/dates';
-import { Card, EmptyState, PageHeader, PriorityBadge, ProgressBar, Stat, StatusBadge } from '@/components/ui';
+import { Card, EmptyState, PageHeader, Stat } from '@/components/ui';
+import { MyWorkTable } from './my-work-table';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,80 +45,7 @@ export default async function MyWorkPage({
         <EmptyState title="Nothing on your plate" hint="Tasks assigned or handed to you show up here immediately." />
       ) : (
         <Card bodyClassName="p-0">
-          <div className="overflow-x-auto">
-            <table className="table min-w-[860px]">
-              <thead>
-                <tr>
-                  <th className="w-[34%]">Task</th>
-                  <th>Project</th>
-                  <th>Due</th>
-                  <th>Progress</th>
-                  <th>Status</th>
-                  <th>Waiting on</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(({ task, assignment, unmetDependencies }) => {
-                  const due = daysUntil(task.plannedEnd);
-                  return (
-                    <tr key={assignment.id}>
-                      <td>
-                        <Link href={`/pm/tasks/${task.id}`} className="font-medium text-ink hover:text-ink">
-                          {task.title}
-                        </Link>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                          
-                          <PriorityBadge priority={task.priority} />
-                          {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
-                          {assignment.role !== 'OWNER' ? (
-                            <span className="badge bg-surface-strong text-body">{assignment.role.toLowerCase()}</span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="text-caption text-muted">
-                        <Link href={`/pm/projects/${task.project.id}`} className="hover:text-ink">
-                          {task.project.name}
-                        </Link>
-                        <span className="block text-caption text-muted-soft">{task.project.clientName}</span>
-                      </td>
-                      <td className="whitespace-nowrap text-caption">
-                        {task.plannedEnd ? (
-                          <>
-                            <span className={due !== null && due < 0 ? 'font-medium text-error' : 'text-body'}>
-                              {formatDate(task.plannedEnd)}
-                            </span>
-                            <span className="block text-caption text-muted-soft">
-                              {due !== null ? (due < 0 ? `${-due}d late` : `in ${due}d`) : ''}
-                            </span>
-                          </>
-                        ) : (
-                          '-'
-                        )}
-                      </td>
-                      <td className="w-28">
-                        <ProgressBar value={task.percentComplete} tone={task.status === 'BLOCKED' ? 'danger' : undefined} />
-                        <span className="mt-1 block text-caption text-muted">{task.percentComplete}%</span>
-                      </td>
-                      <td>
-                        <StatusBadge status={task.status} />
-                      </td>
-                      <td className="text-caption">
-                        {unmetDependencies.length === 0 ? (
-                          <span className="text-success">clear</span>
-                        ) : (
-                          unmetDependencies.map((dep) => (
-                            <Link key={dep.id} href={`/pm/tasks/${dep.id}`} className="block text-caption text-error hover:underline">
-                              {dep.title}
-                            </Link>
-                          ))
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <MyWorkTable rows={rows} />
         </Card>
       )}
     </>

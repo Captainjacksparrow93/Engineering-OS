@@ -2,8 +2,10 @@ import { formatName } from '@/core/utils/strings';
 import Link from 'next/link';
 import { requirePrincipal } from '@/core/auth/session';
 import { getDashboard } from '@/modules/project-management/services/dashboard.service';
-import { formatDate, daysUntil } from '@/core/utils/dates';
-import { Avatar, Card, EmptyState, PageHeader, PriorityBadge, ProgressBar, Stat, StatusBadge } from '@/components/ui';
+import { formatDate } from '@/core/utils/dates';
+import { Avatar, Card, PageHeader, Stat } from '@/components/ui';
+import { LiveProjectsTable } from './live-projects-table';
+import { DashboardMyWorkTable } from './dashboard-my-work-table';
 
 export const dynamic = 'force-dynamic';
 
@@ -144,89 +146,7 @@ export default async function DashboardPage() {
             }
             bodyClassName="p-0"
           >
-            {data.projects.length === 0 ? (
-              <div className="p-4">
-                <EmptyState title="No active projects" hint="Create an automation project to start tracking." />
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="table w-full text-xs">
-                  <thead>
-                    <tr className="bg-surface-subtle text-muted text-left uppercase tracking-wider">
-                      <th>Project & Client</th>
-                      <th>Project Manager</th>
-                      <th>Target Delivery</th>
-                      <th className="w-36">Progress</th>
-                      <th className="text-right">Health</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-hairline">
-                    {data.projects.map((project) => {
-                      const due = daysUntil(project.targetEndDate);
-                      return (
-                        <tr key={project.id} className="hover:bg-surface-subtle/50">
-                          <td>
-                            <Link href={`/pm/projects/${project.id}`} className="font-semibold text-ink text-sm hover:underline">
-                              {project.name}
-                            </Link>
-                            <div className="mt-0.5 flex items-center gap-2">
-                              <span className="text-caption text-muted font-medium">• {project.clientName}</span>
-                              <PriorityBadge priority={project.priority} />
-                            </div>
-                          </td>
-                          <td>
-                            <span className="flex items-center gap-2 font-medium text-ink text-xs">
-                              <Avatar name={formatName(project.manager.fullName)} color={project.manager.avatarColor} size={22} />
-                              {formatName(project.manager.fullName)}
-                            </span>
-                          </td>
-                          <td className="whitespace-nowrap">
-                            {project.targetEndDate ? (
-                              <div>
-                                <span className="font-medium text-ink text-xs">{formatDate(project.targetEndDate)}</span>
-                                {due !== null ? (
-                                  <span
-                                    className={`block text-caption font-semibold ${
-                                      due < 0 ? 'text-error' : due <= 7 ? 'text-stage-review' : 'text-muted-soft'
-                                    }`}
-                                  >
-                                    {due < 0 ? `${-due}d late` : due === 0 ? 'Due today' : `in ${due} days`}
-                                  </span>
-                                ) : null}
-                              </div>
-                            ) : (
-                              '-'
-                            )}
-                          </td>
-                          <td>
-                            <ProgressBar value={project.progressPercent} />
-                            <div className="mt-1 flex items-center justify-between text-caption text-muted">
-                              <span>{project.progressPercent}%</span>
-                              {project.blockedCount > 0 && (
-                                <span className="text-error font-medium">{project.blockedCount} blocked</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="text-right">
-                            <span
-                              className={`badge text-xs font-semibold ${
-                                project.health === 'HEALTHY'
-                                  ? 'bg-success/[0.08] text-success'
-                                  : project.health === 'AT_RISK'
-                                  ? 'bg-error/[0.08] text-error'
-                                  : 'bg-stage-review/[0.15] text-stage-review'
-                              }`}
-                            >
-                              {project.health.replace('_', ' ')}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <LiveProjectsTable projects={data.projects} />
           </Card>
 
           {/* Section 2: Roadblock Radar */}
@@ -406,62 +326,7 @@ export default async function DashboardPage() {
               }
               bodyClassName="p-0"
             >
-              {data.myWork.items.length === 0 ? (
-                <div className="p-4">
-                  <EmptyState title="Nothing assigned to you right now" hint="New work will appear here the moment it is assigned." />
-                </div>
-              ) : (
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Task</th>
-                      <th>Project</th>
-                      <th>Due</th>
-                      <th>Progress</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.myWork.items.slice(0, 8).map(({ task }) => {
-                      const due = daysUntil(task.plannedEnd);
-                      return (
-                        <tr key={task.id}>
-                          <td>
-                            <Link href={`/pm/tasks/${task.id}`} className="font-medium text-ink hover:text-ink">
-                              {task.title}
-                            </Link>
-                            <div className="mt-0.5 flex items-center gap-2">
-                              <PriorityBadge priority={task.priority} />
-                            </div>
-                          </td>
-                          <td className="text-caption text-muted">{task.project.name}</td>
-                          <td className="whitespace-nowrap text-caption">
-                            {task.plannedEnd ? (
-                              <span className={due !== null && due < 0 ? 'font-medium text-error' : 'text-body'}>
-                                {formatDate(task.plannedEnd)}
-                                {due !== null ? (
-                                  <span className="block text-caption text-muted-soft">
-                                    {due < 0 ? `${-due}d late` : `in ${due}d`}
-                                  </span>
-                                ) : null}
-                              </span>
-                            ) : (
-                              '-'
-                            )}
-                          </td>
-                          <td className="w-28">
-                            <ProgressBar value={task.percentComplete} />
-                            <span className="mt-1 block text-caption text-muted">{task.percentComplete}%</span>
-                          </td>
-                          <td>
-                            <StatusBadge status={task.status} />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
+              <DashboardMyWorkTable items={data.myWork.items} />
             </Card>
           </div>
 

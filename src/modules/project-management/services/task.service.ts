@@ -194,6 +194,19 @@ export async function changeTaskStatus(
         where: { taskId, status: 'ACTIVE' },
         data: { status: 'COMPLETED', releasedAt: new Date() },
       });
+
+      if (task.percentComplete < 100) {
+        await tx.taskProgressLog.create({
+          data: {
+            taskId,
+            userId: principal.userId,
+            percentComplete: 100,
+            hoursSpent: Math.max(1, task.estimatedHours - task.actualHours),
+            note: note || `Task marked completed by ${formatName(principal.fullName)}`,
+            loggedFor: new Date(),
+          },
+        });
+      }
     }
 
     await audit(

@@ -94,7 +94,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <StatusBadge status={task.status} />
-            <PriorityBadge priority={task.priority} />
+            {task.priority !== 'MEDIUM' ? <PriorityBadge priority={task.priority} /> : null}
             {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
             {task.parent ? (
               <Link href={`/pm/tasks/${task.parent.id}`} className="text-caption text-ink hover:underline">
@@ -170,19 +170,6 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
               </div>
             </div>
 
-            {task.requiredSkills.length ? (
-              <div className="mt-3">
-                <p className="label">Skills needed</p>
-                <div className="flex flex-wrap gap-1">
-                  {task.requiredSkills.map((skill) => (
-                    <span key={skill} className="badge bg-surface-strong text-body">
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
             <div className="mt-4 border-t border-hairline pt-3">
               <div className="mb-1 flex items-center justify-between text-caption text-muted">
                 <span>Progress</span>
@@ -202,7 +189,6 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                         <Link href={`/pm/tasks/${child.id}`} className="text-body-sm text-ink hover:text-ink">
                           {child.title}
                         </Link>
-                        
                       </td>
                       <td className="w-28">
                         <ProgressBar value={child.percentComplete} />
@@ -294,7 +280,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             ) : null}
           </Card>
 
-          {permissions.canHandover && !pendingHandover && !['COMPLETED', 'CANCELLED'].includes(task.status) ? (
+          {permissions.canHandover && !permissions.canAssign && !pendingHandover && !['COMPLETED', 'CANCELLED'].includes(task.status) ? (
             <HandoverForm
               taskId={task.id}
               remainingPercent={100 - task.percentComplete}
