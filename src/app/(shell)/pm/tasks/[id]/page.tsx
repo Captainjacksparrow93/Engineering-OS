@@ -26,18 +26,18 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
     return (
       <div className="mx-auto max-w-md py-16 text-center">
         <div className="card p-8 space-y-4 border-hairline bg-surface">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-800 text-xl font-bold">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface-strong text-ink text-xl font-bold">
             !
           </div>
           <div>
-            <h1 className="text-lg font-bold text-ink">Task Not Found</h1>
+            <h1 className="text-lg font-semibold text-ink">Task Not Found</h1>
             <p className="mt-1 text-xs text-muted">
-              This task does not exist or may have been deleted.
+              You don&apos;t have access to this task, or it no longer exists.
             </p>
           </div>
           <div className="pt-2 flex items-center justify-center gap-2">
             <Link href="/pm/my-work" className="btn btn-primary btn-sm">
-              My Work
+              My work
             </Link>
             <Link href="/dashboard" className="btn btn-secondary btn-sm">
               Dashboard
@@ -152,14 +152,14 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                 </p>
               </div>
               <div>
-                <p className="label">Effort</p>
+                <p className="label">Planned duration</p>
                 <p className="text-body-sm text-ink">
-                  {Math.round(task.actualHours)}h spent of {Math.round(task.estimatedHours)}h
+                  {Math.max(1, Math.ceil(task.estimatedHours / 8))} {Math.max(1, Math.ceil(task.estimatedHours / 8)) === 1 ? 'day' : 'days'}
                 </p>
               </div>
               <div>
-                <p className="label">Downstream</p>
-                <p className="text-body-sm text-ink">{downstreamCount} task(s) wait on this</p>
+                <p className="label">Next steps waiting</p>
+                <p className="text-body-sm text-ink">{downstreamCount} step(s)</p>
               </div>
               <div>
                 <p className="label">Raised by</p>
@@ -219,7 +219,6 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                       <p className="flex flex-wrap items-center gap-2 text-body-sm">
                         <span className="font-medium text-ink">{formatName(log.user.fullName)}</span>
                         <span className="badge bg-canvas-soft text-ink">{log.percentComplete}%</span>
-                        {log.hoursSpent > 0 ? <span className="text-caption text-muted">{log.hoursSpent}h</span> : null}
                         <span className="text-caption text-muted-soft">{formatDate(log.loggedFor)}</span>
                       </p>
                       <p className="mt-0.5 whitespace-pre-wrap text-body-sm text-body">{log.note}</p>

@@ -32,6 +32,8 @@ export interface Principal {
   coveredDepartmentIds: string[];
   /** Project ids reachable through PROJECT-scoped grants or project membership. */
   memberProjectIds: string[];
+  /** Subtree of user ids who report directly or indirectly to this principal. */
+  reportIds: string[];
   roleKeys: string[];
 }
 

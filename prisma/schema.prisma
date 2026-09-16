@@ -115,6 +115,7 @@ model User {
   sponsoredProjects Project[]         @relation("ProjectSponsor")
   projectMembers    ProjectMember[]
   createdTasks      Task[]            @relation("TaskCreatedBy")
+  completedTasks    Task[]            @relation("TaskCompletedBy")
   taskAssignments   TaskAssignment[]
   progressLogs      TaskProgressLog[]
   handoversFrom     TaskHandover[]    @relation("HandoverFrom")
@@ -513,7 +514,7 @@ model Task {
   priority    TaskPriority @default(MEDIUM)
 
   estimatedHours  Float @default(8)
-  /// Sum of hours punched in on progress logs. Denormalised for capacity queries.
+  /// ponytail: actual hours are no longer tracked in UI/workflows; column kept for schema compatibility.
   actualHours     Float @default(0)
   /// 0-100. Leaf tasks take it from the latest progress log; PHASE tasks roll it up
   /// from children weighted by estimated hours.
@@ -523,6 +524,9 @@ model Task {
   plannedEnd   DateTime? @db.Date
   actualStart  DateTime?
   actualEnd    DateTime?
+  submittedAt  DateTime?
+  completedAt  DateTime?
+  completedById String?
 
   /// Skills a candidate assignee should have. Drives the "who can take this" ranking.
   requiredSkills String[] @default([])
@@ -530,11 +534,12 @@ model Task {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parent    Task?      @relation("TaskTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children  Task[]     @relation("TaskTree")
-  milestone Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
-  createdBy User       @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent      Task?      @relation("TaskTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Task[]     @relation("TaskTree")
+  milestone   Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  createdBy   User       @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  completedBy User?      @relation("TaskCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
 
   assignments  TaskAssignment[]
   progressLogs TaskProgressLog[]

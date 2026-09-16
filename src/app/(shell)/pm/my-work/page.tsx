@@ -22,14 +22,10 @@ export default async function MyWorkPage({
   });
 
   const today = new Date();
-  const overdue = rows.filter((r) => r.task.plannedEnd && r.task.plannedEnd < today);
+  const overdue = rows.filter((r) => r.task.plannedEnd && new Date(r.task.plannedEnd) < today && r.task.status !== 'COMPLETED');
   const blocked = rows.filter((r) => r.task.status === 'BLOCKED');
   const inProgress = rows.filter((r) => r.task.status === 'IN_PROGRESS');
-  const remainingHours = rows.reduce(
-    (sum, r) => sum + r.assignment.allocatedHours * (1 - r.task.percentComplete / 100),
-    0,
-  );
-  const completedHours = rows.reduce((sum, r) => sum + r.assignment.allocatedHours, 0);
+  const inReview = rows.filter((r) => r.task.status === 'IN_REVIEW');
 
   return (
     <>
@@ -37,7 +33,7 @@ export default async function MyWorkPage({
         title="My work"
         subtitle={
           isCompletedView
-            ? 'Your completed tasks and past deliverables across all projects.'
+            ? 'Your completed steps and past deliverables across all projects.'
             : 'Everything currently assigned to you, across every project.'
         }
         actions={
@@ -53,19 +49,18 @@ export default async function MyWorkPage({
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {isCompletedView ? (
           <>
-            <Stat label="Completed tasks" value={rows.length} tone="success" />
-            <Stat label="Total logged effort" value={`${Math.round(completedHours)}h`} />
+            <Stat label="Completed steps" value={rows.length} tone="success" />
           </>
         ) : (
           <>
-            <Stat label="Open tasks" value={rows.length} />
+            <Stat label="Open steps" value={rows.length} />
             <Stat label="In progress" value={inProgress.length} />
-            <Stat label="Blocked" value={blocked.length} tone={blocked.length ? 'warning' : 'default'} />
+            <Stat label="Waiting / Review" value={blocked.length + inReview.length} tone={blocked.length ? 'danger' : 'default'} hint={blocked.length ? `${blocked.length} blocked` : undefined} />
             <Stat
-              label="Remaining effort"
-              value={`${Math.round(remainingHours)}h`}
+              label="Overdue"
+              value={overdue.length}
               tone={overdue.length ? 'danger' : 'default'}
-              hint={overdue.length ? `${overdue.length} overdue` : undefined}
+              hint={overdue.length ? 'Needs attention' : 'All on track'}
             />
           </>
         )}

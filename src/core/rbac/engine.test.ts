@@ -15,6 +15,7 @@ const principal = (grants: Grant[], overrides: Partial<Principal> = {}): Princip
   grants,
   coveredDepartmentIds: [],
   memberProjectIds: [],
+  reportIds: [],
   roleKeys: [],
   ...overrides,
 });

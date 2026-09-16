@@ -346,33 +346,6 @@ export async function markAllNotificationsReadAction(_prev: ActionState, _form: 
 
 // -------------------------------------------------------------- PM quality gate & review
 
-export async function approveTaskReviewAction(taskId: string) {
-  const principal = await requirePrincipal();
-  try {
-    const result = await approveTaskReview(principal, taskId);
-    revalidatePath(`/pm/tasks/${taskId}`);
-    revalidatePath(`/pm/projects/${result.projectId}`);
-    revalidatePath('/pm/my-work');
-    revalidatePath('/dashboard');
-    return { success: true, allTasksCompleted: result.allTasksCompleted, projectId: result.projectId, projectName: result.projectName };
-  } catch (error) {
-    return { success: false, error: toState(error).error ?? 'Failed to approve task.' };
-  }
-}
-
-export async function disapproveTaskReviewAction(taskId: string, feedback: string) {
-  const principal = await requirePrincipal();
-  try {
-    const task = await disapproveTaskReview(principal, taskId, feedback);
-    revalidatePath(`/pm/tasks/${taskId}`);
-    revalidatePath(`/pm/projects/${task.projectId}`);
-    revalidatePath('/pm/my-work');
-    revalidatePath('/dashboard');
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: toState(error).error ?? 'Failed to disapprove task.' };
-  }
-}
 
 export async function flagRoadblockAction(taskId: string, comment: string) {
   const principal = await requirePrincipal();
@@ -517,6 +490,35 @@ export async function autoAssignAutomationTeamAction(rawInput: unknown) {
     return { success: true, assignments: result.assignments };
   } catch (error) {
     return { success: false, error: toState(error).error ?? 'Auto-assignment failed.' };
+  }
+}
+
+export async function approveTaskReviewAction(taskId: string, feedback?: string) {
+  const principal = await requirePrincipal();
+  try {
+    const result = await approveTaskReview(principal, taskId, feedback);
+    revalidatePath(`/pm/tasks/${taskId}`);
+    revalidatePath('/pm/approvals');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    if (result.projectId) revalidatePath(`/pm/projects/${result.projectId}`);
+    return { success: true, allTasksCompleted: result.allTasksCompleted };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to approve task.' };
+  }
+}
+
+export async function disapproveTaskReviewAction(taskId: string, feedback: string) {
+  const principal = await requirePrincipal();
+  try {
+    await disapproveTaskReview(principal, taskId, feedback);
+    revalidatePath(`/pm/tasks/${taskId}`);
+    revalidatePath('/pm/approvals');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to send back task.' };
   }
 }
 

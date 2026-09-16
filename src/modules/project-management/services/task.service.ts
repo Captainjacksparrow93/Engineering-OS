@@ -7,7 +7,7 @@ import { audit, diffOf } from '@/core/audit/audit';
 import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
-import { assertProjectPermission, assertTaskPermission, assertTaskVisible, loadTaskContext, projectVisibilityWhere } from './access';
+import { assertProjectPermission, assertTaskPermission, assertTaskVisible, loadTaskContext, oversightRecipients, projectVisibilityWhere } from './access';
 import { addDependency } from './dependency.service';
 import type { CreateTaskInput } from '../validation/schemas';
 import { blockingReasons, completionBlockers, downstreamTaskIds, rollUpProgress, type Graph } from '../domain/scheduling';
@@ -21,8 +21,8 @@ import { formatName } from '@/core/utils/strings';
 const ALLOWED_TRANSITIONS: Record<PrismaTaskStatus, PrismaTaskStatus[]> = {
   DRAFT: ['TODO', 'CANCELLED'],
   BLOCKED: ['TODO', 'IN_PROGRESS', 'CANCELLED'],
-  TODO: ['IN_PROGRESS', 'IN_REVIEW', 'COMPLETED', 'BLOCKED', 'CANCELLED'],
-  IN_PROGRESS: ['IN_REVIEW', 'COMPLETED', 'BLOCKED', 'TODO', 'CANCELLED'],
+  TODO: ['IN_PROGRESS', 'BLOCKED', 'CANCELLED'],
+  IN_PROGRESS: ['IN_REVIEW', 'BLOCKED', 'TODO', 'CANCELLED'],
   IN_REVIEW: ['COMPLETED', 'IN_PROGRESS', 'CANCELLED'],
   COMPLETED: ['IN_PROGRESS'],
   CANCELLED: ['TODO'],
@@ -146,12 +146,25 @@ export async function changeTaskStatus(
   status: PrismaTaskStatus,
   note?: string,
 ) {
-  await assertTaskPermission(principal, taskId, 'pm.task.update');
   const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId } });
 
   if (task.status === status) return task;
   if (!ALLOWED_TRANSITIONS[task.status].includes(status)) {
     throw new DomainError(`A task cannot move from ${task.status} to ${status}.`);
+  }
+
+  if (
+    ((task.status === 'TODO' || task.status === 'BLOCKED') && status === 'IN_PROGRESS') ||
+    (task.status === 'IN_PROGRESS' && status === 'IN_REVIEW')
+  ) {
+    await assertTaskPermission(principal, taskId, 'pm.progress.log');
+  } else if (
+    (task.status === 'IN_REVIEW' && (status === 'COMPLETED' || status === 'IN_PROGRESS')) ||
+    (task.status === 'COMPLETED' && status === 'IN_PROGRESS')
+  ) {
+    await assertTaskPermission(principal, taskId, 'pm.progress.review');
+  } else {
+    await assertTaskPermission(principal, taskId, 'pm.task.update');
   }
 
   const graph = await loadProjectGraph(task.projectId);
@@ -179,13 +192,33 @@ export async function changeTaskStatus(
   }
 
   const updated = await prisma.$transaction(async (tx) => {
+    if (status === 'IN_PROGRESS') {
+      const proj = await tx.project.findUnique({ where: { id: task.projectId }, select: { status: true } });
+      if (proj?.status === 'PLANNING') {
+        await tx.project.update({ where: { id: task.projectId }, data: { status: 'IN_PROGRESS' } });
+        await audit(
+          {
+            actorId: principal.userId,
+            module: 'pm',
+            action: 'project.status_changed',
+            entityType: 'Project',
+            entityId: task.projectId,
+            diff: { status: { from: 'PLANNING', to: 'IN_PROGRESS' } },
+          },
+          tx,
+        );
+      }
+    }
+
     const updateResult = await tx.task.updateMany({
       where: { id: taskId, status: task.status },
       data: {
         status,
         percentComplete: status === 'COMPLETED' ? 100 : task.percentComplete,
         actualStart: status === 'IN_PROGRESS' && !task.actualStart ? new Date() : task.actualStart,
-        actualEnd: status === 'COMPLETED' ? new Date() : status === 'IN_PROGRESS' ? null : task.actualEnd,
+        submittedAt: status === 'IN_REVIEW' ? new Date() : task.submittedAt,
+        completedAt: status === 'COMPLETED' ? new Date() : status === 'IN_PROGRESS' ? null : task.completedAt,
+        completedById: status === 'COMPLETED' ? principal.userId : status === 'IN_PROGRESS' ? null : task.completedById,
       },
     });
 
@@ -200,19 +233,6 @@ export async function changeTaskStatus(
         where: { taskId, status: 'ACTIVE' },
         data: { status: 'COMPLETED', releasedAt: new Date() },
       });
-
-      if (task.percentComplete < 100) {
-        await tx.taskProgressLog.create({
-          data: {
-            taskId,
-            userId: principal.userId,
-            percentComplete: 100,
-            hoursSpent: Math.max(1, task.estimatedHours - task.actualHours),
-            note: note || `Task marked completed by ${formatName(principal.fullName)}`,
-            loggedFor: new Date(),
-          },
-        });
-      }
     }
 
     await audit(
@@ -239,59 +259,62 @@ export async function changeTaskStatus(
       tx,
     );
 
+    const project = await tx.project.findUnique({
+      where: { id: task.projectId },
+      select: { id: true, name: true, managerId: true, departmentId: true },
+    });
+
+    const oversightIds = await oversightRecipients(principal.companyId, project?.departmentId, principal.userId);
+
     if (status === 'COMPLETED') {
-      // 1. Notify leadership (PM, Sponsor, HOD, Directors)
-      const project = await tx.project.findUnique({
-        where: { id: task.projectId },
-        select: { id: true, name: true, managerId: true, sponsorId: true, departmentId: true },
-      });
+      const leadershipIds = Array.from(
+        new Set([project?.managerId, ...oversightIds].filter((uid): uid is string => Boolean(uid) && uid !== principal.userId)),
+      );
 
-      if (project) {
-        const leadershipUsers = await tx.user.findMany({
-          where: {
-            companyId: principal.companyId,
-            status: 'ACTIVE',
-            OR: [
-              { id: project.managerId },
-              ...(project.sponsorId ? [{ id: project.sponsorId }] : []),
-              { grade: { in: ['DIRECTOR', 'HEAD'] } },
-              { designation: { contains: 'Director', mode: 'insensitive' } },
-            ],
+      if (leadershipIds.length > 0) {
+        await notify(
+          {
+            userIds: leadershipIds,
+            title: `Task completed: ${task.title}`,
+            body: `${formatName(principal.fullName)} approved and completed "${task.title}" in ${project?.name || ''}.`,
+            link: `/pm/projects/${task.projectId}`,
           },
-          select: { id: true },
-        });
-
-        const notifyIds = leadershipUsers
-          .map((u) => u.id)
-          .filter((uid) => uid !== principal.userId);
-
-        if (notifyIds.length > 0) {
-          await notify(
-            {
-              userIds: notifyIds,
-              title: `Task completed: ${task.title}`,
-              body: `${formatName(principal.fullName)} marked "${task.title}" as completed in ${project.name}.`,
-              link: `/pm/projects/${task.projectId}`,
-            },
-            tx,
-          );
-        }
+          tx,
+        );
       }
 
-      // 2. Whoever was waiting on this can now move; tell them without being asked.
+      // Tell holders their work was approved
+      const holders = await tx.taskAssignment.findMany({
+        where: { taskId },
+        select: { userId: true },
+      });
+      const holderIds = holders.map((h) => h.userId).filter((uid) => uid !== principal.userId);
+      if (holderIds.length > 0) {
+        await notify(
+          {
+            userIds: holderIds,
+            title: `Step approved: ${task.title}`,
+            body: `Your step "${task.title}" has been approved and marked complete.`,
+            link: `/pm/tasks/${taskId}`,
+          },
+          tx,
+        );
+      }
+
+      // Whoever was waiting on this can now move
       const unblocked = downstreamTaskIds(taskId, graph.edges);
       if (unblocked.length) {
-        const holders = await tx.taskAssignment.findMany({
+        const downstreamHolders = await tx.taskAssignment.findMany({
           where: { taskId: { in: unblocked }, status: 'ACTIVE' },
           select: { userId: true, taskId: true },
         });
-        const downstreamHolders = holders
+        const downstreamNotifyIds = downstreamHolders
           .map((h) => h.userId)
           .filter((uid) => uid !== principal.userId);
-        if (downstreamHolders.length > 0) {
+        if (downstreamNotifyIds.length > 0) {
           await notify(
             {
-              userIds: downstreamHolders,
+              userIds: downstreamNotifyIds,
               title: `${task.title} is done`,
               body: `A task you are waiting on ("${task.title}") has been completed.`,
               link: `/pm/projects/${task.projectId}`,
@@ -299,6 +322,45 @@ export async function changeTaskStatus(
             tx,
           );
         }
+      }
+    } else if (status === 'IN_REVIEW') {
+      const reviewNotifyIds = Array.from(
+        new Set([project?.managerId, ...oversightIds].filter((uid): uid is string => Boolean(uid) && uid !== principal.userId)),
+      );
+      if (reviewNotifyIds.length > 0) {
+        await notify(
+          {
+            userIds: reviewNotifyIds,
+            title: `Review submitted: ${task.title}`,
+            body: `${formatName(principal.fullName)} submitted "${task.title}" for review in ${project?.name || ''}.`,
+            link: `/pm/tasks/${taskId}`,
+          },
+          tx,
+        );
+      }
+    } else if (status === 'IN_PROGRESS' && task.status === 'IN_REVIEW') {
+      // Sent back for rework
+      const activeHolders = await tx.taskAssignment.findMany({
+        where: { taskId, status: 'ACTIVE' },
+        select: { userId: true },
+      });
+      const reworkNotifyIds = Array.from(
+        new Set(
+          [...activeHolders.map((h) => h.userId), ...oversightIds].filter(
+            (uid): uid is string => Boolean(uid) && uid !== principal.userId,
+          ),
+        ),
+      );
+      if (reworkNotifyIds.length > 0) {
+        await notify(
+          {
+            userIds: reworkNotifyIds,
+            title: `Sent back: ${task.title}`,
+            body: `${formatName(principal.fullName)} requested rework on "${task.title}": ${note || 'Changes required.'}`,
+            link: `/pm/tasks/${taskId}`,
+          },
+          tx,
+        );
       }
     }
 
@@ -514,6 +576,7 @@ export async function listMyTasks(
       task: {
         include: {
           project: { select: { id: true, code: true, name: true, clientName: true, priority: true } },
+          parent: { select: { id: true, code: true, title: true } },
           dependencies: {
             include: { predecessor: { select: { id: true, code: true, title: true, status: true } } },
           },
@@ -602,7 +665,39 @@ export async function getTaskDetail(principal: Principal, taskId: string) {
   const blockers = blockingReasons(taskId, graph);
   const scope = { projectId: task.projectId, departmentId: task.project.departmentId };
   const isHolder = task.assignments.some((a) => a.status === 'ACTIVE' && a.userId === principal.userId);
+  const isHolderOrLead =
+    isHolder ||
+    Boolean(
+      principal.reportIds &&
+        principal.reportIds.length > 0 &&
+        task.assignments.some((a) => a.status === 'ACTIVE' && principal.reportIds.includes(a.userId)),
+    );
   const isManager = task.project.managerId === principal.userId;
+
+  const canStart =
+    (task.status === 'TODO' || task.status === 'BLOCKED') &&
+    blockers.length === 0 &&
+    (isHolderOrLead || can(principal, 'pm.progress.log', scope) || isManager);
+
+  const canSubmit =
+    task.status === 'IN_PROGRESS' &&
+    (isHolderOrLead || can(principal, 'pm.progress.log', scope) || isManager);
+
+  const canReview =
+    task.status === 'IN_REVIEW' &&
+    (can(principal, 'pm.progress.review', scope) || isManager);
+
+  const canCancel =
+    !['COMPLETED', 'CANCELLED'].includes(task.status) &&
+    (can(principal, 'pm.task.update', scope) || isManager);
+
+  const canReopen =
+    task.status === 'COMPLETED' &&
+    (can(principal, 'pm.progress.review', scope) || isManager);
+
+  const canReportProblem =
+    !['COMPLETED', 'CANCELLED'].includes(task.status) &&
+    (isHolderOrLead || can(principal, 'pm.progress.log', scope) || isManager);
 
   return {
     task,
@@ -611,11 +706,18 @@ export async function getTaskDetail(principal: Principal, taskId: string) {
     permissions: {
       canEdit: can(principal, 'pm.task.update', scope) || isManager,
       canAssign: can(principal, 'pm.task.assign', scope) || isManager,
-      canLogProgress: isHolder || can(principal, 'pm.progress.log', scope) || isManager,
-      canHandover: isHolder || can(principal, 'pm.handover.override', scope) || isManager,
+      canLogProgress: !['COMPLETED', 'CANCELLED'].includes(task.status) && (isHolderOrLead || can(principal, 'pm.progress.log', scope) || isManager),
+      canHandover: !['COMPLETED', 'CANCELLED'].includes(task.status) && (isHolderOrLead || can(principal, 'pm.handover.override', scope) || isManager),
       canManageDependencies: can(principal, 'pm.task.dependency.manage', scope) || isManager,
       canDelete: can(principal, 'pm.task.delete', scope) || isManager,
+      canStart,
+      canSubmit,
+      canReview,
+      canCancel,
+      canReopen,
+      canReportProblem,
       isHolder,
+      isHolderOrLead,
     },
   };
 }

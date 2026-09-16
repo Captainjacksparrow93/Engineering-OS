@@ -181,7 +181,11 @@ export async function loadTaskContext(taskId: string): Promise<TaskContext> {
  * ad-hoc task handed to an engineer outside the project team would be invisible to them.
  */
 export function isHolderOfTask(principal: Principal, task: TaskContext): boolean {
-  return task.assigneeIds.includes(principal.userId);
+  if (task.assigneeIds.includes(principal.userId)) return true;
+  if (principal.reportIds && principal.reportIds.length > 0) {
+    return task.assigneeIds.some((id) => principal.reportIds.includes(id));
+  }
+  return false;
 }
 
 export async function assertTaskVisible(principal: Principal, taskId: string): Promise<TaskContext> {
@@ -213,3 +217,60 @@ export async function assertTaskPermission(
 
 /** What the person holding a task may do on it without any project-scoped grant. */
 const HOLDER_IMPLIED = new Set<PermissionKey>(['pm.task.read', 'pm.progress.log', 'pm.handover.request']);
+
+/**
+ * Helper to find all upper management users who should receive oversight notifications.
+ */
+export async function oversightRecipients(
+  companyId: string,
+  departmentId?: string | null,
+  excludeUserId?: string,
+): Promise<string[]> {
+  const users = await prisma.user.findMany({
+    where: {
+      companyId,
+      status: 'ACTIVE',
+      roleAssignments: {
+        some: {
+          role: {
+            permissions: {
+              some: { permission: { key: 'pm.oversight' } },
+            },
+          },
+        },
+      },
+    },
+    select: {
+      id: true,
+      roleAssignments: {
+        select: {
+          scopeType: true,
+          scopeId: true,
+          role: {
+            select: {
+              permissions: { select: { permission: { select: { key: true } } } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const matching = new Set<string>();
+  for (const u of users) {
+    if (excludeUserId && u.id === excludeUserId) continue;
+    for (const a of u.roleAssignments) {
+      const hasOversight = a.role.permissions.some((p) => p.permission.key === 'pm.oversight');
+      if (!hasOversight) continue;
+      if (a.scopeType === 'GLOBAL') {
+        matching.add(u.id);
+        break;
+      }
+      if (a.scopeType === 'DEPARTMENT' && departmentId && a.scopeId === departmentId) {
+        matching.add(u.id);
+        break;
+      }
+    }
+  }
+  return Array.from(matching);
+}
