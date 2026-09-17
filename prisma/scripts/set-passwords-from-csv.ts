@@ -29,7 +29,7 @@ function parseLine(line: string): string[] {
 async function main() {
   const path = process.env.CSV_PATH ?? 'prisma/data/logins.csv';
   if (!existsSync(path)) { console.log(`No password file at ${path}; skipping.`); return; }
-  const [header, ...lines] = readFileSync(path, 'utf8').replace(/^FEFF/, '').split(/\r?\n/).filter((l) => l.trim());
+  const [header, ...lines] = readFileSync(path, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim());
   const columns = parseLine(header).map((c) => c.trim().toLowerCase());
   const emailAt = columns.indexOf('email');
   const passwordAt = columns.indexOf('password');
