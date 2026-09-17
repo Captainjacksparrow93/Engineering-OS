@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addWorkingDays,
+  eachWorkingDay,
   formatDate,
   formatDateRange,
   formatRelativeDate,
@@ -37,6 +38,48 @@ describe('working-day arithmetic', () => {
   it('counts the intersection of overlapping ranges', () => {
     expect(overlapDays(d('2026-01-05'), d('2026-01-09'), d('2026-01-07'), d('2026-01-12'))).toBe(3);
   });
+
+  it('calculates inclusive working-day task end dates (1-day step starts and ends on same day)', () => {
+    // Mon 5 Oct 2026: 1-day step
+    const start = d('2026-10-05');
+    const end1Day = addWorkingDays(start, 1 - 1);
+    expect(end1Day.toISOString().slice(0, 10)).toBe('2026-10-05');
+    expect(workingDaysBetween(start, end1Day)).toBe(1);
+
+    // 2-day step: Mon 5 Oct -> Tue 6 Oct
+    const end2Days = addWorkingDays(start, 2 - 1);
+    expect(end2Days.toISOString().slice(0, 10)).toBe('2026-10-06');
+    expect(workingDaysBetween(start, end2Days)).toBe(2);
+  });
+
+  it('correctly calculates 13 sequential 1-day steps starting Monday 5 Oct (finishes Mon 19 Oct, skipping Sunday)', () => {
+    const start = d('2026-10-05'); // Mon 5 Oct 2026
+    let cursor = start;
+    for (let step = 1; step <= 13; step++) {
+      const stepStart = cursor;
+      const stepEnd = addWorkingDays(stepStart, 1 - 1);
+      cursor = addWorkingDays(stepEnd, 1);
+      if (step === 13) {
+        expect(stepEnd.toISOString().slice(0, 10)).toBe('2026-10-19');
+        expect(workingDaysBetween(start, stepEnd)).toBe(13);
+      }
+    }
+  });
+
+  it('correctly calculates 13 sequential 2-day steps for PLC × 2 (26 working days)', () => {
+    const start = d('2026-10-05'); // Mon 5 Oct 2026
+    let cursor = start;
+    let finalEnd = start;
+    for (let step = 1; step <= 13; step++) {
+      const stepStart = cursor;
+      const stepEnd = addWorkingDays(stepStart, 2 - 1);
+      cursor = addWorkingDays(stepEnd, 1);
+      if (step === 13) {
+        finalEnd = stepEnd;
+      }
+    }
+    expect(workingDaysBetween(start, finalEnd)).toBe(26);
+  });
 });
 
 describe('formatDate and formatRelativeDate', () => {
@@ -62,3 +105,27 @@ describe('formatDate and formatRelativeDate', () => {
     expect(formatDateRange(d(`${currentYear}-09-28`), d(`${currentYear}-10-02`))).toBe('28 Sept – 2 Oct');
   });
 });
+
+describe('Timeline ticks and working day generations', () => {
+  it('generates exact 13 daily ticks for a standard 13-working-day project', () => {
+    const start = d('2026-10-05'); // Mon 5 Oct
+    const targetEnd = d('2026-10-19'); // Mon 19 Oct
+    const workingDays = workingDaysBetween(start, targetEnd);
+    expect(workingDays).toBe(13);
+
+    const dayTicks = eachWorkingDay(start, targetEnd);
+    expect(dayTicks.length).toBe(13);
+    expect(dayTicks[0].toISOString().slice(0, 10)).toBe('2026-10-05');
+    expect(dayTicks[12].toISOString().slice(0, 10)).toBe('2026-10-19');
+    // Ensure Sunday 11 Oct is excluded
+    expect(dayTicks.some((dt: Date) => dt.toISOString().slice(0, 10) === '2026-10-11')).toBe(false);
+  });
+
+  it('generates exact 26 daily ticks for PLC x 2 (26 working days)', () => {
+    const start = d('2026-10-05');
+    const end = addWorkingDays(start, 26 - 1);
+    const dayTicks = eachWorkingDay(start, end);
+    expect(dayTicks.length).toBe(26);
+  });
+});
+

@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
 import { getProjectWorkspace, getProjectTimeline } from '@/modules/project-management/services/project.service';
-import { TECHNICAL_DEPARTMENT_CODES } from '@/modules/project-management/domain/constants';
 import { can } from '@/core/rbac/engine';
 import { formatDate, daysUntil } from '@/core/utils/dates';
 import { Alert, Card, PageHeader, ProgressBar, Stat, StatusBadge, PriorityBadge } from '@/components/ui';
@@ -51,11 +50,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           companyId: principal.companyId,
           status: 'ACTIVE',
           id: { not: project.managerId },
-          department: { code: { in: [...TECHNICAL_DEPARTMENT_CODES] } },
-          NOT: [
-            { designation: { contains: 'Director', mode: 'insensitive' } },
-            { grade: 'DIRECTOR' },
-          ],
+          roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER', 'PM_BASE'] } } } },
         },
         select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true, skills: true },
         orderBy: { fullName: 'asc' },

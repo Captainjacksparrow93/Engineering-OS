@@ -38,7 +38,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editSeniority, setEditSeniority] = useState('JUNIOR');
-  const [editDuration, setEditDuration] = useState(2);
+  const [editDuration, setEditDuration] = useState(1);
   const [editDepends, setEditDepends] = useState<number | null>(null);
 
   const [newTitle, setNewTitle] = useState('');

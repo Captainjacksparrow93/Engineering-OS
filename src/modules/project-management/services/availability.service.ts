@@ -61,7 +61,7 @@ export async function getWorkloads(principal: Principal, query: AvailabilityQuer
       companyId: principal.companyId,
       status: 'ACTIVE',
       department: { code: { in: [...TECHNICAL_DEPARTMENT_CODES] } },
-      NOT: [{ designation: { contains: 'Director' } }, { grade: 'DIRECTOR' }],
+      NOT: [{ roleAssignments: { some: { role: { key: { in: ['DIRECTOR', 'SUPER_ADMIN'] } } } } }],
       ...visibilityFilter(principal, query),
       ...(query.projectId ? { projectMembers: { some: { projectId: query.projectId } } } : {}),
       ...(query.skills?.length ? { skills: { hasSome: query.skills } } : {}),

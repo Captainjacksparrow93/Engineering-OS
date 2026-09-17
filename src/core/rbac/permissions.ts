@@ -42,7 +42,6 @@ export const PERMISSIONS = {
 
   'pm.handover.request': 'Hand remaining work to a peer',
   'pm.handover.decide': 'Accept or reject a handover addressed to you',
-  'pm.handover.override': 'Force a handover through on behalf of others',
 
   'pm.oversight': 'Kept informed about all project activity in scope',
   'pm.resource.read': 'See who is available and how loaded they are',

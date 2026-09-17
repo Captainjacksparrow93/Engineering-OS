@@ -5,7 +5,6 @@ import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
 import { getTaskDetail } from '@/modules/project-management/services/task.service';
 import { handoverCandidates, peersForHandover } from '@/modules/project-management/services/availability.service';
-import { TECHNICAL_DEPARTMENT_CODES } from '@/modules/project-management/domain/constants';
 import { formatDate, formatDateRange, daysUntil } from '@/core/utils/dates';
 import { Alert, Avatar, Card, PageHeader, PriorityBadge, ProgressBar, StatusBadge } from '@/components/ui';
 import { ProgressForm } from './progress-form';
@@ -38,11 +37,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           where: {
             companyId: principal.companyId,
             status: 'ACTIVE',
-            department: { code: { in: [...TECHNICAL_DEPARTMENT_CODES] } },
-            NOT: [
-              { designation: { contains: 'Director', mode: 'insensitive' } },
-              { grade: 'DIRECTOR' },
-            ],
+            roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } } } },
           },
           select: { id: true, fullName: true, designation: true },
           orderBy: { fullName: 'asc' },

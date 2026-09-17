@@ -4,7 +4,7 @@ import { useState, useTransition, useMemo, useEffect, useCallback } from 'react'
 import Link from 'next/link';
 import clsx from 'clsx';
 import { formatName, cleanTaskTitle } from '@/core/utils/strings';
-import { formatDate } from '@/core/utils/dates';
+import { addWorkingDays, formatDate, workingDaysBetween } from '@/core/utils/dates';
 import { createAutomationProjectAction } from '@/app/actions/automation-project';
 import { autoAssignAutomationTeamAction } from '@/app/actions/pm';
 
@@ -94,7 +94,7 @@ export function AutomationProjectWizard({
   const [step2Error, setStep2Error] = useState<string | null>(null);
 
   // Step 3: Team assignments & dates
-  // key: `${templateCode}_U${unitIndex}_${stepNumber}` or `${templateCode}_${stepNumber}`
+  // key: `${templateCode}_${stepNumber}`
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
   const [taskDurations, setTaskDurations] = useState<Record<string, number>>({});
   const [rationales, setRationales] = useState<
@@ -102,17 +102,17 @@ export function AutomationProjectWizard({
   >({});
   const [isAutoAssigning, setIsAutoAssigning] = useState(false);
   const [autoAssignBanner, setAutoAssignBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set());
+  const [expandedPackages, setExpandedPackages] = useState<Set<string>>(new Set(['PLC', 'SCADA', 'HMI']));
 
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  // Initial durations from templates
+  // Initial durations from templates (default 1 day)
   useEffect(() => {
     const durations: Record<string, number> = {};
     for (const tpl of templates) {
       for (const item of tpl.items) {
-        durations[`${tpl.code}_${item.stepNumber}`] = item.defaultDurationDays;
+        durations[`${tpl.code}_${item.stepNumber}`] = item.defaultDurationDays || 1;
       }
     }
     setTaskDurations(durations);
@@ -133,26 +133,66 @@ export function AutomationProjectWizard({
       ...prev,
       [tplCode]: {
         enabled: true,
-        qty: Math.max(1, Math.min(10, qty)),
+        qty: Math.max(1, Math.min(20, qty)),
       },
     }));
   };
 
-  const toggleUnitExpand = (unitKey: string) => {
-    setExpandedUnits((prev) => {
+  const togglePackageExpand = (tplCode: string) => {
+    setExpandedPackages((prev) => {
       const next = new Set(prev);
-      if (next.has(unitKey)) next.delete(unitKey);
-      else next.add(unitKey);
+      if (next.has(tplCode)) next.delete(tplCode);
+      else next.add(tplCode);
       return next;
     });
   };
 
-  // Active units list
+  // Active scopes list
   const activeScopes = useMemo(() => {
     return Object.entries(selectedScopes)
       .filter(([_, val]) => val.enabled && val.qty > 0)
       .map(([code, val]) => ({ templateCode: code, quantity: val.qty }));
   }, [selectedScopes]);
+
+  // Minimum required finish date computation (inclusive working days, Sundays skipped)
+  const { minWorkingDays, minFinishDateStr, minFinishDateObj } = useMemo(() => {
+    if (activeScopes.length === 0 || !startDate) {
+      return { minWorkingDays: 13, minFinishDateStr: '', minFinishDateObj: new Date() };
+    }
+    const startDt = new Date(startDate);
+    let maxDays = 0;
+    for (const scope of activeScopes) {
+      const tpl = templates.find((t) => t.code === scope.templateCode);
+      if (!tpl) continue;
+      const baseDays = tpl.items.reduce((sum, item) => {
+        const dur = taskDurations[`${tpl.code}_${item.stepNumber}`] ?? item.defaultDurationDays ?? 1;
+        return sum + dur;
+      }, 0);
+      const packageDays = baseDays * scope.quantity;
+      if (packageDays > maxDays) maxDays = packageDays;
+    }
+    const days = Math.max(1, maxDays);
+    // Inclusive working days: 1 day finishes on startDt, N days finishes on addWorkingDays(startDt, N - 1)
+    const finishObj = addWorkingDays(startDt, days - 1);
+    const finishStr = finishObj.toISOString().split('T')[0];
+    return { minWorkingDays: days, minFinishDateStr: finishStr, minFinishDateObj: finishObj };
+  }, [activeScopes, templates, taskDurations, startDate]);
+
+  // Pre-fill target delivery date if empty or if previously less than min
+  useEffect(() => {
+    if (!minFinishDateStr) return;
+    if (!targetEndDate || targetEndDate < minFinishDateStr) {
+      setTargetEndDate(minFinishDateStr);
+    }
+  }, [minFinishDateStr, targetEndDate]);
+
+  // Check if chosen target end date is too early
+  const selectedDurationWorkingDays = useMemo(() => {
+    if (!startDate || !targetEndDate) return 0;
+    return workingDaysBetween(new Date(startDate), new Date(targetEndDate));
+  }, [startDate, targetEndDate]);
+
+  const isTargetDateTooEarly = selectedDurationWorkingDays < minWorkingDays;
 
   // Candidates for selected PM
   const candidateEngineers = useMemo(() => {
@@ -167,10 +207,10 @@ export function AutomationProjectWizard({
     const groups: Record<number, Engineer[]> = { 1: [], 2: [], 3: [], 4: [] };
     for (const eng of allEngineers) {
       const level = SENIORITY_ORDER[eng.grade] || 3;
-      groups[level]!.push(eng);
+      groups[level].push(eng);
     }
     for (const lvl of [1, 2, 3, 4]) {
-      groups[lvl]!.sort((a, b) => a.fullName.localeCompare(b.fullName));
+      groups[lvl].sort((a, b) => a.fullName.localeCompare(b.fullName));
     }
     return groups;
   }, [allEngineers]);
@@ -190,27 +230,43 @@ export function AutomationProjectWizard({
 
     try {
       const tasksPayload: Array<{
-        stepId: string;
+        templateCode: string;
         stepNumber: number;
         title: string;
         recommendedSeniority: string;
-        defaultDurationDays: number;
+        plannedStart: string;
+        plannedEnd: string;
+        durationDays: number;
+        estimatedHours: number;
       }> = [];
+
+      const startDt = startDate ? new Date(startDate) : new Date();
 
       for (const scope of activeScopes) {
         const tpl = templates.find((t) => t.code === scope.templateCode);
         if (!tpl) continue;
 
-        for (let u = 1; u <= scope.quantity; u++) {
-          for (const item of tpl.items) {
-            tasksPayload.push({
-              stepId: `${scope.templateCode}_U${u}_${item.stepNumber}`,
-              stepNumber: item.stepNumber,
-              title: `${item.title} (${scope.templateCode} ${u})`,
-              recommendedSeniority: item.recommendedSeniority,
-              defaultDurationDays: item.defaultDurationDays,
-            });
-          }
+        let cursorDate = new Date(startDt);
+
+        for (const item of tpl.items) {
+          const fallbackKey = `${scope.templateCode}_${item.stepNumber}`;
+          const baseDuration = taskDurations[fallbackKey] || item.defaultDurationDays || 1;
+          const duration = baseDuration * scope.quantity;
+          const taskStart = cursorDate.toISOString().split('T')[0];
+          const taskEndObj = addWorkingDays(cursorDate, duration - 1);
+          const taskEnd = taskEndObj.toISOString().split('T')[0];
+          cursorDate = addWorkingDays(taskEndObj, 1);
+
+          tasksPayload.push({
+            templateCode: scope.templateCode,
+            stepNumber: item.stepNumber,
+            title: `${item.title} (${scope.templateCode}${scope.quantity > 1 ? ` × ${scope.quantity}` : ''})`,
+            recommendedSeniority: item.recommendedSeniority,
+            plannedStart: taskStart,
+            plannedEnd: taskEnd,
+            durationDays: duration,
+            estimatedHours: duration * 8,
+          });
         }
       }
 
@@ -263,7 +319,7 @@ export function AutomationProjectWizard({
     } finally {
       setIsAutoAssigning(false);
     }
-  }, [selectedPMId, startDate, targetEndDate, activeScopes, templates, taskAssignments]);
+  }, [selectedPMId, startDate, targetEndDate, activeScopes, templates, taskDurations, taskAssignments]);
 
   // Step 1 validation
   const handleProceedToStep2 = () => {
@@ -284,6 +340,10 @@ export function AutomationProjectWizard({
       setStep1Error('Target delivery date cannot be before start date.');
       return;
     }
+    if (isTargetDateTooEarly) {
+      setStep1Error(`Needs at least ${minWorkingDays} working days (finishes ${formatDate(minFinishDateObj)}).`);
+      return;
+    }
     setCurrentStep(2);
   };
 
@@ -296,6 +356,10 @@ export function AutomationProjectWizard({
     }
     if (!selectedPMId) {
       setStep2Error('Please select a Project Manager to lead this project.');
+      return;
+    }
+    if (isTargetDateTooEarly) {
+      setStep2Error(`Needs at least ${minWorkingDays} working days (finishes ${formatDate(minFinishDateObj)}). Please adjust target delivery date in Step 1.`);
       return;
     }
     setCurrentStep(3);
@@ -323,10 +387,14 @@ export function AutomationProjectWizard({
       return;
     }
 
+    if (isTargetDateTooEarly) {
+      setError(`Needs at least ${minWorkingDays} working days (finishes ${formatDate(minFinishDateObj)}).`);
+      return;
+    }
+
     // Build task list payload
     const tasksPayload: Array<{
       templateCode: string;
-      unitIndex: number;
       stepNumber: number;
       title: string;
       assigneeId?: string;
@@ -342,33 +410,29 @@ export function AutomationProjectWizard({
       const tpl = templates.find((t) => t.code === scope.templateCode);
       if (!tpl) continue;
 
-      for (let u = 1; u <= scope.quantity; u++) {
-        let cursorDate = new Date(startDt);
+      let cursorDate = new Date(startDt);
 
-        for (const item of tpl.items) {
-          const unitKey = `${scope.templateCode}_U${u}_${item.stepNumber}`;
-          const fallbackKey = `${scope.templateCode}_${item.stepNumber}`;
-          const assigneeId = taskAssignments[unitKey] || taskAssignments[fallbackKey] || undefined;
+      for (const item of tpl.items) {
+        const taskKey = `${scope.templateCode}_${item.stepNumber}`;
+        const assigneeId = taskAssignments[taskKey] || undefined;
+        const baseDuration = taskDurations[taskKey] || item.defaultDurationDays || 1;
+        const duration = baseDuration * scope.quantity;
 
-          const duration = taskDurations[fallbackKey] || item.defaultDurationDays;
-          const taskStart = cursorDate.toISOString().split('T')[0]!;
-          const taskEndDt = new Date(cursorDate);
-          taskEndDt.setDate(taskEndDt.getDate() + duration);
-          const taskEnd = taskEndDt.toISOString().split('T')[0]!;
-          cursorDate = taskEndDt;
+        const taskStart = cursorDate.toISOString().split('T')[0];
+        const taskEndObj = addWorkingDays(cursorDate, duration - 1);
+        const taskEnd = taskEndObj.toISOString().split('T')[0];
+        cursorDate = addWorkingDays(taskEndObj, 1);
 
-          tasksPayload.push({
-            templateCode: scope.templateCode,
-            unitIndex: u,
-            stepNumber: item.stepNumber,
-            title: item.title,
-            assigneeId,
-            plannedStart: taskStart,
-            plannedEnd: taskEnd,
-            durationDays: duration,
-            estimatedHours: duration * 8,
-          });
-        }
+        tasksPayload.push({
+          templateCode: scope.templateCode,
+          stepNumber: item.stepNumber,
+          title: item.title,
+          assigneeId,
+          plannedStart: taskStart,
+          plannedEnd: taskEnd,
+          durationDays: duration,
+          estimatedHours: duration * 8,
+        });
       }
     }
 
@@ -613,12 +677,18 @@ export function AutomationProjectWizard({
                 type="date"
                 value={targetEndDate}
                 onChange={(e) => setTargetEndDate(e.target.value)}
-                className="input text-sm w-full font-mono"
+                className={clsx('input text-sm w-full font-mono', isTargetDateTooEarly && 'border-error')}
                 required
               />
-              <p className="text-caption text-muted mt-1">
-                Contractual finish date promised to customer. Team scheduling will anchor to this deadline.
-              </p>
+              {isTargetDateTooEarly ? (
+                <p className="text-caption text-error font-medium mt-1">
+                  ⚠️ Needs at least {minWorkingDays} working days (finishes {formatDate(minFinishDateObj)}). Working days exclude Sundays.
+                </p>
+              ) : (
+                <p className="text-caption text-muted mt-1">
+                  Target finish date promised to customer ({selectedDurationWorkingDays} working days). Minimum requirement: {minWorkingDays} working days ({formatDate(minFinishDateObj)}).
+                </p>
+              )}
             </div>
           </div>
 
@@ -656,11 +726,12 @@ export function AutomationProjectWizard({
           {/* Automation Packages */}
           <div className="space-y-3">
             <label className="label text-xs font-semibold">
-              Automation Deliverables & Units *
+              Automation Deliverables & Panel Quantities *
             </label>
             <div className="grid gap-3 sm:grid-cols-3">
               {templates.map((tpl) => {
                 const scope = selectedScopes[tpl.code] || { enabled: false, qty: 1 };
+                const packageDays = scope.qty * 13;
                 return (
                   <div
                     key={tpl.id}
@@ -682,7 +753,7 @@ export function AutomationProjectWizard({
                         <span className="font-semibold text-ink text-body-sm">{tpl.name}</span>
                       </label>
                       <span className="badge badge-neutral text-caption font-mono">
-                        {tpl.items.length} steps
+                        13 steps
                       </span>
                     </div>
 
@@ -692,7 +763,12 @@ export function AutomationProjectWizard({
 
                     {scope.enabled ? (
                       <div className="flex items-center justify-between border-t border-hairline pt-2.5">
-                        <span className="text-caption text-muted">Units / Panels:</span>
+                        <div className="flex flex-col">
+                          <span className="text-caption text-muted">Quantity:</span>
+                          <span className="text-[10px] text-muted font-mono font-medium">
+                            {packageDays} working days
+                          </span>
+                        </div>
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
@@ -708,7 +784,7 @@ export function AutomationProjectWizard({
                           <button
                             type="button"
                             onClick={() => setScopeQty(tpl.code, scope.qty + 1)}
-                            disabled={scope.qty >= 10}
+                            disabled={scope.qty >= 20}
                             className="flex h-6 w-6 items-center justify-center rounded border border-hairline bg-surface text-xs font-bold text-ink hover:bg-surface-strong disabled:opacity-40"
                           >
                             +
@@ -743,7 +819,7 @@ export function AutomationProjectWizard({
                 ))}
               </select>
               <p className="text-caption text-muted mt-1">
-                The PM controls project execution, reviews step deliverables, and manages team workload.
+                The PM controls project execution, reviews step deliverables, and approves task completions.
               </p>
             </div>
 
@@ -793,7 +869,7 @@ export function AutomationProjectWizard({
             <div>
               <h2 className="text-title-sm font-semibold text-ink">3. Review Team & Sequential Tasks</h2>
               <p className="text-caption text-muted">
-                Engineers auto-matched by seniority fit and free capacity. Expand any unit to customize assignees or dates.
+                Quantity multiplies task duration (e.g. PLC × 2 = 13 steps of 2 working days each). Expand any package to inspect assignees.
               </p>
             </div>
 
@@ -832,192 +908,183 @@ export function AutomationProjectWizard({
             </div>
           ) : null}
 
-          {/* Compact Unit Summaries */}
-          <div className="space-y-3">
+          {/* Package Summaries */}
+          <div className="space-y-4">
             {activeScopes.map((scope) => {
               const tpl = templates.find((t) => t.code === scope.templateCode);
               if (!tpl) return null;
 
-              return Array.from({ length: scope.quantity }, (_, i) => i + 1).map((u) => {
-                const unitKey = `${scope.templateCode}_U${u}`;
-                const isExpanded = expandedUnits.has(unitKey);
+              const isExpanded = expandedPackages.has(scope.templateCode);
+              const packageDays = scope.quantity * 13;
 
-                // Collect assigned engineers for this unit
-                const assignedNames = new Set<string>();
-                let unassignedCount = 0;
+              // Collect assigned engineers for this package
+              const assignedNames = new Set<string>();
+              let unassignedCount = 0;
 
-                for (const item of tpl.items) {
-                  const itemKey = `${scope.templateCode}_U${u}_${item.stepNumber}`;
-                  const fallbackKey = `${scope.templateCode}_${item.stepNumber}`;
-                  const assignedId = taskAssignments[itemKey] || taskAssignments[fallbackKey];
-                  if (assignedId) {
-                    const eng = allEngineers.find((e) => e.id === assignedId);
-                    if (eng) assignedNames.add(formatName(eng.fullName));
-                  } else {
-                    unassignedCount++;
-                  }
+              for (const item of tpl.items) {
+                const itemKey = `${scope.templateCode}_${item.stepNumber}`;
+                const assignedId = taskAssignments[itemKey];
+                if (assignedId) {
+                  const eng = allEngineers.find((e) => e.id === assignedId);
+                  if (eng) assignedNames.add(formatName(eng.fullName));
+                } else {
+                  unassignedCount++;
                 }
+              }
 
-                return (
-                  <div
-                    key={unitKey}
-                    className="rounded-lg border border-hairline bg-canvas overflow-hidden divide-y divide-hairline"
-                  >
-                    {/* Unit Summary Header */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 p-4">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded bg-surface-strong text-xs font-mono font-bold text-ink">
-                          {u}
-                        </span>
-                        <div>
-                          <p className="font-semibold text-ink text-body-sm">
-                            {tpl.name} · Unit {u}
-                          </p>
-                          <p className="text-caption text-muted">
-                            {tpl.items.length} sequential steps · {assignedNames.size > 0 ? `Assigned: ${Array.from(assignedNames).join(', ')}` : 'Unassigned'}
-                            {unassignedCount > 0 ? ` (${unassignedCount} pending)` : ''}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <span className="text-caption text-muted font-mono hidden sm:inline">
-                          {formatDate(startDate)} → {formatDate(targetEndDate)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => toggleUnitExpand(unitKey)}
-                          className="btn btn-secondary btn-sm text-xs font-medium"
-                        >
-                          {isExpanded ? 'Hide steps ▲' : 'Customize steps ▼'}
-                        </button>
+              return (
+                <div
+                  key={scope.templateCode}
+                  className="rounded-lg border border-hairline bg-canvas overflow-hidden divide-y divide-hairline"
+                >
+                  {/* Package Summary Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 items-center justify-center rounded bg-surface-strong text-xs font-mono font-bold text-ink">
+                        {scope.templateCode}
+                      </span>
+                      <div>
+                        <p className="font-semibold text-ink text-body-sm">
+                          {tpl.name} {scope.quantity > 1 ? `× ${scope.quantity}` : ''}
+                        </p>
+                        <p className="text-caption text-muted">
+                          13 steps · {packageDays} working days total ({scope.quantity} {scope.quantity === 1 ? 'day' : 'days'}/step) · {assignedNames.size > 0 ? `Assigned: ${Array.from(assignedNames).join(', ')}` : 'Unassigned'}
+                          {unassignedCount > 0 ? ` (${unassignedCount} pending)` : ''}
+                        </p>
                       </div>
                     </div>
 
-                    {/* Step-by-Step Checklist Table (When Expanded) */}
-                    {isExpanded ? (
-                      <div className="overflow-x-auto p-3 bg-surface">
-                        <table className="w-full text-left text-xs">
-                          <thead className="border-b border-hairline text-caption font-semibold text-muted">
-                            <tr>
-                              <th className="py-2 px-2 w-12">#</th>
-                              <th className="py-2 px-2">Task / Milestone</th>
-                              <th className="py-2 px-2 w-28">Seniority</th>
-                              <th className="py-2 px-2 w-24">Days</th>
-                              <th className="py-2 px-2 w-64">Assignee</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-hairline">
-                            {tpl.items.map((item) => {
-                              const itemKey = `${scope.templateCode}_U${u}_${item.stepNumber}`;
-                              const fallbackKey = `${scope.templateCode}_${item.stepNumber}`;
-                              const selectedUserId = taskAssignments[itemKey] || taskAssignments[fallbackKey] || '';
-                              const duration = taskDurations[fallbackKey] || item.defaultDurationDays;
-                              const rationaleInfo = rationales[itemKey];
-
-                              return (
-                                <tr key={item.id} className="hover:bg-canvas/50">
-                                  <td className="py-2 px-2 font-mono font-semibold text-muted">
-                                    {item.stepNumber}
-                                  </td>
-                                  <td className="py-2 px-2">
-                                    <p className="font-medium text-ink">{cleanTaskTitle(item.title)}</p>
-                                    {item.dependsOnStep ? (
-                                      <p className="text-[10px] text-muted font-mono">
-                                        Depends on Step {item.dependsOnStep}
-                                      </p>
-                                    ) : null}
-                                  </td>
-                                  <td className="py-2 px-2 text-muted">
-                                    {item.recommendedSeniority.replaceAll('_', ' ')}
-                                  </td>
-                                  <td className="py-2 px-2">
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      max="90"
-                                      value={duration}
-                                      onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 1;
-                                        setTaskDurations((prev) => ({
-                                          ...prev,
-                                          [fallbackKey]: val,
-                                        }));
-                                      }}
-                                      className="input text-xs py-1 px-1.5 w-16 font-mono text-center"
-                                    />
-                                  </td>
-                                  <td className="py-2 px-2">
-                                    <select
-                                      value={selectedUserId}
-                                      onChange={(e) => {
-                                        const uid = e.target.value;
-                                        setTaskAssignments((prev) => ({
-                                          ...prev,
-                                          [itemKey]: uid,
-                                        }));
-                                      }}
-                                      className="select text-xs py-1 w-full"
-                                    >
-                                      <option value="">[ Unassigned ]</option>
-                                      {filterPMTeamOnly ? (
-                                        <>
-                                          {selectedUserId &&
-                                            !candidateEngineers.some((e) => e.id === selectedUserId) &&
-                                            allEngineers.find((e) => e.id === selectedUserId) && (
-                                              <option value={selectedUserId}>
-                                                {formatName(allEngineers.find((e) => e.id === selectedUserId)!.fullName)} (
-                                                {allEngineers.find((e) => e.id === selectedUserId)!.designation ||
-                                                  allEngineers.find((e) => e.id === selectedUserId)!.grade}
-                                                )
-                                              </option>
-                                            )}
-                                          {candidateEngineers.map((eng) => (
-                                            <option key={eng.id} value={eng.id}>
-                                              {formatName(eng.fullName)} ({eng.designation || eng.grade})
-                                            </option>
-                                          ))}
-                                        </>
-                                      ) : (
-                                        <>
-                                          {[1, 2, 3, 4].map((lvl) => {
-                                            const group = groupedEngineers[lvl];
-                                            if (!group || group.length === 0) return null;
-                                            return (
-                                              <optgroup key={lvl} label={SENIORITY_SECTION_LABELS[lvl]}>
-                                                {group.map((eng) => (
-                                                  <option key={eng.id} value={eng.id}>
-                                                    {formatName(eng.fullName)} ({eng.designation || eng.grade})
-                                                  </option>
-                                                ))}
-                                              </optgroup>
-                                            );
-                                          })}
-                                        </>
-                                      )}
-                                    </select>
-                                    {rationaleInfo ? (
-                                      <p
-                                        className={clsx(
-                                          'text-[10px] mt-0.5 truncate',
-                                          rationaleInfo.isWeakMatch ? 'text-error' : 'text-success'
-                                        )}
-                                        title={rationaleInfo.rationale}
-                                      >
-                                        {rationaleInfo.rationale}
-                                      </p>
-                                    ) : null}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : null}
+                    <div className="flex items-center gap-3">
+                      <span className="text-caption text-muted font-mono hidden sm:inline">
+                        {formatDate(startDate)} → {formatDate(targetEndDate)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => togglePackageExpand(scope.templateCode)}
+                        className="btn btn-secondary btn-sm text-xs font-medium"
+                      >
+                        {isExpanded ? 'Hide steps ▲' : 'Customize steps ▼'}
+                      </button>
+                    </div>
                   </div>
-                );
-              });
+
+                  {/* Step-by-Step Checklist Table (When Expanded) */}
+                  {isExpanded ? (
+                    <div className="overflow-x-auto p-3 bg-surface">
+                      <table className="w-full text-left text-xs">
+                        <thead className="border-b border-hairline text-caption font-semibold text-muted">
+                          <tr>
+                            <th className="py-2 px-2 w-12">#</th>
+                            <th className="py-2 px-2">Task / Milestone</th>
+                            <th className="py-2 px-2 w-28">Seniority</th>
+                            <th className="py-2 px-2 w-28">Duration</th>
+                            <th className="py-2 px-2 w-64">Assignee</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-hairline">
+                          {tpl.items.map((item) => {
+                            const itemKey = `${scope.templateCode}_${item.stepNumber}`;
+                            const selectedUserId = taskAssignments[itemKey] || '';
+                            const baseDuration = taskDurations[itemKey] || item.defaultDurationDays || 1;
+                            const totalDuration = baseDuration * scope.quantity;
+                            const rationaleInfo = rationales[itemKey];
+
+                            return (
+                              <tr key={item.id} className="hover:bg-canvas/50">
+                                <td className="py-2 px-2 font-mono font-semibold text-muted">
+                                  {item.stepNumber}
+                                </td>
+                                <td className="py-2 px-2">
+                                  <p className="font-medium text-ink">{cleanTaskTitle(item.title)}</p>
+                                  {item.dependsOnStep ? (
+                                    <p className="text-[10px] text-muted font-mono">
+                                      Depends on Step {item.dependsOnStep}
+                                    </p>
+                                  ) : null}
+                                </td>
+                                <td className="py-2 px-2 text-muted">
+                                  {item.recommendedSeniority.replaceAll('_', ' ')}
+                                </td>
+                                <td className="py-2 px-2">
+                                  <span className="font-mono font-medium text-ink text-xs">
+                                    {totalDuration} {totalDuration === 1 ? 'day' : 'days'}
+                                  </span>
+                                  {scope.quantity > 1 ? (
+                                    <span className="text-[10px] text-muted block">
+                                      (1d × {scope.quantity})
+                                    </span>
+                                  ) : null}
+                                </td>
+                                <td className="py-2 px-2">
+                                  <select
+                                    value={selectedUserId}
+                                    onChange={(e) => {
+                                      const uid = e.target.value;
+                                      setTaskAssignments((prev) => ({
+                                        ...prev,
+                                        [itemKey]: uid,
+                                      }));
+                                    }}
+                                    className="select text-xs py-1 w-full"
+                                  >
+                                    <option value="">[ Unassigned ]</option>
+                                    {filterPMTeamOnly ? (
+                                      <>
+                                        {selectedUserId &&
+                                          !candidateEngineers.some((e) => e.id === selectedUserId) &&
+                                          allEngineers.find((e) => e.id === selectedUserId) && (
+                                            <option value={selectedUserId}>
+                                              {formatName(allEngineers.find((e) => e.id === selectedUserId)!.fullName)} (
+                                              {allEngineers.find((e) => e.id === selectedUserId)!.designation ||
+                                                allEngineers.find((e) => e.id === selectedUserId)!.grade}
+                                              )
+                                            </option>
+                                          )}
+                                        {candidateEngineers.map((eng) => (
+                                          <option key={eng.id} value={eng.id}>
+                                            {formatName(eng.fullName)} ({eng.designation || eng.grade})
+                                          </option>
+                                        ))}
+                                      </>
+                                    ) : (
+                                      <>
+                                        {[1, 2, 3, 4].map((lvl) => {
+                                          const group = groupedEngineers[lvl];
+                                          if (!group || group.length === 0) return null;
+                                          return (
+                                            <optgroup key={lvl} label={SENIORITY_SECTION_LABELS[lvl]}>
+                                              {group.map((eng) => (
+                                                <option key={eng.id} value={eng.id}>
+                                                  {formatName(eng.fullName)} ({eng.designation || eng.grade})
+                                                </option>
+                                              ))}
+                                            </optgroup>
+                                          );
+                                        })}
+                                      </>
+                                    )}
+                                  </select>
+                                  {rationaleInfo ? (
+                                    <p
+                                      className={clsx(
+                                        'text-[10px] mt-0.5 truncate',
+                                        rationaleInfo.isWeakMatch ? 'text-error' : 'text-success'
+                                      )}
+                                      title={rationaleInfo.rationale}
+                                    >
+                                      {rationaleInfo.rationale}
+                                    </p>
+                                  ) : null}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </div>
+              );
             })}
           </div>
 
@@ -1031,7 +1098,7 @@ export function AutomationProjectWizard({
             </button>
             <button
               type="submit"
-              disabled={isPending}
+              disabled={isPending || isTargetDateTooEarly}
               className="btn btn-primary px-6"
             >
               {isPending ? 'Creating Project...' : 'Create Project & Tasks'}

@@ -137,7 +137,7 @@ export const createAutomationProjectSchema = z.object({
     .array(
       z.object({
         templateCode: z.string().min(1),
-        name: z.string().min(1),
+        name: z.string().optional(),
         quantity: z.coerce.number().int().min(1).max(20),
       }),
     )
@@ -153,6 +153,7 @@ export const createAutomationProjectSchema = z.object({
         assigneeId: z.string().optional(),
         plannedStart: z.string().optional(),
         plannedEnd: z.string().optional(),
+        durationDays: z.coerce.number().int().min(1).max(365).optional(),
         estimatedHours: z.coerce.number().min(0.5).max(1000).optional(),
       }),
     )
@@ -162,15 +163,16 @@ export const createAutomationProjectSchema = z.object({
 export const autoAssignTeamSchema = z.object({
   managerId: z.string().min(1),
   startDate: z.string().optional(),
+  targetEndDate: z.string().optional(),
   scopes: z
     .array(
       z.object({
         templateCode: z.string().min(1),
-        name: z.string().min(1),
+        name: z.string().optional(),
         quantity: z.coerce.number().int().min(1).max(20),
       }),
     )
-    .max(20),
+    .optional(),
   tasks: z
     .array(
       z.object({
@@ -178,9 +180,10 @@ export const autoAssignTeamSchema = z.object({
         unitIndex: z.coerce.number().int().min(1).max(20).optional(),
         stepNumber: z.coerce.number().int().min(1).max(100),
         title: z.string().trim().min(1).max(200),
-        assigneeId: z.string().optional(),
+        recommendedSeniority: z.string().optional(),
         plannedStart: z.string().optional(),
         plannedEnd: z.string().optional(),
+        durationDays: z.coerce.number().int().min(1).max(365).optional(),
         estimatedHours: z.coerce.number().min(0.5).max(1000).optional(),
       }),
     )

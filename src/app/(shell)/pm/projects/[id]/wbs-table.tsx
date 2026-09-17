@@ -85,6 +85,9 @@ export function WbsTable({
 
   const units = useMemo(() => {
     if (phases.length === 0) {
+      const hasNonCriticalOpenStep = leafTasks.some(
+        (t) => !critical.has(t.id) && !['COMPLETED', 'CANCELLED'].includes(t.status)
+      );
       return [
         {
           id: 'default',
@@ -94,6 +97,7 @@ export function WbsTable({
               Math.max(leafTasks.length, 1)
           ),
           tasks: filteredLeafTasks,
+          showCriticalBadge: hasNonCriticalOpenStep,
         },
       ];
     }
@@ -105,15 +109,19 @@ export function WbsTable({
         allUnitTasks.reduce((s, t) => s + (t.status === 'COMPLETED' ? 100 : t.percentComplete), 0) /
           Math.max(allUnitTasks.length, 1)
       );
+      const hasNonCriticalOpenStep = allUnitTasks.some(
+        (t) => !critical.has(t.id) && !['COMPLETED', 'CANCELLED'].includes(t.status)
+      );
 
       return {
         id: phase.id,
         title: phase.title,
         progress: unitProgress,
         tasks: unitTasks,
+        showCriticalBadge: hasNonCriticalOpenStep,
       };
     });
-  }, [phases, leafTasks, filteredLeafTasks]);
+  }, [phases, leafTasks, filteredLeafTasks, critical]);
 
   return (
     <div>
@@ -214,7 +222,7 @@ export function WbsTable({
                                 {task.type === 'ADHOC' ? (
                                   <span className="badge bg-surface-strong text-ink">ad-hoc</span>
                                 ) : null}
-                                {critical.has(task.id) ? (
+                                {unit.showCriticalBadge && critical.has(task.id) ? (
                                   <span className="badge bg-error/[0.06] text-error" title="Critical path item">
                                     critical
                                   </span>

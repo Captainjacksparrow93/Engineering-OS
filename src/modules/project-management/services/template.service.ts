@@ -111,7 +111,7 @@ export async function addTemplateItem(
         title: data.title,
         description: data.description ?? null,
         recommendedSeniority: data.recommendedSeniority ?? 'JUNIOR',
-        defaultDurationDays: data.defaultDurationDays ?? 2,
+        defaultDurationDays: data.defaultDurationDays ?? 1,
         dependsOnStep: data.dependsOnStep ?? (nextStep > 1 ? nextStep - 1 : null),
         sortOrder: nextStep,
       },

@@ -751,7 +751,7 @@ model ChecklistTemplateItem {
   title               String
   description         String?
   recommendedSeniority String  @default("JUNIOR") // ASST_MANAGER, SENIOR, JUNIOR, TRAINEE
-  defaultDurationDays Int      @default(2)
+  defaultDurationDays Int      @default(1)
   isSimulationSignoff Boolean  @default(false)
   dependsOnStep       Int?
   sortOrder           Int      @default(1)

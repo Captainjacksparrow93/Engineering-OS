@@ -55,20 +55,22 @@ That is the entire palette; the app adds nothing.
 | Confirmation | `success` | Completed, on track, spare capacity |
 | Work stage | `stage-*` | Lifecycle stage pills only — see below |
 
-### Judgement call: the stage pastels
+### Judgement call: the stage pastels and status pills
 
-The source scopes the five pastels to "in-product agent timeline visualizations" and
-forbids them as generic system action colours. This app's closest equivalent is the
-**work-stage timeline** a task moves along, so the pastels mark exactly that and
-nothing else:
+Per owner decisions (Audit Round 2, Steps 3 & 7), status pill semantics are:
+- `COMPLETED` / Approved: `success` (solid green, `bg-success text-on-primary`) to unequivocally signal completion/approval.
+- `TODO`: neutral (`bg-surface-strong text-ink border border-hairline`), never green so green is reserved for approved.
+- `BLOCKED` / `LATE`: `error` (semantic red).
+- `IN_PROGRESS`: `stage-edit` (lavender).
+- `IN_REVIEW` ("Waiting for approval"): `stage-read` (blue).
 
-| Stage | Token | Original meaning |
+| Stage | Token | Treatment |
 |---|---|---|
 | Project `PLANNING` | `stage-thinking` (peach) | Thinking |
-| Task `TODO` | `stage-grep` (mint) | Grepping |
-| Task `IN_PROGRESS` | `stage-edit` (lavender) | Editing |
-| Task `IN_REVIEW` | `stage-read` (blue) | Reading |
-| Task `COMPLETED` | `stage-done` (gold) | Done |
+| Task `TODO` | Neutral (`surface-strong`) | Queued / To do |
+| Task `IN_PROGRESS` | `stage-edit` (lavender) | In progress |
+| Task `IN_REVIEW` | `stage-read` (blue) | Waiting for approval |
+| Task `COMPLETED` | `success` (green) | Approved / Completed |
 
 States that are **not** stages deliberately fall through to neutral or semantic
 treatments, so a pastel always means "work is at this stage":

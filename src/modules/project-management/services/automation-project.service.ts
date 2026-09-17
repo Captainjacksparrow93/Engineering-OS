@@ -16,7 +16,6 @@ import {
   type WorkloadAssignment,
   type WorkloadPerson,
 } from '../domain/availability';
-import { TECHNICAL_DEPARTMENT_CODES } from '../domain/constants';
 import { generateWithGemini } from '@/core/ai/vertex';
 
 export interface ScopeSelection {
@@ -91,20 +90,12 @@ export async function getDescendantUserIds(companyId: string, managerId: string)
 
 
 export async function getPMTeamData(companyId: string) {
-  // Find PMs: eligible active users holding PM_BASE or PROJECT_MANAGER or MANAGER in technical departments
+  // Find PMs: eligible active users holding PM_BASE or PROJECT_MANAGER
   const managers = await prisma.user.findMany({
     where: {
       companyId,
       status: 'ACTIVE',
-      OR: [
-        { roleAssignments: { some: { role: { key: { in: ['PM_BASE', 'PROJECT_MANAGER'] } } } } },
-        { designation: { contains: 'Project Manager', mode: 'insensitive' } },
-        { grade: 'MANAGER', department: { code: { in: [...TECHNICAL_DEPARTMENT_CODES] } } },
-      ],
-      NOT: [
-        { designation: { contains: 'Director', mode: 'insensitive' } },
-        { grade: 'DIRECTOR' },
-      ],
+      roleAssignments: { some: { role: { key: { in: ['PM_BASE', 'PROJECT_MANAGER'] } } } },
     },
     select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true },
     orderBy: { fullName: 'asc' },
@@ -130,17 +121,12 @@ export async function getPMTeamData(companyId: string) {
     teamsByPM[m.id] = getDescendantUserIdsFromMap(m.id, reportsByManager);
   }
 
-  // All technical engineers grouped by seniority (strictly excluding Project Managers and Directors)
+  // All technical engineers (holding SENIOR_ENGINEER or JUNIOR_ENGINEER)
   const allEngineers = await prisma.user.findMany({
     where: {
       companyId,
       status: 'ACTIVE',
-      grade: { notIn: ['MANAGER', 'HEAD', 'DIRECTOR'] },
-      NOT: [
-        { designation: { contains: 'Project Manager' } },
-        { designation: { contains: 'Director', mode: 'insensitive' } },
-        { grade: 'DIRECTOR' },
-      ],
+      roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } } } },
     },
     select: {
       id: true,
@@ -270,7 +256,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
       });
     }
 
-    // 4. Create WBS nodes and 13 tasks per scope unit
+    // 4. Create WBS nodes and 13 tasks per scope package (quantity multiplies duration)
     let phaseCounter = 1;
     let globalTaskCounter = 1;
 
@@ -279,93 +265,100 @@ export async function createAutomationProject(principal: Principal, input: Creat
       const tpl = templateMap.get(scope.templateCode);
       if (!tpl) continue;
 
-      for (let u = 1; u <= scope.quantity; u++) {
-        const unitName = scope.quantity > 1 ? `${tpl.code} ${u}` : tpl.code;
-        const phaseCode = `${project.code}-PH${phaseCounter++}`;
+      const phaseTitle = scope.quantity > 1 ? `${tpl.code} × ${scope.quantity}: ${tpl.name}` : `${tpl.code}: ${tpl.name}`;
+      const phaseCode = `${project.code}-PH${phaseCounter++}`;
+      const packageStepMultiplier = scope.quantity;
 
-        // Create Phase task (container node)
-        const phaseTask = await tx.task.create({
+      // Each package starts on project start date (parallel lanes)
+      let cursorDate = start;
+
+      // Create Phase task (container node)
+      const phaseTask = await tx.task.create({
+        data: {
+          projectId: project.id,
+          code: phaseCode,
+          title: phaseTitle,
+          type: 'PHASE',
+          status: 'TODO',
+          priority: 'MEDIUM',
+          estimatedHours: tpl.items.reduce((sum, item) => sum + item.defaultDurationDays * packageStepMultiplier * 8, 0),
+          createdById: principal.userId,
+          plannedStart: start,
+          plannedEnd: targetEnd,
+        },
+      });
+
+      // Map stepNumber -> created task id for dependency wiring
+      const stepTaskIdMap = new Map<number, string>();
+      for (const item of tpl.items) {
+        const draft = input.tasks.find(
+          (d) =>
+            d.templateCode === scope.templateCode &&
+            d.stepNumber === item.stepNumber,
+        );
+
+        const durationDays = draft?.durationDays ?? (item.defaultDurationDays * packageStepMultiplier);
+        const taskStart = draft?.plannedStart ? new Date(draft.plannedStart) : cursorDate;
+        // Inclusive working-day calculation: 1-day step ends on taskStart
+        const taskEnd = draft?.plannedEnd ? new Date(draft.plannedEnd) : addWorkingDays(taskStart, durationDays - 1);
+        const estimatedHours = draft?.estimatedHours ?? durationDays * 8;
+
+        const taskCode = `${project.code}-T${String(globalTaskCounter++).padStart(3, '0')}`;
+        const hasBlocker = Boolean(item.dependsOnStep);
+
+        const task = await tx.task.create({
           data: {
             projectId: project.id,
-            code: phaseCode,
-            title: `${unitName}: ${tpl.name}`,
-            type: 'PHASE',
-            status: 'TODO',
-            priority: 'MEDIUM',
-            estimatedHours: tpl.items.reduce((sum, item) => sum + item.defaultDurationDays * 8, 0),
+            parentId: phaseTask.id,
+            code: taskCode,
+            title: item.title,
+            description: item.description ?? `Standard step ${item.stepNumber} of ${tpl.name}`,
+            type: 'PROJECT',
+            status: hasBlocker ? 'BLOCKED' : 'TODO',
+            priority: item.isSimulationSignoff ? 'HIGH' : 'MEDIUM',
+            estimatedHours,
+            plannedStart: taskStart,
+            plannedEnd: taskEnd,
             createdById: principal.userId,
-            plannedStart: start,
-            plannedEnd: targetEnd,
           },
         });
 
-        // Map stepNumber -> created task id for dependency wiring
-        const stepTaskIdMap = new Map<number, string>();
-        for (const item of tpl.items) {
-          const draft = input.tasks.find(
-            (d) =>
-              d.templateCode === scope.templateCode &&
-              (d.unitIndex ?? 1) === u &&
-              d.stepNumber === item.stepNumber,
-          );
+        stepTaskIdMap.set(item.stepNumber, task.id);
 
-          const taskCode = `${project.code}-T${String(globalTaskCounter++).padStart(3, '0')}`;
-          const hasBlocker = Boolean(item.dependsOnStep);
-          const taskStart = draft?.plannedStart ? new Date(draft.plannedStart) : start;
-          const taskEnd = draft?.plannedEnd ? new Date(draft.plannedEnd) : addWorkingDays(taskStart, item.defaultDurationDays);
-          const estimatedHours = draft?.estimatedHours ?? item.defaultDurationDays * 8;
+        // Next sequential step starts on next working day after taskEnd
+        cursorDate = addWorkingDays(taskEnd, 1);
 
-          const task = await tx.task.create({
+        // Assignee
+        const assigneeId = draft?.assigneeId;
+        if (assigneeId) {
+          await tx.taskAssignment.create({
             data: {
-              projectId: project.id,
-              parentId: phaseTask.id,
-              code: taskCode,
-              title: item.title,
-              description: item.description ?? `Standard step ${item.stepNumber} of ${tpl.name}`,
-              type: 'PROJECT',
-              status: hasBlocker ? 'BLOCKED' : 'TODO',
-              priority: item.isSimulationSignoff ? 'HIGH' : 'MEDIUM',
-              estimatedHours,
-              plannedStart: taskStart,
-              plannedEnd: taskEnd,
-              createdById: principal.userId,
+              taskId: task.id,
+              userId: assigneeId,
+              role: 'OWNER',
+              allocatedHours: estimatedHours,
+              assignedById: principal.userId,
             },
           });
-
-          stepTaskIdMap.set(item.stepNumber, task.id);
-
-          // Assignee
-          const assigneeId = draft?.assigneeId;
-          if (assigneeId) {
-            await tx.taskAssignment.create({
-              data: {
-                taskId: task.id,
-                userId: assigneeId,
-                role: 'OWNER',
-                allocatedHours: estimatedHours,
-                assignedById: principal.userId,
-              },
-            });
-          }
         }
+      }
 
-        // Wire Finish-to-Start dependencies only when explicitly configured in template
-        for (const item of tpl.items) {
-          const successorId = stepTaskIdMap.get(item.stepNumber);
-          if (!successorId) continue;
+      // Wire Finish-to-Start dependencies only when explicitly configured in template
+      for (const item of tpl.items) {
+        const successorId = stepTaskIdMap.get(item.stepNumber);
+        if (!successorId) continue;
 
-          const predStep = item.dependsOnStep;
-          if (predStep && stepTaskIdMap.has(predStep)) {
-            const predecessorId = stepTaskIdMap.get(predStep)!;
-            await tx.taskDependency.create({
-              data: {
-                predecessorId,
-                successorId,
-                type: 'FINISH_TO_START',
-                lagDays: 0,
-              },
-            });
-          }
+        const predStep = item.dependsOnStep;
+        if (predStep && stepTaskIdMap.has(predStep)) {
+          const predecessorId = stepTaskIdMap.get(predStep)!;
+          await tx.taskDependency.create({
+            data: {
+              predecessorId,
+              successorId,
+              type: 'FINISH_TO_START',
+              lagDays: 0,
+            },
+          });
         }
       }
     }
@@ -549,9 +542,9 @@ export async function autoAssignAutomationTeam(
 
   // 6. Map step requirements
   const stepRequirements: SmartStepRequirement[] = input.tasks.map((t, idx) => ({
-    id: t.id || `${t.templateCode}-${t.unitIndex ?? 1}-${t.stepNumber}-${idx}`,
+    id: t.id || `${t.templateCode}_${t.stepNumber}`,
     stepNumber: t.stepNumber,
-    templateInstanceId: `${t.templateCode}-${t.unitIndex ?? 1}`,
+    templateInstanceId: t.templateCode,
     name: t.title,
     recommendedSeniority: t.recommendedSeniority || 'SENIOR',
     estimatedHours: t.estimatedHours || 8,
