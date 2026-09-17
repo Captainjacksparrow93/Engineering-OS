@@ -292,10 +292,14 @@ export function DirectorDashboard({
                       </div>
                     </td>
                     <td>
-                      <div className="flex items-center gap-2">
-                        <Avatar name={p.manager.fullName} color={p.manager.avatarColor} size={22} />
-                        <span className="text-body-sm text-ink">{formatName(p.manager.fullName)}</span>
-                      </div>
+                      {p.manager ? (
+                        <div className="flex items-center gap-2">
+                          <Avatar name={p.manager.fullName} color={p.manager.avatarColor} size={22} />
+                          <span className="text-body-sm text-ink">{formatName(p.manager.fullName)}</span>
+                        </div>
+                      ) : (
+                        <span className="text-caption text-muted-soft">Unassigned</span>
+                      )}
                     </td>
                     <td>
                       <span className="font-mono text-body-sm text-ink font-medium">
@@ -363,7 +367,7 @@ export function DirectorDashboard({
             <h2 className="card-title text-ink font-semibold">Project managers</h2>
           </header>
           <div className="divide-y divide-hairline">
-            {data.projectManagers.map((pm) => (
+            {data.projectManagers.filter((pm) => pm.manager).map((pm) => (
               <div key={pm.manager.id} className="flex items-center justify-between py-2.5">
                 <div className="flex items-center gap-2.5">
                   <Avatar name={pm.manager.fullName} color={pm.manager.avatarColor} size={26} />

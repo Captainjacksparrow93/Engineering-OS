@@ -236,7 +236,13 @@ export async function getDashboard(
       }
     }
 
-    const hasOpenRoadblock = p.tasks.some((t) => t.status === 'BLOCKED');
+    // Only treat currently active or overdue tasks that are blocked as genuine roadblocks
+    const hasOpenRoadblock = p.tasks.some(
+      (t) =>
+        t.status === 'BLOCKED' &&
+        t.plannedStart &&
+        startOfDay(t.plannedStart).getTime() <= today.getTime()
+    );
     const hasStaleApprovals = pendingApprovals.some(
       (a) => a.project.id === p.id && a.submittedAt && a.submittedAt.getTime() < today.getTime() - 2 * 86400000
     );
@@ -321,7 +327,7 @@ export async function getDashboard(
         id: `late-${lp.id}`,
         type: 'late_project',
         title: `${lp.name} is ${lp.daysLate} days late`,
-        subtitle: `PM: ${formatName(lp.manager.fullName)} · Target finish was ${pDate(lp.targetEndDate)}`,
+        subtitle: `PM: ${lp.manager ? formatName(lp.manager.fullName) : 'Unassigned'} · Target finish was ${pDate(lp.targetEndDate)}`,
         severity: 'error',
         link: `/pm/projects/${lp.id}`,
         actionLabel: 'View plan',
@@ -383,9 +389,10 @@ export async function getDashboard(
     const freeNextWeek = workloads.filter((w) => w.committedHours === 0).length;
     const onLeave = workloads.filter((w) => w.status === 'ON_LEAVE' || w.leaveDays > 0).length;
 
-    // PM breakdown
+    // PM breakdown (only include projects with an assigned manager)
     const pmMap = new Map<string, { manager: any; live: number; onTime: number; pendingApprovals: number }>();
     for (const p of liveProjects) {
+      if (!p.manager) continue;
       const pmId = p.manager.id;
       if (!pmMap.has(pmId)) {
         pmMap.set(pmId, {

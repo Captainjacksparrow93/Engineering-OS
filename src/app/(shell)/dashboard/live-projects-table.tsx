@@ -117,10 +117,14 @@ export function LiveProjectsTable({ projects }: { projects: DashboardProject[] }
                   </div>
                 </td>
                 <td>
-                  <span className="flex items-center gap-2 font-medium text-ink text-xs">
-                    <Avatar name={formatName(project.manager.fullName)} color={project.manager.avatarColor} size={22} />
-                    {formatName(project.manager.fullName)}
-                  </span>
+                  {project.manager ? (
+                    <span className="flex items-center gap-2 font-medium text-ink text-xs">
+                      <Avatar name={formatName(project.manager.fullName)} color={project.manager.avatarColor} size={22} />
+                      {formatName(project.manager.fullName)}
+                    </span>
+                  ) : (
+                    <span className="text-caption text-muted-soft">Unassigned</span>
+                  )}
                 </td>
                 <td className="whitespace-nowrap">
                   {project.targetEndDate ? (
