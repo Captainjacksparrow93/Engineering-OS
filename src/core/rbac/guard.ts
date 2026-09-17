@@ -15,17 +15,3 @@ export function assertCan(
   }
 }
 
-/**
- * Passes when ANY of the permissions is held. Useful where a relationship-based rule
- * ("it is your own task") is an alternative to a broad permission.
- */
-export function assertCanAny(
-  principal: Principal,
-  permissions: PermissionKey[],
-  scope: AccessScope = {},
-  message?: string,
-): void {
-  if (!permissions.some((p) => can(principal, p, scope))) {
-    throw new ForbiddenError(message ?? `Missing one of: ${permissions.join(', ')}`);
-  }
-}

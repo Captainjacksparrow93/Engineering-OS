@@ -108,17 +108,6 @@ export const handoverDecisionSchema = z.object({
   note: z.string().trim().max(1000).optional(),
 });
 
-export const adhocTaskSchema = createTaskSchema;
-
-export const availabilityQuerySchema = z.object({
-  from: z.string().optional(),
-  to: z.string().optional(),
-  departmentId: z.string().optional(),
-  skills: z.string().optional(),
-  requiredHours: z.coerce.number().min(0).max(2000).optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
-});
-
 export const createAutomationProjectSchema = z.object({
   name: z.string().trim().min(3, 'Project name is too short').max(160),
   code: z

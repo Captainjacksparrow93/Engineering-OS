@@ -138,20 +138,6 @@ export async function listChecklistTemplates() {
   });
 }
 
-export async function getChecklistTemplate(codeOrId: string) {
-  return prisma.checklistTemplate.findFirst({
-    where: {
-      OR: [{ id: codeOrId }, { code: codeOrId }],
-      isActive: true,
-    },
-    include: {
-      items: {
-        orderBy: { stepNumber: 'asc' },
-      },
-    },
-  });
-}
-
 export async function updateTemplateItem(
   principal: Principal,
   itemId: string,

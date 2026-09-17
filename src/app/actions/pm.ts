@@ -8,22 +8,18 @@ import {
   assignTaskSchema,
   autoAssignTeamSchema,
   changeTaskStatusSchema,
-  createProjectSchema,
   createTaskSchema,
   handoverDecisionSchema,
   handoverRequestSchema,
   progressSchema,
-  updateProjectSchema,
 } from '@/modules/project-management/validation/schemas';
 import {
   addProjectMember,
   completeAutomationProject,
-  createProject,
   getProjectTimeline,
   quickFind,
   reassignAllMemberTasks,
   removeProjectMember,
-  updateProject,
 } from '@/modules/project-management/services/project.service';
 import {
   addComment,
@@ -78,64 +74,6 @@ function isRedirectError(error: unknown): boolean {
 
 
 // ------------------------------------------------------------------- projects
-
-export async function createProjectAction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  const principal = await requirePrincipal();
-  let projectId: string | null = null;
-
-  const state = await run(async () => {
-    const input = createProjectSchema.parse({
-      name: value(form, 'name'),
-      code: value(form, 'code'),
-      description: value(form, 'description'),
-      clientName: value(form, 'clientName'),
-      poNumber: value(form, 'poNumber'),
-      orderValue: value(form, 'orderValue'),
-      panelType: value(form, 'panelType'),
-      panelCount: value(form, 'panelCount') ?? 0,
-      priority: value(form, 'priority') ?? 'MEDIUM',
-      status: value(form, 'status') ?? 'PLANNING',
-      startDate: value(form, 'startDate') ?? '',
-      targetEndDate: value(form, 'targetEndDate') ?? '',
-      managerId: value(form, 'managerId'),
-      sponsorId: value(form, 'sponsorId'),
-      departmentId: value(form, 'departmentId'),
-    });
-    const project = await createProject(principal, input);
-    projectId = project.id;
-    return project;
-  });
-
-  if (state.error) return state;
-  revalidatePath('/pm/projects');
-  if (projectId) redirect(`/pm/projects/${projectId}`);
-  return state;
-}
-
-export async function updateProjectAction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  const principal = await requirePrincipal();
-  const projectId = String(form.get('projectId'));
-
-  const state = await run(async () => {
-    const input = updateProjectSchema.parse({
-      name: value(form, 'name'),
-      description: value(form, 'description'),
-      clientName: value(form, 'clientName'),
-      poNumber: value(form, 'poNumber'),
-      orderValue: value(form, 'orderValue'),
-      panelType: value(form, 'panelType'),
-      panelCount: value(form, 'panelCount'),
-      priority: value(form, 'priority'),
-      status: value(form, 'status'),
-      startDate: value(form, 'startDate') ?? '',
-      targetEndDate: value(form, 'targetEndDate') ?? '',
-    });
-    return updateProject(principal, projectId, input);
-  });
-
-  revalidatePath(`/pm/projects/${projectId}`);
-  return state;
-}
 
 export async function addMemberAction(_prev: ActionState, form: FormData): Promise<ActionState> {
   const principal = await requirePrincipal();
@@ -444,40 +382,6 @@ export async function cancelProjectHandoverAction(_prev: ActionState, form: Form
   revalidatePath('/pm/handovers');
   revalidatePath('/dashboard');
   return state;
-}
-
-export async function updateProjectStatusAction(projectId: string, status: string) {
-  const principal = await requirePrincipal();
-  const validStatuses = ['DRAFT', 'PLANNING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED'];
-  if (!validStatuses.includes(status)) {
-    return { success: false, error: 'Invalid project status.' };
-  }
-  try {
-    await updateProject(principal, projectId, { status: status as never });
-    revalidatePath(`/pm/projects/${projectId}`);
-    revalidatePath('/pm/projects');
-    revalidatePath('/dashboard');
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: toState(error).error ?? 'Failed to update project status.' };
-  }
-}
-
-export async function updateProjectPriorityAction(projectId: string, priority: string) {
-  const principal = await requirePrincipal();
-  const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-  if (!validPriorities.includes(priority)) {
-    return { success: false, error: 'Invalid project priority.' };
-  }
-  try {
-    await updateProject(principal, projectId, { priority: priority as never });
-    revalidatePath(`/pm/projects/${projectId}`);
-    revalidatePath('/pm/projects');
-    revalidatePath('/dashboard');
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: toState(error).error ?? 'Failed to update project priority.' };
-  }
 }
 
 export async function reassignMemberTasksAction(_prev: ActionState, form: FormData): Promise<ActionState> {

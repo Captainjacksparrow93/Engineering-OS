@@ -45,11 +45,6 @@ function scopeMatches(principal: Principal, grant: Grant, scope: AccessScope): b
   }
 }
 
-/** Permissions this principal holds anywhere - used to decide what to render in the nav. */
-export function permissionsAnywhere(principal: Principal): Set<PermissionKey> {
-  return new Set(principal.grants.map((g) => g.permission));
-}
-
 export function hasPermissionAnywhere(principal: Principal, permission: PermissionKey): boolean {
   return principal.grants.some((g) => g.permission === permission);
 }

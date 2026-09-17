@@ -27,4 +27,3 @@ export function config() {
   return cached;
 }
 
-export const isProduction = () => config().NODE_ENV === 'production';

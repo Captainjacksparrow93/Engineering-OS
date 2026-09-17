@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requirePrincipal } from '@/core/auth/session';
-import { assignRole, createUser, revokeRole, setRolePermissions, setUserStatus } from '@/modules/admin/services/admin.service';
+import { assignRole, createUser, setRolePermissions, setUserStatus } from '@/modules/admin/services/admin.service';
 import { toState, value, type ActionState } from '@/core/utils/actions';
 import type { ScopeType } from '@prisma/client';
 
@@ -54,11 +54,6 @@ export async function assignRoleAction(_prev: ActionState, form: FormData): Prom
       }),
     ['/admin/users'],
   );
-}
-
-export async function revokeRoleAction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  const principal = await requirePrincipal();
-  return run(() => revokeRole(principal, String(form.get('assignmentId'))), ['/admin/users']);
 }
 
 export async function setUserStatusAction(_prev: ActionState, form: FormData): Promise<ActionState> {

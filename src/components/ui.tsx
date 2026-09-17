@@ -47,24 +47,6 @@ export function Avatar({
   );
 }
 
-export function AvatarStack({ people }: { people: Array<{ id: string; fullName: string; avatarColor?: string | null }> }) {
-  if (people.length === 0) return <span className="text-caption text-muted-soft">Unassigned</span>;
-  return (
-    <span className="flex -space-x-1.5">
-      {people.slice(0, 4).map((person) => (
-        <span key={person.id} className="rounded-pill ring-2 ring-surface">
-          <Avatar name={person.fullName} color={person.avatarColor} size={24} />
-        </span>
-      ))}
-      {people.length > 4 ? (
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-pill border border-hairline bg-surface-strong text-caption font-medium text-ink ring-2 ring-surface">
-          +${people.length - 4}
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
 const STATUS_LABELS: Record<string, string> = {
   IN_REVIEW: 'Waiting for approval',
   TODO: 'To do',
@@ -277,9 +259,4 @@ export function Alert({
     success: 'border-success/30 bg-success/[0.07] text-ink',
   }[tone];
   return <div className={clsx('rounded-md border px-base py-sm text-body-sm', styles)}>{children}</div>;
-}
-
-/** Monospace chip for identifiers: task codes, project codes, employee codes. */
-export function CodeRef({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <span className={clsx('code', className)}>{children}</span>;
 }

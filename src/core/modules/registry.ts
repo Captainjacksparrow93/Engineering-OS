@@ -141,4 +141,3 @@ export const MODULES: ModuleDefinition[] = [
 ];
 
 export const getModule = (key: string) => MODULES.find((m) => m.key === key);
-export const comingSoonModules = () => MODULES.filter((m) => m.status === 'COMING_SOON');
