@@ -1,11 +1,14 @@
 /**
- * One-off: set each person's password from a CSV with a header row containing
+ * Set each person's password from a CSV with a header row containing
  * `Email` and `Password` columns (other columns are ignored).
  *
- *   CSV_PATH=./technical-department-logins.csv npx tsx prisma/scripts/set-passwords-from-csv.ts
+ *   npx tsx prisma/scripts/set-passwords-from-csv.ts            (uses prisma/data/logins.csv)
+ *   CSV_PATH=./other.csv npx tsx prisma/scripts/set-passwords-from-csv.ts
+ *
+ * Runs on every container start. Accounts whose password already matches are skipped.
  */
 import bcrypt from 'bcryptjs';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { prisma } from '../../src/core/db/prisma';
 
 function parseLine(line: string): string[] {
@@ -24,9 +27,9 @@ function parseLine(line: string): string[] {
 }
 
 async function main() {
-  const path = process.env.CSV_PATH;
-  if (!path) throw new Error('Set CSV_PATH.');
-  const [header, ...lines] = readFileSync(path, 'utf8').split(/\r?\n/).filter((l) => l.trim());
+  const path = process.env.CSV_PATH ?? 'prisma/data/logins.csv';
+  if (!existsSync(path)) { console.log(`No password file at ${path}; skipping.`); return; }
+  const [header, ...lines] = readFileSync(path, 'utf8').replace(/^FEFF/, '').split(/\r?\n/).filter((l) => l.trim());
   const columns = parseLine(header).map((c) => c.trim().toLowerCase());
   const emailAt = columns.indexOf('email');
   const passwordAt = columns.indexOf('password');
@@ -37,12 +40,14 @@ async function main() {
     const cells = parseLine(line);
     const email = cells[emailAt]?.trim().toLowerCase();
     const password = cells[passwordAt]?.trim();
-    if (!email || !password || password.length < 8) { console.warn(`Skipped: ${email ?? line}`); continue; }
-    const result = await prisma.user.updateMany({ where: { email }, data: { passwordHash: await bcrypt.hash(password, 12) } });
-    if (result.count === 0) console.warn(`No account for ${email}`);
-    updated += result.count;
+    if (!email || !password || password.length < 8 || password.startsWith('(')) { console.warn(`Skipped a row without a usable password${email ? ` (${email})` : ''}`); continue; }
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true, passwordHash: true } });
+    if (!user) { console.warn(`No account for ${email}`); continue; }
+    if (await bcrypt.compare(password, user.passwordHash)) continue;
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(password, 12) } });
+    updated += 1;
   }
-  console.log(`Updated ${updated} of ${lines.length} accounts.`);
+  console.log(`Passwords: updated ${updated}, ${lines.length - updated} already set or skipped.`);
 }
 
 main()
