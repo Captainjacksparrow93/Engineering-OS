@@ -676,7 +676,7 @@ export async function completeAutomationProject(principal: Principal, projectId:
       {
         userIds: heads.map((h) => h.id),
         title: `Project Completed: ${project.name}`,
-        body: `PM ${formatName(project.manager.fullName)} marked project "${project.name}" as COMPLETED and ready for review.`,
+        body: `PM ${project.manager ? formatName(project.manager.fullName) : 'Unassigned'} marked project "${project.name}" as COMPLETED and ready for review.`,
         link: `/pm/projects/${projectId}`,
       },
       tx,

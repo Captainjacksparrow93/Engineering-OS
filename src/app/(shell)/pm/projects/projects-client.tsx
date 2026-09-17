@@ -49,7 +49,7 @@ export function ProjectsClient({
         const matchesName = p.name.toLowerCase().includes(q);
         const matchesCode = p.code.toLowerCase().includes(q);
         const matchesClient = p.clientName.toLowerCase().includes(q);
-        const matchesManager = p.manager.fullName.toLowerCase().includes(q);
+        const matchesManager = p.manager ? p.manager.fullName.toLowerCase().includes(q) : false;
         if (!matchesName && !matchesCode && !matchesClient && !matchesManager) {
           return false;
         }
@@ -158,14 +158,18 @@ export function ProjectsClient({
                 </div>
 
                 <div className="flex items-center justify-between border-t border-hairline pt-2.5 text-caption">
-                  <span className="flex items-center gap-1.5 text-ink">
-                    <Avatar
-                      name={formatName(project.manager.fullName)}
-                      color={project.manager.avatarColor}
-                      size={20}
-                    />
-                    <span className="font-medium">{formatName(project.manager.fullName)}</span>
-                  </span>
+                  {project.manager ? (
+                    <span className="flex items-center gap-1.5 text-ink">
+                      <Avatar
+                        name={formatName(project.manager.fullName)}
+                        color={project.manager.avatarColor}
+                        size={20}
+                      />
+                      <span className="font-medium">{formatName(project.manager.fullName)}</span>
+                    </span>
+                  ) : (
+                    <span className="text-muted-soft">Unassigned</span>
+                  )}
                   <span className={isLate ? 'font-semibold text-error' : 'text-muted'}>
                     {project.targetEndDate ? formatDate(project.targetEndDate) : 'No target date'}
                   </span>

@@ -473,7 +473,7 @@ export async function getDashboard(
   // ---------------------------------------------------------------
   // PM DASHBOARD (UX-3)
   // ---------------------------------------------------------------
-  const myProjects = processedProjects.filter((p) => p.manager.id === principal.userId);
+  const myProjects = processedProjects.filter((p) => p.manager?.id === principal.userId);
   const myApprovals = pendingApprovals.filter((a) => a.project.managerId === principal.userId);
   const myHandovers = taskHandovers.length + projectHandovers.length;
 
