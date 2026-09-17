@@ -286,9 +286,8 @@ export function DirectorDashboard({
                         <Link href={`/pm/projects/${p.id}`} className="font-semibold text-ink hover:underline">
                           {p.name}
                         </Link>
-                        <div className="flex items-center gap-2 text-caption text-muted">
+                        <div className="text-caption text-muted">
                           <span>{p.clientName}</span>
-                          <span className="code-chip text-caption">{p.code}</span>
                         </div>
                       </div>
                     </td>

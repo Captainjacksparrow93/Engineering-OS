@@ -114,7 +114,6 @@ export function PMDashboard({ data }: { data: PMDashboardData }) {
                           <Link href={`/pm/projects/${p.id}`} className="font-semibold text-ink hover:underline">
                             {p.name}
                           </Link>
-                          <span className="code-chip text-caption">{p.code}</span>
                         </div>
                       </td>
                       <td className="text-body-sm text-muted">{p.clientName}</td>

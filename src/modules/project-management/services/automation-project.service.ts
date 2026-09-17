@@ -4,7 +4,7 @@ import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { DomainError, ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
-import { addDays, addWorkingDays, startOfDay } from '@/core/utils/dates';
+import { addDays, addWorkingDays, paceStepDurations, startOfDay, workingDaysBetween } from '@/core/utils/dates';
 import { recomputeTaskDerivedState } from './task.service';
 import { nextProjectCode } from './project.service';
 import {
@@ -90,11 +90,12 @@ export async function getDescendantUserIds(companyId: string, managerId: string)
 
 
 export async function getPMTeamData(companyId: string) {
-  // Find PMs: eligible active users holding PM_BASE or PROJECT_MANAGER
+  // Find PMs: eligible active users holding PM_BASE or PROJECT_MANAGER in TECH department
   const managers = await prisma.user.findMany({
     where: {
       companyId,
       status: 'ACTIVE',
+      department: { code: { in: ['TECH'] } },
       roleAssignments: { some: { role: { key: { in: ['PM_BASE', 'PROJECT_MANAGER'] } } } },
     },
     select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true },
@@ -121,11 +122,12 @@ export async function getPMTeamData(companyId: string) {
     teamsByPM[m.id] = getDescendantUserIdsFromMap(m.id, reportsByManager);
   }
 
-  // All technical engineers (holding SENIOR_ENGINEER or JUNIOR_ENGINEER)
+  // All technical engineers (holding SENIOR_ENGINEER or JUNIOR_ENGINEER) in TECH department
   const allEngineers = await prisma.user.findMany({
     where: {
       companyId,
       status: 'ACTIVE',
+      department: { code: { in: ['TECH'] } },
       roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } } } },
     },
     select: {
@@ -288,19 +290,34 @@ export async function createAutomationProject(principal: Principal, input: Creat
         },
       });
 
+      // Pacing calculation across project window
+      const totalAvailableDays = workingDaysBetween(start, targetEnd);
+      const baseDurations = tpl.items.map((item) => {
+        const draft = input.tasks.find(
+          (d) => d.templateCode === scope.templateCode && d.stepNumber === item.stepNumber
+        );
+        return draft?.durationDays ?? (item.defaultDurationDays * packageStepMultiplier);
+      });
+      const pacedDurations = paceStepDurations(totalAvailableDays, baseDurations);
+
       // Map stepNumber -> created task id for dependency wiring
       const stepTaskIdMap = new Map<number, string>();
-      for (const item of tpl.items) {
+      for (let idx = 0; idx < tpl.items.length; idx++) {
+        const item = tpl.items[idx];
         const draft = input.tasks.find(
           (d) =>
             d.templateCode === scope.templateCode &&
             d.stepNumber === item.stepNumber,
         );
 
-        const durationDays = draft?.durationDays ?? (item.defaultDurationDays * packageStepMultiplier);
+        const durationDays = draft?.durationDays ?? pacedDurations[idx] ?? (item.defaultDurationDays * packageStepMultiplier);
         const taskStart = draft?.plannedStart ? new Date(draft.plannedStart) : cursorDate;
         // Inclusive working-day calculation: 1-day step ends on taskStart
-        const taskEnd = draft?.plannedEnd ? new Date(draft.plannedEnd) : addWorkingDays(taskStart, durationDays - 1);
+        const taskEnd = draft?.plannedEnd
+          ? new Date(draft.plannedEnd)
+          : idx === tpl.items.length - 1 && !draft?.plannedEnd
+          ? targetEnd
+          : addWorkingDays(taskStart, durationDays - 1);
         const estimatedHours = draft?.estimatedHours ?? durationDays * 8;
 
         const taskCode = `${project.code}-T${String(globalTaskCounter++).padStart(3, '0')}`;
@@ -421,11 +438,12 @@ export async function autoAssignAutomationTeam(
   const windowEnd = input.targetEndDate ? startOfDay(new Date(input.targetEndDate)) : addDays(windowStart, 30);
   const window = { from: windowStart, to: windowEnd };
 
-  // 3. Fetch candidate engineers
+  // 3. Fetch candidate engineers (strictly TECH department)
   const users = await prisma.user.findMany({
     where: {
       companyId: principal.companyId,
       status: 'ACTIVE',
+      department: { code: { in: ['TECH'] } },
       grade: { notIn: ['MANAGER', 'HEAD', 'DIRECTOR'] },
     },
     include: {

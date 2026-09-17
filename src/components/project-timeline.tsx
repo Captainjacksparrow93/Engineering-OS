@@ -89,13 +89,14 @@ export function ProjectTimeline({
 
   // Determine working day ticks or weekly ticks
   const totalWorkingDays = workingDaysBetween(start, maxTimelineDate);
-  const useDailyTicks = totalWorkingDays <= 60;
+  const useDailyTicks = totalWorkingDays <= 45;
 
   const ticks: Array<{ date: Date; xPct: number; isKey: boolean; label?: string }> = [];
   if (useDailyTicks) {
     const days = eachWorkingDay(start, maxTimelineDate);
+    const interval = days.length <= 15 ? 2 : days.length <= 30 ? 5 : 7;
     days.forEach((d, idx) => {
-      const showLabel = days.length <= 15 || idx === 0 || idx === days.length - 1 || idx % 5 === 0;
+      const showLabel = idx === 0 || idx === days.length - 1 || idx % interval === 0;
       ticks.push({
         date: d,
         xPct: getXPercent(d),
@@ -214,7 +215,6 @@ export function ProjectTimeline({
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-title-sm font-semibold text-ink">{data.projectName}</h3>
-            <span className="code-chip text-caption">{data.projectCode}</span>
           </div>
           <p className="mt-0.5 text-caption text-muted">
             {data.manager ? `PM: ${formatName(data.manager.fullName)} · ` : ''}
@@ -233,7 +233,7 @@ export function ProjectTimeline({
             >
               {projectsList.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({p.code})
+                  {p.name}
                 </option>
               ))}
             </select>
@@ -271,10 +271,10 @@ export function ProjectTimeline({
             {/* Today marker label */}
             {todayMs >= startMs && todayMs <= maxMs ? (
               <span
-                className="absolute -top-1 -translate-x-1/2 text-caption font-semibold text-ink bg-surface-strong px-1.5 py-0.5 rounded shadow-sm z-20"
+                className="absolute -top-1 -translate-x-1/2 text-caption font-semibold text-ink bg-surface-strong px-1.5 py-0.5 rounded shadow-sm z-20 whitespace-nowrap"
                 style={{ left: `${todayX}%` }}
               >
-                Today
+                Today ({formatDate(today)})
               </span>
             ) : null}
           </div>
@@ -365,7 +365,6 @@ export function ProjectTimeline({
               <span className="font-semibold text-ink text-body-sm">
                 Step {activeStep.stepNumber}: {cleanTaskTitle(activeStep.title)}
               </span>
-              <span className="code-chip text-caption">{activeStep.code}</span>
               <StatusBadge status={activeStep.status} />
               {activeStep.assignee ? (
                 <span className="text-caption text-muted">

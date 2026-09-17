@@ -13,6 +13,8 @@ interface WbsTask {
   title: string;
   type: string;
   status: string;
+  isBlocked?: boolean;
+  effectiveStatus?: string;
   priority: string;
   parentId: string | null;
   estimatedHours: number;
@@ -247,7 +249,7 @@ export function WbsTable({
                               <ProgressBar
                                 value={task.percentComplete}
                                 tone={
-                                  task.status === 'BLOCKED'
+                                  task.isBlocked || task.status === 'BLOCKED'
                                     ? 'danger'
                                     : task.status === 'COMPLETED'
                                     ? 'success'
@@ -259,7 +261,9 @@ export function WbsTable({
                               </span>
                             </td>
                             <td className="text-right">
-                              <StatusBadge status={task.status} />
+                              <StatusBadge
+                                status={task.effectiveStatus || (task.isBlocked || task.status === 'BLOCKED' ? 'BLOCKED' : task.status)}
+                              />
                             </td>
                           </tr>
                         ))

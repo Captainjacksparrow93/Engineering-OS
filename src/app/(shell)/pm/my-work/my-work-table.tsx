@@ -105,6 +105,8 @@ export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
                 const relative = formatRelativeDate(task.plannedEnd);
                 const isOverdue = relative.includes('late') && task.status !== 'COMPLETED';
                 const parentTitle = task.parent?.title ? cleanTaskTitle(task.parent.title) : null;
+                const isBlocked = task.status === 'BLOCKED' || (task.status === 'TODO' && unmetDependencies.length > 0);
+                const effectiveStatus = isBlocked ? 'BLOCKED' : task.status;
 
                 return (
                   <tr key={assignment.id} className="hover:bg-canvas-soft/60 transition-colors">
@@ -143,11 +145,11 @@ export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
                       )}
                     </td>
                     <td>
-                      <ProgressBar value={task.percentComplete} tone={task.status === 'BLOCKED' ? 'danger' : undefined} />
+                      <ProgressBar value={task.percentComplete} tone={isBlocked ? 'danger' : undefined} />
                       <span className="mt-0.5 block text-caption text-muted">{task.percentComplete}%</span>
                     </td>
                     <td>
-                      <StatusBadge status={task.status} />
+                      <StatusBadge status={effectiveStatus} />
                     </td>
                     <td className="text-right whitespace-nowrap">
                       {task.status === 'TODO' && unmetDependencies.length === 0 ? (

@@ -364,31 +364,44 @@ export async function getProjectWorkspace(principal: Principal, projectId: strin
 
   const rollup = rollUpProgress(graph.tasks);
 
-  const openTasks = tasks.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED');
-  const estimatedHours = tasks.reduce((sum, t) => sum + t.estimatedHours, 0);
-  const actualHours = tasks.reduce((sum, t) => sum + t.actualHours, 0);
+  const statusMap = new Map(tasks.map((t) => [t.id, t.status]));
+  const processedTasks = tasks.map((t) => {
+    const unmetPreds = dependencies
+      .filter((d) => d.successorId === t.id && !['COMPLETED', 'CANCELLED'].includes(statusMap.get(d.predecessorId) ?? 'TODO'))
+      .map((d) => d.predecessor);
+    const isBlocked = t.status === 'BLOCKED' || (t.status === 'TODO' && unmetPreds.length > 0);
+    const effectiveStatus = isBlocked ? 'BLOCKED' : t.status;
+    return {
+      ...t,
+      isBlocked,
+      effectiveStatus,
+      unmetDependencies: unmetPreds,
+      percentComplete: rollup.get(t.id) ?? t.percentComplete,
+      rolledUpPercent: rollup.get(t.id) ?? t.percentComplete,
+      schedule: schedule.find((s) => s.taskId === t.id) ?? null,
+    };
+  });
+
+  const openTasks = processedTasks.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED');
+  const estimatedHours = processedTasks.reduce((sum, t) => sum + t.estimatedHours, 0);
+  const actualHours = processedTasks.reduce((sum, t) => sum + t.actualHours, 0);
 
   return {
     project: {
       ...project,
       orderValue: project.orderValue ? Number(project.orderValue) : null,
     },
-    tasks: tasks.map((t) => ({
-      ...t,
-      percentComplete: rollup.get(t.id) ?? t.percentComplete,
-      rolledUpPercent: rollup.get(t.id) ?? t.percentComplete,
-      schedule: schedule.find((s) => s.taskId === t.id) ?? null,
-    })),
+    tasks: processedTasks,
     dependencies,
     schedule,
     scheduleError,
     criticalTaskIds: schedule.filter((s) => s.isCritical).map((s) => s.taskId),
 
     summary: {
-      taskCount: tasks.length,
+      taskCount: processedTasks.length,
       openCount: openTasks.length,
-      blockedCount: tasks.filter((t) => t.status === 'BLOCKED').length,
-      completedCount: tasks.filter((t) => t.status === 'COMPLETED').length,
+      blockedCount: processedTasks.filter((t) => t.isBlocked).length,
+      completedCount: processedTasks.filter((t) => t.status === 'COMPLETED').length,
       overdueCount: openTasks.filter((t) => t.plannedEnd && t.plannedEnd < new Date()).length,
       estimatedHours: Math.round(estimatedHours),
       actualHours: Math.round(actualHours),

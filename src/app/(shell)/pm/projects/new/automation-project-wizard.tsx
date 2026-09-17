@@ -4,7 +4,7 @@ import { useState, useTransition, useMemo, useEffect, useCallback } from 'react'
 import Link from 'next/link';
 import clsx from 'clsx';
 import { formatName, cleanTaskTitle } from '@/core/utils/strings';
-import { addWorkingDays, formatDate, workingDaysBetween } from '@/core/utils/dates';
+import { addWorkingDays, formatDate, paceStepDurations, workingDaysBetween } from '@/core/utils/dates';
 import { createAutomationProjectAction } from '@/app/actions/automation-project';
 import { autoAssignAutomationTeamAction } from '@/app/actions/pm';
 
@@ -194,6 +194,29 @@ export function AutomationProjectWizard({
 
   const isTargetDateTooEarly = selectedDurationWorkingDays < minWorkingDays;
 
+  // Proportional date pacing map across the project delivery window
+  const pacedDurationsMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (!startDate || !targetEndDate) return map;
+    const totalAvailDays = workingDaysBetween(new Date(startDate), new Date(targetEndDate));
+    for (const scope of activeScopes) {
+      const tpl = templates.find((t) => t.code === scope.templateCode);
+      if (!tpl) continue;
+      const baseDurations = tpl.items.map((item) => {
+        const fallbackKey = `${scope.templateCode}_${item.stepNumber}`;
+        return (taskDurations[fallbackKey] || item.defaultDurationDays || 1) * scope.quantity;
+      });
+      const paced = paceStepDurations(totalAvailDays, baseDurations);
+      tpl.items.forEach((item, idx) => {
+        map[`${scope.templateCode}_${item.stepNumber}`] =
+          paced[idx] ??
+          ((taskDurations[`${scope.templateCode}_${item.stepNumber}`] || item.defaultDurationDays || 1) *
+            scope.quantity);
+      });
+    }
+    return map;
+  }, [startDate, targetEndDate, activeScopes, templates, taskDurations]);
+
   // Candidates for selected PM
   const candidateEngineers = useMemo(() => {
     if (!selectedPMId) return allEngineers;
@@ -248,12 +271,15 @@ export function AutomationProjectWizard({
 
         let cursorDate = new Date(startDt);
 
-        for (const item of tpl.items) {
-          const fallbackKey = `${scope.templateCode}_${item.stepNumber}`;
-          const baseDuration = taskDurations[fallbackKey] || item.defaultDurationDays || 1;
-          const duration = baseDuration * scope.quantity;
+        for (let idx = 0; idx < tpl.items.length; idx++) {
+          const item = tpl.items[idx];
+          const taskKey = `${scope.templateCode}_${item.stepNumber}`;
+          const duration = pacedDurationsMap[taskKey] || (item.defaultDurationDays * scope.quantity);
           const taskStart = cursorDate.toISOString().split('T')[0];
-          const taskEndObj = addWorkingDays(cursorDate, duration - 1);
+          const taskEndObj =
+            idx === tpl.items.length - 1 && targetEndDate
+              ? new Date(targetEndDate)
+              : addWorkingDays(cursorDate, duration - 1);
           const taskEnd = taskEndObj.toISOString().split('T')[0];
           cursorDate = addWorkingDays(taskEndObj, 1);
 
@@ -412,14 +438,17 @@ export function AutomationProjectWizard({
 
       let cursorDate = new Date(startDt);
 
-      for (const item of tpl.items) {
+      for (let idx = 0; idx < tpl.items.length; idx++) {
+        const item = tpl.items[idx];
         const taskKey = `${scope.templateCode}_${item.stepNumber}`;
         const assigneeId = taskAssignments[taskKey] || undefined;
-        const baseDuration = taskDurations[taskKey] || item.defaultDurationDays || 1;
-        const duration = baseDuration * scope.quantity;
+        const duration = pacedDurationsMap[taskKey] || (item.defaultDurationDays * scope.quantity);
 
         const taskStart = cursorDate.toISOString().split('T')[0];
-        const taskEndObj = addWorkingDays(cursorDate, duration - 1);
+        const taskEndObj =
+          idx === tpl.items.length - 1 && targetEndDate
+            ? new Date(targetEndDate)
+            : addWorkingDays(cursorDate, duration - 1);
         const taskEnd = taskEndObj.toISOString().split('T')[0];
         cursorDate = addWorkingDays(taskEndObj, 1);
 
@@ -986,7 +1015,7 @@ export function AutomationProjectWizard({
                             const itemKey = `${scope.templateCode}_${item.stepNumber}`;
                             const selectedUserId = taskAssignments[itemKey] || '';
                             const baseDuration = taskDurations[itemKey] || item.defaultDurationDays || 1;
-                            const totalDuration = baseDuration * scope.quantity;
+                            const totalDuration = pacedDurationsMap[itemKey] || (baseDuration * scope.quantity);
                             const rationaleInfo = rationales[itemKey];
 
                             return (
@@ -1009,9 +1038,9 @@ export function AutomationProjectWizard({
                                   <span className="font-mono font-medium text-ink text-xs">
                                     {totalDuration} {totalDuration === 1 ? 'day' : 'days'}
                                   </span>
-                                  {scope.quantity > 1 ? (
-                                    <span className="text-[10px] text-muted block">
-                                      (1d × {scope.quantity})
+                                  {scope.quantity > 1 || totalDuration !== baseDuration ? (
+                                    <span className="text-[10px] text-muted block font-mono">
+                                      (paced across window)
                                     </span>
                                   ) : null}
                                 </td>

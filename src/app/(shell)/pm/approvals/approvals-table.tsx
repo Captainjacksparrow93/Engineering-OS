@@ -115,7 +115,6 @@ export function ApprovalsTable({ items }: { items: ApprovalItem[] }) {
                         >
                           {task.title}
                         </Link>
-                        <span className="code-chip text-caption">{task.code}</span>
                       </div>
                     </td>
                     <td className="px-base py-md align-top">
