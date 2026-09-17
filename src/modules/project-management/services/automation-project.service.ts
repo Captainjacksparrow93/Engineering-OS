@@ -122,13 +122,17 @@ export async function getPMTeamData(companyId: string) {
     teamsByPM[m.id] = getDescendantUserIdsFromMap(m.id, reportsByManager);
   }
 
-  // All technical engineers (holding SENIOR_ENGINEER or JUNIOR_ENGINEER) in TECH department
+  // All technical engineers (holding SENIOR_ENGINEER or JUNIOR_ENGINEER) in TECH department, excluding management/assistants
   const allEngineers = await prisma.user.findMany({
     where: {
       companyId,
       status: 'ACTIVE',
       department: { code: { in: ['TECH'] } },
       roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } } } },
+      NOT: [
+        { designation: { contains: 'Manager', mode: 'insensitive' } },
+        { designation: { contains: 'Asst', mode: 'insensitive' } },
+      ],
     },
     select: {
       id: true,
@@ -438,13 +442,17 @@ export async function autoAssignAutomationTeam(
   const windowEnd = input.targetEndDate ? startOfDay(new Date(input.targetEndDate)) : addDays(windowStart, 30);
   const window = { from: windowStart, to: windowEnd };
 
-  // 3. Fetch candidate engineers (strictly TECH department)
+  // 3. Fetch candidate engineers (strictly TECH department execution staff)
   const users = await prisma.user.findMany({
     where: {
       companyId: principal.companyId,
       status: 'ACTIVE',
       department: { code: { in: ['TECH'] } },
       grade: { notIn: ['MANAGER', 'HEAD', 'DIRECTOR'] },
+      NOT: [
+        { designation: { contains: 'Manager', mode: 'insensitive' } },
+        { designation: { contains: 'Asst', mode: 'insensitive' } },
+      ],
     },
     include: {
       department: { select: { id: true, name: true } },

@@ -288,8 +288,9 @@ export function applyHardRules(candidate: SmartCandidate, step: SmartStepRequire
   // H5: Inactive account
   if (candidate.status !== 'ACTIVE') return false;
 
-  // H4: Exclude PMs / Directors / Upper management from task execution
+  // H4: Exclude PMs / Assistant Managers / Directors / Upper management from task execution
   if (['MANAGER', 'HEAD', 'DIRECTOR'].includes(candidate.grade)) return false;
+  if (candidate.designation && /manager|asst/i.test(candidate.designation)) return false;
 
   // H1: Approved leave covering >50% of the task's working days
   if (isCandidateOnHeavyLeave(candidate, step)) return false;
@@ -323,37 +324,37 @@ export function scoreForStep(
   const rank = GRADE_RANK[candidate.grade] ?? 2;
   const target = TARGET_RANK[step.recommendedSeniority] ?? 2;
 
-  // M — Grade fit (40%): exact match is 100, higher qualified (e.g. Senior doing Junior task) is 95
+  // M — Grade fit (40%): exact match is 100, senior doing junior task is 75 (prefers junior for junior tasks)
   let M = 0;
   if (rank >= target) {
-    M = rank === target ? 100 : 95;
+    M = rank === target ? 100 : 75;
   } else {
     M = 100 * Math.max(0, 1 - (target - rank) / 2);
   }
 
-  // A — Availability (30%)
+  // A — Availability (35%)
   const required = Math.max(1, step.estimatedHours);
   const free = Math.max(0, candidate.freeHours);
-  let A = 100 * Math.min(1, free / (required * 1.25));
+  let A = 100 * Math.min(1, free / (required * 1.5));
   if (candidate.workingDays > 0 && free / candidate.workingDays < 2.0) {
     A = A * 0.5; // Thin-capacity penalty
   }
 
-  // C — Context Continuity (15%)
+  // C — Context Continuity (10%)
   const sameTemplateAssigned = context.assignedSteps.filter(
     (s) => s.templateInstanceId === step.templateInstanceId && s.userId === candidate.id,
   );
   let C = 0;
   if (sameTemplateAssigned.some((s) => Math.abs(s.stepNumber - step.stepNumber) === 1)) {
-    C = 100;
+    C = 40;
   } else if (sameTemplateAssigned.length > 0) {
-    C = 50;
+    C = 20;
   }
 
   // Q — Squad integrity (15%)
   const Q = context.pmSquadUserIds.has(candidate.id) ? 100 : 0;
 
-  const score = Math.round(0.4 * M + 0.3 * A + 0.15 * C + 0.15 * Q);
+  const score = Math.round(0.4 * M + 0.35 * A + 0.1 * C + 0.15 * Q);
 
   return {
     score: Math.max(0, Math.min(100, score)),
