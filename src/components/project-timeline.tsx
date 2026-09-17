@@ -7,10 +7,7 @@ import {
   formatDate,
   formatDateRange,
   startOfDay,
-  eachWorkingDay,
   workingDaysBetween,
-  isWorkingDay,
-  addDays,
 } from '@/core/utils/dates';
 import { cleanTaskTitle, formatName } from '@/core/utils/strings';
 import { StatusBadge } from '@/components/ui';
@@ -87,37 +84,38 @@ export function ProjectTimeline({
   const todayX = getXPercent(today);
   const targetEndX = getXPercent(targetEnd);
 
-  // Determine working day ticks or weekly ticks
-  const totalWorkingDays = workingDaysBetween(start, maxTimelineDate);
-  const useDailyTicks = totalWorkingDays <= 45;
+  // Determine submitted/completed ticks strictly for completed deliverables
+  const completedSteps = data.lanes.flatMap((lane) => lane.steps).filter((s) => s.status === 'COMPLETED');
+  const rawSubmittedTicks: Array<{ date: Date; xPct: number; label: string; stepNumber: number }> = [];
 
-  const ticks: Array<{ date: Date; xPct: number; isKey: boolean; label?: string }> = [];
-  if (useDailyTicks) {
-    const days = eachWorkingDay(start, maxTimelineDate);
-    const interval = days.length <= 15 ? 2 : days.length <= 30 ? 5 : 7;
-    days.forEach((d, idx) => {
-      const showLabel = idx === 0 || idx === days.length - 1 || idx % interval === 0;
-      ticks.push({
+  completedSteps.forEach((s) => {
+    const rawDate = s.submittedAt ?? s.completedAt ?? s.plannedEnd;
+    if (rawDate) {
+      const d = startOfDay(new Date(rawDate));
+      rawSubmittedTicks.push({
         date: d,
         xPct: getXPercent(d),
-        isKey: showLabel,
-        label: showLabel ? formatDate(d) : undefined,
+        label: formatDate(d),
+        stepNumber: s.stepNumber,
       });
-    });
-  } else {
-    // Weekly ticks
-    let cursor = new Date(start);
-    while (cursor <= maxTimelineDate) {
-      if (isWorkingDay(cursor)) {
-        ticks.push({
-          date: new Date(cursor),
-          xPct: getXPercent(cursor),
-          isKey: true,
-          label: formatDate(cursor),
-        });
-      }
-      cursor = addDays(cursor, 7);
     }
+  });
+
+  rawSubmittedTicks.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  // Deduplicate ticks if two steps completed on the exact same date or are visually overlapping (< 4% apart)
+  const ticks: Array<{ date: Date; xPct: number; isKey: boolean; label?: string }> = [];
+  for (const tick of rawSubmittedTicks) {
+    const last = ticks[ticks.length - 1];
+    if (last && Math.abs(last.xPct - tick.xPct) < 4) {
+      continue;
+    }
+    ticks.push({
+      date: tick.date,
+      xPct: tick.xPct,
+      isKey: true,
+      label: tick.label,
+    });
   }
 
   const getStepState = (step: TimelineStep) => {
@@ -336,21 +334,17 @@ export function ProjectTimeline({
           ))}
 
           {/* Date ticks at bottom */}
-          <div className="relative h-5 border-t border-hairline pt-1 text-caption text-muted-soft">
+          <div className="relative h-6 border-t border-hairline pt-1 text-caption text-muted">
             {ticks.map((t, idx) => (
               <div
                 key={idx}
                 className="absolute -translate-x-1/2 flex flex-col items-center"
                 style={{ left: `${t.xPct}%` }}
               >
-                <span className="block h-1 w-px bg-hairline-strong mb-0.5" />
-                {t.label ? (
-                  <span className="text-caption text-muted select-none whitespace-nowrap">
-                    {t.label}
-                  </span>
-                ) : (
-                  <span className="block h-1 w-1 rounded-full bg-hairline-strong" />
-                )}
+                <span className="block h-1.5 w-px bg-success/80 mb-0.5" />
+                <span className="text-caption font-medium text-ink select-none whitespace-nowrap">
+                  {t.label}
+                </span>
               </div>
             ))}
           </div>

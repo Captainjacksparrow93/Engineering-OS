@@ -733,7 +733,7 @@ export async function getTaskDetail(principal: Principal, taskId: string) {
       canAssign: (can(principal, 'pm.task.assign', scope) || isManager) && !task.assignments.some((a) => a.status === 'ACTIVE' && a.role === 'OWNER'),
       canLogProgress,
       canHandover: !['COMPLETED', 'CANCELLED'].includes(task.status) && canRequestReassign,
-      canManageDependencies: false,
+      canManageDependencies: can(principal, 'pm.task.dependency.manage', scope) || isManager || can(principal, 'pm.task.update', scope),
       canDelete,
       canStart,
       canSubmit: canMarkCompleted,

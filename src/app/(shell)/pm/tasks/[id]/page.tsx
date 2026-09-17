@@ -29,7 +29,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
 
   const { task, blockers, downstreamCount, permissions } = detail;
 
-  const [candidates, peers, assignableUsers] = await Promise.all([
+  const [candidates, peers, assignableUsers, projectTasks] = await Promise.all([
     permissions.canHandover ? handoverCandidates(principal, task.id) : Promise.resolve([]),
     permissions.canHandover ? peersForHandover(principal, task.id) : Promise.resolve([]),
     permissions.canAssign
@@ -41,6 +41,13 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           },
           select: { id: true, fullName: true, designation: true },
           orderBy: { fullName: 'asc' },
+        })
+      : Promise.resolve([]),
+    permissions.canManageDependencies
+      ? prisma.task.findMany({
+          where: { projectId: task.projectId, id: { not: task.id }, status: { not: 'CANCELLED' } },
+          select: { id: true, code: true, title: true },
+          orderBy: { plannedStart: 'asc' },
         })
       : Promise.resolve([]),
   ]);
@@ -285,8 +292,10 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
 
           <DependencyPanel
             taskId={task.id}
+            canManage={permissions.canManageDependencies}
             dependencies={task.dependencies}
             dependents={task.dependents}
+            projectTasks={projectTasks}
           />
 
           {task.handovers.length > 0 ? (

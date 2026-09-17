@@ -12,8 +12,8 @@ export interface TestPersona {
 export const TEST_PERSONAS: TestPersona[] = [
   {
     id: 'director',
-    name: 'Satish Nagar',
-    email: 'admin@acsengitech.com',
+    name: 'Shaktikumar Vasava',
+    email: 'shaktikumar.vasava@acsengitech.com',
     roleLabel: 'Director',
     shortRole: 'Director',
     tag: '👔 Director',

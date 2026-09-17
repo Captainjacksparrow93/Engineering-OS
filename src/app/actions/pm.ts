@@ -10,7 +10,6 @@ import {
   changeTaskStatusSchema,
   createProjectSchema,
   createTaskSchema,
-  dependencySchema,
   handoverDecisionSchema,
   handoverRequestSchema,
   progressSchema,
@@ -247,27 +246,40 @@ export async function addCommentAction(_prev: ActionState, form: FormData): Prom
 
 // --------------------------------------------------------------- dependencies
 
-export async function addDependencyAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+export async function addDependencyAction(input: {
+  predecessorId: string;
+  successorId: string;
+  type?: 'FINISH_TO_START' | 'START_TO_START' | 'FINISH_TO_FINISH' | 'START_TO_FINISH';
+  lagDays?: number;
+}) {
   const principal = await requirePrincipal();
-  const successorId = String(form.get('successorId'));
-  const state = await run(async () => {
-    const input = dependencySchema.parse({
-      predecessorId: value(form, 'predecessorId'),
-      successorId,
-      type: value(form, 'type') ?? 'FINISH_TO_START',
-      lagDays: value(form, 'lagDays') ?? 0,
-    });
-    return addDependency(principal, input);
-  });
-  revalidatePath(`/pm/tasks/${successorId}`);
-  return state;
+  try {
+    const dep = await addDependency(principal, input);
+    await drainOutbox();
+    revalidatePath(`/pm/tasks/${input.successorId}`);
+    revalidatePath('/pm/projects/[id]', 'page');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    return { success: true, data: dep };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to add dependency.' };
+  }
 }
 
-export async function removeDependencyAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+export async function removeDependencyAction(dependencyId: string, taskId?: string) {
   const principal = await requirePrincipal();
-  const state = await run(() => removeDependency(principal, String(form.get('dependencyId'))));
-  revalidatePath(`/pm/tasks/${String(form.get('taskId'))}`);
-  return state;
+  try {
+    await removeDependency(principal, dependencyId);
+    await drainOutbox();
+    if (taskId) revalidatePath(`/pm/tasks/${taskId}`);
+    revalidatePath('/pm/tasks/[id]', 'page');
+    revalidatePath('/pm/projects/[id]', 'page');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to remove dependency.' };
+  }
 }
 
 // ------------------------------------------------------------------- progress
@@ -544,6 +556,8 @@ export async function getProjectTimelineAction(projectId: string) {
     return null;
   }
 }
+
+
 
 
 

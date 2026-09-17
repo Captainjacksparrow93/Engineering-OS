@@ -3,10 +3,126 @@ import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
+import { recomputeTaskDerivedState } from './task.service';
+
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
 function assertTemplateAdmin(principal: Principal) {
   if (!hasPermissionAnywhere(principal, 'pm.template.manage')) {
     throw new ForbiddenError('Only users with template management permissions can edit master checklist templates.');
+  }
+}
+
+export async function syncTemplateDependenciesToProjects(templateId: string, tx: Tx = prisma) {
+  const template = await tx.checklistTemplate.findUnique({
+    where: { id: templateId },
+    include: { items: { orderBy: { stepNumber: 'asc' } } },
+  });
+  if (!template || template.items.length === 0) return;
+
+  const itemTitles = template.items.map((i) => i.title);
+
+  // Find all tasks with matching titles in active/planned projects
+  const matchingTasks = await tx.task.findMany({
+    where: {
+      title: { in: itemTitles },
+      project: { status: { not: 'CANCELLED' } },
+    },
+    select: {
+      id: true,
+      title: true,
+      projectId: true,
+      parentId: true,
+      status: true,
+    },
+  });
+
+  // Group by (projectId, parentId)
+  const groups = new Map<string, typeof matchingTasks>();
+  for (const t of matchingTasks) {
+    const key = `${t.projectId}::${t.parentId ?? 'root'}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(t);
+  }
+
+  const affectedProjectIds = new Set<string>();
+
+  for (const [, tasksInGroup] of groups) {
+    if (tasksInGroup.length === 0) continue;
+    const projectId = tasksInGroup[0].projectId;
+    affectedProjectIds.add(projectId);
+
+    // Map stepNumber -> task
+    const stepToTask = new Map<number, (typeof matchingTasks)[0]>();
+    for (const item of template.items) {
+      const task = tasksInGroup.find((t) => t.title === item.title);
+      if (task) {
+        stepToTask.set(item.stepNumber, task);
+      }
+    }
+
+    // Update dependencies for all steps in this template group
+    for (const item of template.items) {
+      const successorTask = stepToTask.get(item.stepNumber);
+      if (!successorTask) continue;
+
+      const existingDeps = await tx.taskDependency.findMany({
+        where: { successorId: successorTask.id },
+      });
+
+      if (item.dependsOnStep === null || item.dependsOnStep === undefined) {
+        // Delete any dependency where predecessor is in this group
+        for (const dep of existingDeps) {
+          if (Array.from(stepToTask.values()).some((t) => t.id === dep.predecessorId)) {
+            await tx.taskDependency.delete({
+              where: {
+                predecessorId_successorId: {
+                  predecessorId: dep.predecessorId,
+                  successorId: successorTask.id,
+                },
+              },
+            });
+          }
+        }
+      } else {
+        const predTask = stepToTask.get(item.dependsOnStep);
+        if (predTask) {
+          // Remove any outdated predecessor from this template group
+          for (const dep of existingDeps) {
+            if (
+              dep.predecessorId !== predTask.id &&
+              Array.from(stepToTask.values()).some((t) => t.id === dep.predecessorId)
+            ) {
+              await tx.taskDependency.delete({
+                where: {
+                  predecessorId_successorId: {
+                    predecessorId: dep.predecessorId,
+                    successorId: successorTask.id,
+                  },
+                },
+              });
+            }
+          }
+          // Ensure dependency to predTask exists
+          const hasDep = existingDeps.some((d) => d.predecessorId === predTask.id);
+          if (!hasDep) {
+            await tx.taskDependency.create({
+              data: {
+                predecessorId: predTask.id,
+                successorId: successorTask.id,
+                type: 'FINISH_TO_START',
+                lagDays: 0,
+              },
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Recompute task derived state for all affected projects
+  for (const projId of affectedProjectIds) {
+    await recomputeTaskDerivedState(projId, tx);
   }
 }
 
@@ -75,6 +191,8 @@ export async function updateTemplateItem(
       tx,
     );
 
+    await syncTemplateDependenciesToProjects(before.templateId, tx);
+
     return item;
   });
 
@@ -128,6 +246,8 @@ export async function addTemplateItem(
       },
       tx,
     );
+
+    await syncTemplateDependenciesToProjects(templateId, tx);
 
     return item;
   });
@@ -192,6 +312,8 @@ export async function deleteTemplateItem(principal: Principal, itemId: string) {
       },
       tx,
     );
+
+    await syncTemplateDependenciesToProjects(item.templateId, tx);
   });
 
   return { success: true };
