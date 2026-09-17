@@ -1664,7 +1664,6 @@ async function main() {
       title: 'Motor Control Logic, Faceplate, Alarms & Animation',
       hours: 24, start: 14, end: 20, skills: ['motor control', 'alarms logic'],
       assignee: 'ACS-0064', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-001-T08' }],
     },
     {
       key: 'PRJ-001-T10', project: 'PRJ-2026-001',
@@ -1685,7 +1684,6 @@ async function main() {
       title: 'Simulation Trial of Manual Function',
       hours: 16, start: 31, end: 35, skills: ['simulation', 'manual testing'],
       assignee: 'ACS-0067', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-001-T11' }],
     },
     {
       key: 'PRJ-001-T13', project: 'PRJ-2026-001',

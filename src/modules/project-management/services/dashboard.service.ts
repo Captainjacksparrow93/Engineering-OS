@@ -236,13 +236,8 @@ export async function getDashboard(
       }
     }
 
-    // Only treat currently active or overdue tasks that are blocked as genuine roadblocks
-    const hasOpenRoadblock = p.tasks.some(
-      (t) =>
-        t.status === 'BLOCKED' &&
-        t.plannedStart &&
-        startOfDay(t.plannedStart).getTime() <= today.getTime()
-    );
+    // A genuine roadblock is an actively reported problem log on a task
+    const hasOpenRoadblock = roadblocks.some((rb) => rb.task.projectId === p.id);
     const hasStaleApprovals = pendingApprovals.some(
       (a) => a.project.id === p.id && a.submittedAt && a.submittedAt.getTime() < today.getTime() - 2 * 86400000
     );
