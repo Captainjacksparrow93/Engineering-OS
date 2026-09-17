@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getPrincipal } from '@/core/auth/session';
 import { LoginForm } from './login-form';
-import { QuickLoginButtons } from './quick-login-buttons';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,9 +32,6 @@ export default async function LoginPage() {
             <LoginForm />
           </div>
         </div>
-
-        {/* 1-Click Fast Testing Personas */}
-        <QuickLoginButtons />
 
         <p className="mt-lg text-caption text-muted">
           Access is controlled by your role. Contact the PMO if a screen you expect is missing.
