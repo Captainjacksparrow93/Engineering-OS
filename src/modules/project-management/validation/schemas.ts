@@ -14,7 +14,7 @@ export const createProjectSchema = z.object({
   name: z.string().trim().min(3, 'Project name is too short').max(160),
   code: z
     .string()
-    .transform((v) => v.trim().toUpperCase().replace(/[s_]+/g, '-'))
+    .transform((v) => v.trim().toUpperCase().replace(/[\s_]+/g, '-'))
     .pipe(z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,19}$/, 'Project code must be 3-20 characters: letters, digits or dashes (e.g. ACS-PRJ-0042)'))
     .optional(),
   description: z.string().trim().max(4000).optional(),
@@ -112,7 +112,7 @@ export const createAutomationProjectSchema = z.object({
   name: z.string().trim().min(3, 'Project name is too short').max(160),
   code: z
     .string()
-    .transform((v) => v.trim().toUpperCase().replace(/[s_]+/g, '-'))
+    .transform((v) => v.trim().toUpperCase().replace(/[\s_]+/g, '-'))
     .pipe(z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,19}$/, 'Project code must be 3-20 characters: letters, digits or dashes (e.g. ACS-PRJ-0042)'))
     .optional(),
   clientName: z.string().trim().min(2, 'Client name is required').max(160),
