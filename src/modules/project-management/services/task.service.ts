@@ -7,7 +7,7 @@ import { audit, diffOf } from '@/core/audit/audit';
 import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
-import { assertProjectPermission, assertTaskPermission, assertTaskVisible, loadTaskContext, oversightRecipients, projectVisibilityWhere } from './access';
+import { assertProjectPermission, assertTaskPermission, assertTaskVisible, loadTaskContext, OUTSIDE_TEAM_MESSAGE, oversightRecipients, projectVisibilityWhere, reassignTeamFor } from './access';
 import { addDependency } from './dependency.service';
 import type { CreateTaskInput } from '../validation/schemas';
 import { blockingReasons, completionBlockers, downstreamTaskIds, rollUpProgress, type Graph } from '../domain/scheduling';
@@ -401,6 +401,8 @@ export async function assignTask(
     select: { id: true, fullName: true, grade: true },
   });
   if (!assignee) throw new DomainError('That employee is not active.');
+  const team = await reassignTeamFor(principal);
+  if (team && !team.has(assignee.id)) throw new DomainError(OUTSIDE_TEAM_MESSAGE.replace('reassign', 'assign work'));
 
   const remainingHours =
     input.allocatedHours ?? Math.max(1, task.estimatedHours * (1 - task.percentComplete / 100));

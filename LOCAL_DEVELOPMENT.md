@@ -63,15 +63,13 @@ Push the Prisma schema to your local database:
 npx prisma db push
 ```
 
-Seed the database with all employees, departments, and default projects:
+Seed employees, departments, roles, checklist templates (PLC, SCADA, HMI) and the standard projects, then the demo projects:
 ```bash
 npm run db:seed
+npm run db:seed:demo
 ```
 
-Seed the automation checklist templates (PLC, SCADA, HMI):
-```bash
-npx tsx prisma/seed-automation-templates.ts
-```
+Both seeds are **create-only**: they add what is missing and never overwrite or delete data changed in the app (checklists, roles, users, passwords, projects). They also run on every container start.
 
 ### Step 5: Start the Development Server
 Start the Next.js development server with hot-reload:
@@ -82,16 +80,18 @@ Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 ---
 
-## 4. Test Accounts & Instant Persona Login
+## 4. Test Accounts
 
-The login page (`http://localhost:3000/login`) provides **1-click passwordless test login buttons** for various roles:
+Sign in at `http://localhost:3000/login` with email and password. Every seeded account starts with the password from `SEED_PASSWORD` (default `ACSengi@2026`). The seed sets it only when it creates the account, so passwords changed later are kept.
 
-| Persona | Role / Grade | Typical Use Case |
+| Role | Name | Email |
 |---|---|---|
-| **Pravin Patel** | Managing Director (`DIRECTOR`) | Executive dashboard, creating projects, full visibility |
-| **Parth Nagar** | Tech Lead (`HEAD`) | Managing Team 1, assigning tasks, resolving roadblocks |
-| **Paras Prajapati** | Tech Lead (`HEAD`) | Managing Team 2, approving handovers |
-| **Senior Automation Eng.** | Engineer (`SENIOR`) | Executing tasks, raising blockers, logging progress |
+| Director | Shaktikumar Vasava | `shaktikumar.vasava@acsengitech.com` |
+| Head of Technical | Dilip Asediya | `dilipkumar.asediya@acsengitech.com` |
+| Project Manager (Team 1) | Parth Nagar | `parth.nagar@acsengitech.com` |
+| Project Manager (Team 2) | Paras Prajapati | `paras.prajapati@acsengitech.com` |
+| Senior Engineer (Team 1) | Shivam Prajapati | `shivam.prajapati@acsengitech.com` |
+| Platform admin | Satish Nagar | `admin@acsengitech.com` |
 
 ---
 
@@ -118,10 +118,9 @@ npm run build
 # Open Prisma Studio web GUI on port 5555
 npx prisma studio
 
-# Reset local database (wipes data, pushes schema, requires re-seeding)
-npx prisma db push --force-reset
-npm run db:seed
-npx tsx prisma/seed-automation-templates.ts
+# Reset LOCAL database only: wipes ALL data, pushes schema, re-runs both seeds.
+# Never run this against the live server.
+npm run db:reset:dev
 
 # Stop the background database container
 docker compose -f docker-compose.local.yml stop db

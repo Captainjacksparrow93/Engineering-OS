@@ -153,7 +153,6 @@ export const createAutomationProjectSchema = z.object({
         assigneeId: z.string().optional(),
         plannedStart: z.string().optional(),
         plannedEnd: z.string().optional(),
-        durationDays: z.coerce.number().int().min(1).max(365).optional(),
         estimatedHours: z.coerce.number().min(0.5).max(1000).optional(),
       }),
     )
@@ -183,7 +182,6 @@ export const autoAssignTeamSchema = z.object({
         recommendedSeniority: z.string().optional(),
         plannedStart: z.string().optional(),
         plannedEnd: z.string().optional(),
-        durationDays: z.coerce.number().int().min(1).max(365).optional(),
         estimatedHours: z.coerce.number().min(0.5).max(1000).optional(),
       }),
     )
@@ -194,7 +192,7 @@ export const templateItemSchema = z.object({
   title: z.string().trim().min(3, 'Title is too short').max(200),
   description: z.string().trim().max(4000).optional(),
   recommendedSeniority: z.string().trim().optional(),
-  defaultDurationDays: z.coerce.number().min(0.5).max(365).optional(),
+  defaultDurationHours: z.coerce.number().min(0.5, "At least 0.5 hours").max(200, "At most 200 hours").multipleOf(0.5, "Use steps of 0.5 hours").optional(),
   dependsOnStep: z.coerce.number().int().min(1).max(100).nullable().optional(),
 });
 

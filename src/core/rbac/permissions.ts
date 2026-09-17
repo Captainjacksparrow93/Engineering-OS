@@ -63,6 +63,8 @@ export function permissionModule(key: PermissionKey): string {
  * heads run their department's portfolio, project managers run one project, senior
  * engineers can pull peers in, junior engineers work their own queue.
  */
+// Seeding is create-only: these lists are applied to a role only when it is first created.
+// To grant an existing role a new permission, add a one-off script under prisma/scripts/.
 export const SYSTEM_ROLES: Record<
   string,
   { name: string; description: string; permissions: PermissionKey[] }

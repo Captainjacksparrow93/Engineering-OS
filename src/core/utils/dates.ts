@@ -153,29 +153,3 @@ export function daysUntil(date: Date | string | null | undefined): number | null
   if (isNaN(d.getTime())) return null;
   return Math.round((d.getTime() - startOfDay(new Date()).getTime()) / 86_400_000);
 }
-
-/**
- * Proportionally paces step durations across an available working window.
- * Ensures each step has at least 1 working day and the sum equals totalWorkingDays.
- */
-export function paceStepDurations(
-  totalWorkingDays: number,
-  baseDurations: number[],
-): number[] {
-  if (baseDurations.length === 0) return [];
-  const sumBase = baseDurations.reduce((a, b) => a + b, 0);
-  if (totalWorkingDays <= sumBase) return baseDurations;
-
-  let allocated = 0;
-  const result: number[] = [];
-  for (let i = 0; i < baseDurations.length; i++) {
-    if (i === baseDurations.length - 1) {
-      result.push(Math.max(1, totalWorkingDays - allocated));
-    } else {
-      const share = Math.max(1, Math.floor((baseDurations[i] / sumBase) * totalWorkingDays));
-      result.push(share);
-      allocated += share;
-    }
-  }
-  return result;
-}

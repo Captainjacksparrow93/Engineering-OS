@@ -7,7 +7,7 @@ import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
 import { formatName } from '@/core/utils/strings';
-import { assertTaskPermission, oversightRecipients } from './access';
+import { assertTaskPermission, OUTSIDE_TEAM_MESSAGE, oversightRecipients, reassignTeamFor } from './access';
 
 /**
  * Reassign Request (Unified Request -> Accept flow for everyone).
@@ -84,6 +84,10 @@ export async function requestHandover(
   });
   if (!target) {
     throw new DomainError('Reassignment target must be an active engineering team member.');
+  }
+  const team = await reassignTeamFor(principal);
+  if (team && !team.has(target.id)) {
+    throw new DomainError(OUTSIDE_TEAM_MESSAGE);
   }
 
   const alreadyHolds = task.assignments.some((a) => a.userId === input.toUserId);

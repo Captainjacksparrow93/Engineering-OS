@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it } from 'vitest';
-import { daysLate, forecastFinish, projectHealth, projectProgress } from './portfolio';
+import { countByAutomationType, daysLate, forecastFinish, projectHealth, projectProgress } from './portfolio';
 import { summariseProblems } from '../services/dashboard.service';
 import { todayInIndia } from '@/core/utils/dates';
 
@@ -158,5 +158,20 @@ describe('todayInIndia', () => {
   it('rolls to the next date after 18:30 UTC', () => {
     expect(todayInIndia(new Date('2026-09-16T19:00:00.000Z')).toISOString().slice(0, 10)).toBe('2026-09-17');
     expect(todayInIndia(new Date('2026-09-16T18:00:00.000Z')).toISOString().slice(0, 10)).toBe('2026-09-16');
+  });
+});
+
+describe('countByAutomationType', () => {
+  it('counts active projects per type, multi-type in both, on hold separately', () => {
+    expect(
+      countByAutomationType([
+        { status: 'IN_PROGRESS', automationTypes: ['PLC'] },
+        { status: 'PLANNING', automationTypes: ['PLC', 'HMI'] },
+        { status: 'ON_HOLD', automationTypes: ['SCADA'] },
+        { status: 'COMPLETED', automationTypes: ['HMI'] },
+        { status: 'CANCELLED', automationTypes: ['PLC'] },
+        { status: 'IN_PROGRESS', automationTypes: [] },
+      ]),
+    ).toEqual({ PLC: 2, SCADA: 0, HMI: 1, onHold: 1 });
   });
 });

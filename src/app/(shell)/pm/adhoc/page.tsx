@@ -3,7 +3,7 @@ import { requirePrincipal } from '@/core/auth/session';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { prisma } from '@/core/db/prisma';
 import { suggestAssignees } from '@/modules/project-management/services/availability.service';
-import { projectVisibilityWhere } from '@/modules/project-management/services/access';
+import { projectVisibilityWhere, reassignTeamFor } from '@/modules/project-management/services/access';
 import { PageHeader, Alert } from '@/components/ui';
 import { AdhocForm } from './adhoc-form';
 
@@ -29,7 +29,7 @@ export default async function AdhocPage({
 
   const params = await searchParams;
 
-  const [projects, suggestions] = await Promise.all([
+  const [projects, allSuggestions, team] = await Promise.all([
     prisma.project.findMany({
       where: { ...projectVisibilityWhere(principal), status: { notIn: ['COMPLETED', 'CANCELLED'] } },
       select: { id: true, code: true, name: true, clientName: true },
@@ -39,7 +39,10 @@ export default async function AdhocPage({
       requiredHours: 8,
       priority: 'HIGH',
     }).catch(() => []),
+    reassignTeamFor(principal),
   ]);
+  // Team isolation: a PM only sees (and can assign) engineers from their own team.
+  const suggestions = team ? allSuggestions.filter((s) => team.has(s.workload.person.id)) : allSuggestions;
 
   return (
     <>

@@ -159,7 +159,7 @@ export async function updateTemplateItem(
     title?: string;
     description?: string;
     recommendedSeniority?: string;
-    defaultDurationDays?: number;
+    defaultDurationHours?: number;
     dependsOnStep?: number | null;
   },
 ) {
@@ -174,7 +174,7 @@ export async function updateTemplateItem(
         title: data.title !== undefined ? data.title : before.title,
         description: data.description !== undefined ? data.description : before.description,
         recommendedSeniority: data.recommendedSeniority !== undefined ? data.recommendedSeniority : before.recommendedSeniority,
-        defaultDurationDays: data.defaultDurationDays !== undefined ? data.defaultDurationDays : before.defaultDurationDays,
+        defaultDurationHours: data.defaultDurationHours !== undefined ? data.defaultDurationHours : before.defaultDurationHours,
         dependsOnStep: data.dependsOnStep !== undefined ? data.dependsOnStep : before.dependsOnStep,
       },
     });
@@ -206,7 +206,7 @@ export async function addTemplateItem(
     title: string;
     description?: string;
     recommendedSeniority?: string;
-    defaultDurationDays?: number;
+    defaultDurationHours?: number;
     dependsOnStep?: number | null;
   },
 ) {
@@ -229,7 +229,7 @@ export async function addTemplateItem(
         title: data.title,
         description: data.description ?? null,
         recommendedSeniority: data.recommendedSeniority ?? 'JUNIOR',
-        defaultDurationDays: data.defaultDurationDays ?? 1,
+        defaultDurationHours: data.defaultDurationHours ?? 8,
         dependsOnStep: data.dependsOnStep ?? (nextStep > 1 ? nextStep - 1 : null),
         sortOrder: nextStep,
       },

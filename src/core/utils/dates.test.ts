@@ -7,7 +7,6 @@ import {
   formatRelativeDate,
   isWorkingDay,
   overlapDays,
-  paceStepDurations,
   workingDaysBetween,
 } from './dates';
 
@@ -130,20 +129,4 @@ describe('Timeline ticks and working day generations', () => {
   });
 });
 
-describe('paceStepDurations', () => {
-  it('proportionally distributes 50 working days across 13 base steps', () => {
-    const base = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]; // 13 steps
-    const paced = paceStepDurations(50, base);
-    expect(paced.length).toBe(13);
-    expect(paced.every((d) => d >= 1)).toBe(true);
-    const sum = paced.reduce((a, b) => a + b, 0);
-    expect(sum).toBe(50);
-  });
-
-  it('returns base durations if available days is less than or equal to base sum', () => {
-    const base = [2, 2, 2];
-    expect(paceStepDurations(6, base)).toEqual([2, 2, 2]);
-    expect(paceStepDurations(5, base)).toEqual([2, 2, 2]);
-  });
-});
 

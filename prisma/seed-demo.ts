@@ -22,6 +22,7 @@ import type { AssignmentStatus, ProjectStatus, TaskStatus } from '@prisma/client
 import { prisma } from '../src/core/db/prisma';
 import { addDays, addWorkingDays, isWorkingDay, todayInIndia } from '../src/core/utils/dates';
 import { recomputeTaskDerivedState } from '../src/modules/project-management/services/task.service';
+import { planLaneByHours } from '../src/modules/project-management/domain/scheduling';
 
 type StepState =
   | { state: 'approved'; lateDays?: number; sentBackDaysAgo?: number; problemSolvedDaysAgo?: number }
@@ -32,7 +33,7 @@ type StepState =
 
 interface LaneSpec {
   template: 'PLC' | 'SCADA' | 'HMI';
-  /** Panels in this package: every step lasts defaultDurationDays x quantity. */
+  /** Panels in this package: every step takes defaultDurationHours x quantity. */
   quantity: number;
   /** Step number -> state. Unlisted steps are 'todo'. */
   steps: Record<number, StepState>;
@@ -177,14 +178,15 @@ async function main() {
     // Plan every lane first so the target date can follow the longest lane.
     const lanes = spec.lanes.map((lane) => {
       const template = templates.find((t) => t.code === lane.template)!;
-      let cursor = projectStart;
-      const steps = template.items.map((item) => {
-        const duration = Math.max(1, item.defaultDurationDays) * lane.quantity;
-        const plannedStart = cursor;
-        const plannedEnd = addWorkingDays(plannedStart, duration - 1);
-        cursor = addWorkingDays(plannedEnd, 1);
-        return { item, duration, plannedStart, plannedEnd, spec: lane.steps[item.stepNumber] ?? ({ state: 'todo' } as StepState) };
-      });
+      const hoursList = template.items.map((item) => item.defaultDurationHours * lane.quantity);
+      const plan = planLaneByHours(hoursList, projectStart);
+      const steps = template.items.map((item, idx) => ({
+        item,
+        hours: hoursList[idx]!,
+        plannedStart: plan[idx]!.plannedStart,
+        plannedEnd: plan[idx]!.plannedEnd,
+        spec: lane.steps[item.stepNumber] ?? ({ state: 'todo' } as StepState),
+      }));
       return { lane, template, steps };
     });
     const lastEnd = lanes.flatMap((l) => l.steps).reduce((max, s) => (s.plannedEnd > max ? s.plannedEnd : max), projectStart);
@@ -201,6 +203,7 @@ async function main() {
         orderValue: spec.orderValue,
         panelType: spec.lanes.map((l) => `${l.template} x${l.quantity}`).join(' + '),
         panelCount: spec.lanes.reduce((sum, l) => sum + l.quantity, 0),
+        automationTypes: [...new Set(spec.lanes.map((l) => l.template))],
         status: spec.status,
         priority: spec.priority,
         startDate: projectStart,
@@ -229,7 +232,7 @@ async function main() {
           title: `${template.code} × ${lane.quantity}: ${template.name}`,
           type: 'PHASE',
           status: 'TODO',
-          estimatedHours: steps.reduce((sum, s) => sum + s.duration * 8, 0),
+          estimatedHours: steps.reduce((sum, s) => sum + s.hours, 0),
           plannedStart: steps[0]!.plannedStart,
           plannedEnd: steps[steps.length - 1]!.plannedEnd,
           createdById: director.id,
@@ -248,7 +251,7 @@ async function main() {
         memberIds.add(assignee.id);
 
         const s = step.spec;
-        const hours = step.duration * 8;
+        const hours = step.hours;
         let status: TaskStatus = 'TODO';
         let percentComplete = 0;
         let actualStart: Date | null = null;

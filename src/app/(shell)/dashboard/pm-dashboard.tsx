@@ -7,6 +7,7 @@ import { formatDate } from '@/core/utils/dates';
 import { ProgressBar } from '@/components/ui';
 import type { PMDashboardData } from '@/modules/project-management/services/dashboard.service';
 import { HealthBadge } from './director-dashboard';
+import { TypeCards } from './type-cards';
 
 const ATTENTION_PREVIEW = 6;
 
@@ -64,6 +65,8 @@ export function PMDashboard({ data }: { data: PMDashboardData }) {
           <p className="mt-0.5 text-caption text-muted">Waiting on your decision</p>
         </Link>
       </div>
+
+      <TypeCards counts={data.typeCounts} />
 
       {/* Needs Attention List */}
       {data.needsAttention.length > 0 ? (

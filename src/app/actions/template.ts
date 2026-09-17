@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { ZodError } from 'zod';
 import { requirePrincipal } from '@/core/auth/session';
 import {
   templateItemSchema,
@@ -23,7 +24,7 @@ export async function updateTemplateItemAction(
     revalidatePath('/pm/templates');
     return { success: true, item: updated };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to update item.' };
+    return { success: false, error: messageOf(error, 'Failed to update item.') };
   }
 }
 
@@ -38,7 +39,7 @@ export async function addTemplateItemAction(
     revalidatePath('/pm/templates');
     return { success: true, item: created };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to add item.' };
+    return { success: false, error: messageOf(error, 'Failed to add item.') };
   }
 }
 
@@ -54,4 +55,10 @@ export async function deleteTemplateItemAction(itemId: string) {
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to delete item.' };
   }
+}
+
+/** Zod errors carry a JSON dump in `.message`; show the first human-readable issue instead. */
+function messageOf(error: unknown, fallback: string): string {
+  if (error instanceof ZodError) return error.issues[0]?.message ?? fallback;
+  return error instanceof Error ? error.message : fallback;
 }

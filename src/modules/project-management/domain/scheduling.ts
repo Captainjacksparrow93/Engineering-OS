@@ -401,3 +401,45 @@ export function rollUpProgress(tasks: GraphTask[]): Map<string, number> {
   for (const task of tasks) compute(task);
   return result;
 }
+
+export const HOURS_PER_WORKING_DAY = 8;
+const EPSILON = 1e-9;
+
+/** Working days a sequence of steps needs, when each working day holds 8 planned hours. */
+export function minWorkingDaysForHours(stepHours: number[]): number {
+  const total = stepHours.reduce((sum, h) => sum + Math.max(0, h), 0);
+  return Math.max(1, Math.ceil(total / HOURS_PER_WORKING_DAY - EPSILON));
+}
+
+/**
+ * Dates for one lane (package) of sequential steps, planned by cumulative hours so short
+ * steps share a day: 4 h + 4 h land on day 1, a following 12 h step takes days 2-3.
+ *
+ * With `workingDays` longer than the minimum, the plan is stretched proportionally so the
+ * last step ends on the last day (the owner's target date). Planned hours are unchanged.
+ */
+export function planLaneByHours(
+  stepHours: number[],
+  start: Date,
+  workingDays?: number,
+): Array<{ plannedStart: Date; plannedEnd: Date }> {
+  if (stepHours.length === 0) return [];
+  const total = stepHours.reduce((sum, h) => sum + Math.max(0, h), 0);
+  const minDays = minWorkingDaysForHours(stepHours);
+  const stretch = Boolean(workingDays && workingDays > minDays && total > 0);
+  const scale = stretch ? (workingDays! * HOURS_PER_WORKING_DAY) / total : 1;
+
+  let first = startOfDay(start);
+  while (first.getUTCDay() === 0) first = addWorkingDays(first, 1);
+
+  let cumulative = 0;
+  return stepHours.map((raw) => {
+    const hours = Math.max(0, raw);
+    const from = cumulative * scale;
+    const to = (cumulative + hours) * scale;
+    cumulative += hours;
+    const startIndex = Math.floor(from / HOURS_PER_WORKING_DAY + EPSILON);
+    const endIndex = Math.max(startIndex, Math.ceil(to / HOURS_PER_WORKING_DAY - EPSILON) - 1);
+    return { plannedStart: addWorkingDays(first, startIndex), plannedEnd: addWorkingDays(first, endIndex) };
+  });
+}

@@ -13,7 +13,7 @@ interface Item {
   title: string;
   description: string | null;
   recommendedSeniority: string;
-  defaultDurationDays: number;
+  defaultDurationHours: number;
   dependsOnStep: number | null;
   isSimulationSignoff: boolean;
 }
@@ -24,6 +24,12 @@ interface Template {
   name: string;
   description: string | null;
   items: Item[];
+}
+
+/** "8 h", or "12 h · 1.5 days" when it is not a whole number of 8-hour days. */
+function formatHours(hours: number): string {
+  const days = hours / 8;
+  return Number.isInteger(days) ? `${hours} h` : `${hours} h · ${Math.round(days * 10) / 10} days`;
 }
 
 const SENIORITY_LABELS: Record<string, string> = {
@@ -38,11 +44,12 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editSeniority, setEditSeniority] = useState('JUNIOR');
-  const [editDuration, setEditDuration] = useState(1);
+  const [editHours, setEditHours] = useState(8);
   const [editDepends, setEditDepends] = useState<number | null>(null);
 
   const [newTitle, setNewTitle] = useState('');
   const [newSeniority, setNewSeniority] = useState('JUNIOR');
+  const [newHours, setNewHours] = useState(8);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [deletingItem, setDeletingItem] = useState<{ id: string; title: string; stepNumber: number } | null>(null);
@@ -56,7 +63,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
     setEditingId(item.id);
     setEditTitle(item.title);
     setEditSeniority(item.recommendedSeniority);
-    setEditDuration(item.defaultDurationDays);
+    setEditHours(item.defaultDurationHours);
     setEditDepends(item.dependsOnStep);
   };
 
@@ -65,7 +72,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
       const res = await updateTemplateItemAction(itemId, {
         title: editTitle,
         recommendedSeniority: editSeniority,
-        defaultDurationDays: Number(editDuration),
+        defaultDurationHours: Number(editHours),
         dependsOnStep: editDepends !== null ? Number(editDepends) : null,
       });
       if (res.success) {
@@ -96,11 +103,12 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
       const res = await addTemplateItemAction(activeTemplate.id, {
         title: newTitle.trim(),
         recommendedSeniority: newSeniority,
-        defaultDurationDays: 1,
+        defaultDurationHours: Number(newHours),
       });
       if (res.success) {
         setShowAddModal(false);
         setNewTitle('');
+        setNewHours(8);
         toast.success('New step added to checklist.');
       } else {
         toast.error(res.error ?? 'Failed to add step');
@@ -133,6 +141,14 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
           <div>
             <h3 className="card-title text-base font-semibold">{activeTemplate?.name}</h3>
             <p className="text-caption text-muted mt-0.5">{activeTemplate?.description}</p>
+            {activeTemplate ? (() => {
+              const totalHours = activeTemplate.items.reduce((sum, i) => sum + i.defaultDurationHours, 0);
+              return (
+                <p className="text-caption text-ink mt-1 font-mono">
+                  {activeTemplate.items.length} steps · {totalHours} h · {Math.max(1, Math.ceil(totalHours / 8))} working days
+                </p>
+              );
+            })() : null}
           </div>
           <button
             onClick={() => setShowAddModal(true)}
@@ -149,7 +165,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
                 <th className="w-16 text-center">Step</th>
                 <th>Standard Task Title</th>
                 <th className="w-36">Recommended Seniority</th>
-
+                <th className="w-36">Time to complete</th>
                 <th className="w-32">Blocker (Depends)</th>
                 <th className="w-28 text-right">Actions</th>
               </tr>
@@ -158,7 +174,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
               {activeTemplate?.items.map((item) => {
                 const isEditing = editingId === item.id;
                 return (
-                  <tr key={item.id} className={isEditing ? 'bg-amber-50/40' : 'hover:bg-surface-subtle/50'}>
+                  <tr key={item.id} className={isEditing ? 'bg-surface-strong' : 'hover:bg-surface-subtle/50'}>
                     <td className="text-center font-semibold text-sm text-muted">
                       {item.stepNumber}
                     </td>
@@ -198,6 +214,25 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
                         <span className="badge badge-neutral text-xs">
                           {SENIORITY_LABELS[item.recommendedSeniority] ?? item.recommendedSeniority}
                         </span>
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <label className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min="0.5"
+                            max="200"
+                            step="0.5"
+                            value={editHours}
+                            onChange={(e) => setEditHours(Number(e.target.value))}
+                            className="input text-xs py-1 w-20"
+                            aria-label="Time to complete in hours"
+                          />
+                          <span className="text-caption text-muted">hours</span>
+                        </label>
+                      ) : (
+                        <span className="text-sm font-mono text-ink">{formatHours(item.defaultDurationHours)}</span>
                       )}
                     </td>
                     <td>
@@ -307,6 +342,20 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
                     <option value="JUNIOR">Jr. Engineer</option>
                     <option value="TRAINEE">Trainee Engineer</option>
                   </select>
+                </div>
+                <div>
+                  <label className="label text-xs font-medium" htmlFor="new-step-hours">Time to complete (hours)</label>
+                  <input
+                    id="new-step-hours"
+                    type="number"
+                    min="0.5"
+                    max="200"
+                    step="0.5"
+                    value={newHours}
+                    onChange={(e) => setNewHours(Number(e.target.value))}
+                    className="input text-sm w-full"
+                  />
+                  <p className="text-caption text-muted mt-1">8 hours = 1 working day.</p>
                 </div>
               </div>
             </div>

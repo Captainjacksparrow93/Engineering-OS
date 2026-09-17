@@ -5,7 +5,7 @@ import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
 import { ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { addDays, startOfDay } from '@/core/utils/dates';
-import { assertTaskVisible } from './access';
+import { assertTaskVisible, reassignTeamFor } from './access';
 import {
   computeWorkload,
   rankCandidates,
@@ -223,6 +223,7 @@ export async function handoverCandidates(principal: Principal, taskId: string) {
   });
 
   const excludeUserIds = task.assignments.map((a) => a.userId);
+  const team = await reassignTeamFor(principal);
 
   // Query strictly active engineering team members (SENIOR_ENGINEER / JUNIOR_ENGINEER)
   // Exclude PMs (PM_BASE, PROJECT_MANAGER), Technical Heads, Directors, Super Admins
@@ -242,7 +243,7 @@ export async function handoverCandidates(principal: Principal, taskId: string) {
           },
         },
       },
-      id: { notIn: excludeUserIds },
+      id: team ? { notIn: excludeUserIds, in: [...team] } : { notIn: excludeUserIds },
     },
     select: {
       id: true,
@@ -372,6 +373,7 @@ export async function peersForHandover(principal: Principal, taskId: string) {
     select: { projectId: true, assignments: { where: { status: 'ACTIVE' }, select: { userId: true } } },
   });
   const held = task.assignments.map((a) => a.userId);
+  const team = await reassignTeamFor(principal);
 
   return prisma.user.findMany({
     where: {
@@ -389,7 +391,7 @@ export async function peersForHandover(principal: Principal, taskId: string) {
           },
         },
       },
-      id: { notIn: held },
+      id: team ? { notIn: held, in: [...team] } : { notIn: held },
     },
     select: {
       id: true,

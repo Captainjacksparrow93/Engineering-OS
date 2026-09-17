@@ -18,6 +18,7 @@
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
     "db:seed:demo": "tsx prisma/seed-demo.ts",
+    "db:reset:dev": "prisma db push --force-reset && tsx prisma/seed.ts && tsx prisma/seed-demo.ts",
     "db:reset": "prisma migrate reset --force"
   },
   "prisma": {

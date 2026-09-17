@@ -402,6 +402,8 @@ model Project {
   orderValue    Decimal?        @db.Decimal(14, 2)
   panelType     String?
   panelCount    Int             @default(0)
+  /// Checklist packages in this project: PLC, SCADA, HMI (drives the dashboard type cards).
+  automationTypes String[]      @default([])
   status        ProjectStatus   @default(DRAFT)
   priority      ProjectPriority @default(MEDIUM)
   startDate     DateTime?       @db.Date
@@ -751,7 +753,9 @@ model ChecklistTemplateItem {
   title               String
   description         String?
   recommendedSeniority String  @default("JUNIOR") // ASST_MANAGER, SENIOR, JUNIOR, TRAINEE
+  /// ponytail: legacy whole-day duration, no longer read; kept so old rows are not lost. Use defaultDurationHours.
   defaultDurationDays Int      @default(1)
+  defaultDurationHours Float   @default(8)
   isSimulationSignoff Boolean  @default(false)
   dependsOnStep       Int?
   sortOrder           Int      @default(1)

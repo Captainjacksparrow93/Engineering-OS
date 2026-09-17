@@ -455,8 +455,12 @@ export function allocateTeamForSteps(
   const results: SmartStepAllocation[] = [];
   const fairShare = computeFairShare(candidates, steps, pmSquadUserIds);
 
+  // Team isolation: with a PM team given, only that team is ever considered.
+  const teamOnly = pmSquadUserIds.size > 0;
+  const inScope = (c: SmartCandidate) => !teamOnly || pmSquadUserIds.has(c.id);
+
   for (const step of steps) {
-    let eligible = candidates.filter((c) => applyHardRules(c, step));
+    let eligible = candidates.filter((c) => inScope(c) && applyHardRules(c, step));
     let escalationRung = 0;
 
     // Escalation ladder if no candidate passed standard Layer 1
@@ -464,6 +468,7 @@ export function allocateTeamForSteps(
       // Rung 3: Accept candidate at grade floor short on hours (freeHours > 0)
       const floorQualified = candidates.filter(
         (c) =>
+          inScope(c) &&
           c.status === 'ACTIVE' &&
           !['MANAGER', 'HEAD', 'DIRECTOR'].includes(c.grade) &&
           (GRADE_RANK[c.grade] ?? 1) >= gradeFloor(step.recommendedSeniority) &&
@@ -483,15 +488,15 @@ export function allocateTeamForSteps(
         score: 0,
         factorBreakdown: { M: 0, A: 0, C: 0, Q: 0 },
         escalationRung: 4,
-        rationale: 'No eligible engineer available — needs Department Head decision',
+        rationale: teamOnly
+          ? "No one in the PM's team is free for this step"
+          : 'No eligible engineer available — needs Department Head decision',
         isWeakMatch: true,
       });
       continue;
     }
 
-    // Prioritize candidates within the PM's squad first if any are eligible
-    const squadEligible = eligible.filter((c) => pmSquadUserIds.has(c.id));
-    const pool = squadEligible.length > 0 ? squadEligible : eligible;
+    const pool = eligible;
 
     const scored = pool.map((candidate) => {
       const { score, breakdown } = scoreForStep(candidate, step, {

@@ -4,7 +4,8 @@ import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { DomainError, ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
-import { addDays, addWorkingDays, paceStepDurations, startOfDay, workingDaysBetween } from '@/core/utils/dates';
+import { addDays, addWorkingDays, startOfDay, workingDaysBetween } from '@/core/utils/dates';
+import { planLaneByHours } from '../domain/scheduling';
 import { recomputeTaskDerivedState } from './task.service';
 import { nextProjectCode } from './project.service';
 import {
@@ -32,7 +33,6 @@ export interface TaskAssignmentDraft {
   assigneeId?: string;
   plannedStart?: string; // YYYY-MM-DD
   plannedEnd?: string;   // YYYY-MM-DD
-  durationDays?: number;
   estimatedHours?: number;
 }
 
@@ -179,6 +179,10 @@ export async function createAutomationProject(principal: Principal, input: Creat
         throw new DomainError(`Assignee ${id} is not an active employee in your company.`);
       }
     }
+    const pmTeam = new Set(await getDescendantUserIds(principal.companyId, manager.id));
+    if (uniqueIds.some((id) => !pmTeam.has(id))) {
+      throw new DomainError("Steps can only be assigned to engineers in the selected PM's team.");
+    }
   }
 
   // Generate code if missing or sanitize provided code
@@ -219,6 +223,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
         managerId: manager.id,
         sponsorId: principal.userId,
         departmentId: departmentId ?? null,
+        automationTypes: [...new Set(input.scopes.filter((s) => s.quantity > 0 && templateMap.has(s.templateCode)).map((s) => s.templateCode))],
       },
     });
 
@@ -275,8 +280,6 @@ export async function createAutomationProject(principal: Principal, input: Creat
       const phaseCode = `${project.code}-PH${phaseCounter++}`;
       const packageStepMultiplier = scope.quantity;
 
-      // Each package starts on project start date (parallel lanes)
-      let cursorDate = start;
 
       // Create Phase task (container node)
       const phaseTask = await tx.task.create({
@@ -287,22 +290,17 @@ export async function createAutomationProject(principal: Principal, input: Creat
           type: 'PHASE',
           status: 'TODO',
           priority: 'MEDIUM',
-          estimatedHours: tpl.items.reduce((sum, item) => sum + item.defaultDurationDays * packageStepMultiplier * 8, 0),
+          estimatedHours: tpl.items.reduce((sum, item) => sum + item.defaultDurationHours * packageStepMultiplier, 0),
           createdById: principal.userId,
           plannedStart: start,
           plannedEnd: targetEnd,
         },
       });
 
-      // Pacing calculation across project window
-      const totalAvailableDays = workingDaysBetween(start, targetEnd);
-      const baseDurations = tpl.items.map((item) => {
-        const draft = input.tasks.find(
-          (d) => d.templateCode === scope.templateCode && d.stepNumber === item.stepNumber
-        );
-        return draft?.durationDays ?? (item.defaultDurationDays * packageStepMultiplier);
-      });
-      const pacedDurations = paceStepDurations(totalAvailableDays, baseDurations);
+      // Planned dates by cumulative hours (8 h = 1 working day), stretched to the target date.
+      // The wizard normally sends dates per step; this plan is the fallback for API callers.
+      const stepHoursList = tpl.items.map((item) => item.defaultDurationHours * packageStepMultiplier);
+      const lanePlan = planLaneByHours(stepHoursList, start, workingDaysBetween(start, targetEnd));
 
       // Map stepNumber -> created task id for dependency wiring
       const stepTaskIdMap = new Map<number, string>();
@@ -314,15 +312,9 @@ export async function createAutomationProject(principal: Principal, input: Creat
             d.stepNumber === item.stepNumber,
         );
 
-        const durationDays = draft?.durationDays ?? pacedDurations[idx] ?? (item.defaultDurationDays * packageStepMultiplier);
-        const taskStart = draft?.plannedStart ? new Date(draft.plannedStart) : cursorDate;
-        // Inclusive working-day calculation: 1-day step ends on taskStart
-        const taskEnd = draft?.plannedEnd
-          ? new Date(draft.plannedEnd)
-          : idx === tpl.items.length - 1 && !draft?.plannedEnd
-          ? targetEnd
-          : addWorkingDays(taskStart, durationDays - 1);
-        const estimatedHours = draft?.estimatedHours ?? durationDays * 8;
+        const taskStart = draft?.plannedStart ? new Date(draft.plannedStart) : lanePlan[idx]!.plannedStart;
+        const taskEnd = draft?.plannedEnd ? new Date(draft.plannedEnd) : lanePlan[idx]!.plannedEnd;
+        const estimatedHours = draft?.estimatedHours ?? stepHoursList[idx]!;
 
         const taskCode = `${project.code}-T${String(globalTaskCounter++).padStart(3, '0')}`;
         const hasBlocker = Boolean(item.dependsOnStep);
@@ -346,8 +338,6 @@ export async function createAutomationProject(principal: Principal, input: Creat
 
         stepTaskIdMap.set(item.stepNumber, task.id);
 
-        // Next sequential step starts on next working day after taskEnd
-        cursorDate = addWorkingDays(taskEnd, 1);
 
         // Assignee
         const assigneeId = draft?.assigneeId;

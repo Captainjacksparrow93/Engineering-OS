@@ -82,12 +82,13 @@ describe('templateItemSchema', () => {
       title: 'Valid Step',
       description: 'Step details',
       recommendedSeniority: 'SENIOR',
-      defaultDurationDays: 3,
+      defaultDurationHours: 12.5,
       dependsOnStep: 1,
     };
     const parsed = templateItemSchema.parse(valid);
     expect(parsed.title).toBe('Valid Step');
-    expect(parsed.defaultDurationDays).toBe(3);
+    expect(parsed.defaultDurationHours).toBe(12.5);
+    expect(() => templateItemSchema.parse({ ...valid, defaultDurationHours: 0.3 })).toThrow();
   });
 
   it('rejects short title', () => {

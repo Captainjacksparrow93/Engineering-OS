@@ -1,6 +1,8 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/core/db/prisma';
-import { can } from '@/core/rbac/engine';
+import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
+import { teamMemberIds } from '../domain/teams';
+import { isExecutionStaff } from '../domain/availability';
 import { ForbiddenError, NotFoundError } from '@/core/rbac/errors';
 import type { PermissionKey } from '@/core/rbac/permissions';
 import type { Principal } from '@/core/rbac/types';
@@ -283,3 +285,39 @@ export async function oversightRecipients(
   }
   return Array.from(matching);
 }
+
+/**
+ * Who `principal` may reassign or assign work to: everyone in their own PM's team.
+ * Returns null when unrestricted (Directors and Technical Heads, who hold pm.oversight).
+ */
+export async function reassignTeamFor(principal: Principal): Promise<Set<string> | null> {
+  if (hasPermissionAnywhere(principal, 'pm.oversight')) return null;
+  return teamOf(principal.companyId, principal.userId);
+}
+
+/**
+ * Engineers in the team (PM subtree) that `userId` belongs to: people who execute steps,
+ * so the PM, assistant managers and heads are never offered as assignees.
+ */
+export async function teamOf(companyId: string, userId: string): Promise<Set<string>> {
+  const people = await prisma.user.findMany({
+    where: { companyId, status: 'ACTIVE' },
+    select: {
+      id: true,
+      managerId: true,
+      grade: true,
+      designation: true,
+      roleAssignments: {
+        where: { role: { permissions: { some: { permission: { key: 'pm.oversight' } } } } },
+        select: { id: true },
+      },
+    },
+  });
+  const members = teamMemberIds(
+    userId,
+    people.map((p) => ({ id: p.id, managerId: p.managerId, hasOversight: p.roleAssignments.length > 0 })),
+  );
+  return new Set(people.filter((p) => members.has(p.id) && isExecutionStaff(p)).map((p) => p.id));
+}
+
+export const OUTSIDE_TEAM_MESSAGE = 'You can only reassign to engineers in your own team.';

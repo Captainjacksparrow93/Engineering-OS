@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  minWorkingDaysForHours,
+  planLaneByHours,
   blockingReasons,
   completionBlockers,
   computeSchedule,
@@ -201,5 +203,36 @@ describe('rollUpProgress', () => {
   it('treats a completed leaf as 100 even if its percent lags', () => {
     const tasks = [task('leaf', { status: 'COMPLETED', percentComplete: 80 })];
     expect(rollUpProgress(tasks).get('leaf')).toBe(100);
+  });
+});
+
+describe('planLaneByHours', () => {
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const monday = new Date('2026-10-05T00:00:00.000Z');
+
+  it('gives 13 steps of 8 h one working day each, skipping Sunday', () => {
+    const plan = planLaneByHours(Array(13).fill(8), monday);
+    expect(iso(plan[0]!.plannedStart)).toBe('2026-10-05');
+    expect(iso(plan[5]!.plannedEnd)).toBe('2026-10-10'); // Saturday
+    expect(iso(plan[6]!.plannedStart)).toBe('2026-10-12'); // Sunday skipped
+    expect(iso(plan[12]!.plannedEnd)).toBe('2026-10-19');
+    expect(minWorkingDaysForHours(Array(13).fill(8))).toBe(13);
+  });
+
+  it('lets short steps share a day and spreads long steps over several days', () => {
+    const plan = planLaneByHours([4, 4, 12], monday);
+    expect(plan.map((p) => [iso(p.plannedStart), iso(p.plannedEnd)])).toEqual([
+      ['2026-10-05', '2026-10-05'],
+      ['2026-10-05', '2026-10-05'],
+      ['2026-10-06', '2026-10-07'],
+    ]);
+    expect(minWorkingDaysForHours([4, 4, 12])).toBe(3);
+  });
+
+  it('doubles duration for two panels and stretches to a later target', () => {
+    expect(minWorkingDaysForHours(Array(13).fill(16))).toBe(26);
+    const stretched = planLaneByHours([8, 8], monday, 4);
+    expect(iso(stretched[0]!.plannedEnd)).toBe('2026-10-06');
+    expect(iso(stretched[1]!.plannedEnd)).toBe('2026-10-08');
   });
 });

@@ -13,7 +13,7 @@ import { MODULES } from '../src/core/modules/registry';
 
 const prisma = new PrismaClient();
 
-const PASSWORD: string = process.env.SEED_PASSWORD || 'ChangeMe@2026!';
+const PASSWORD: string = process.env.SEED_PASSWORD || 'ACSengi@2026';
 
 const COLOURS = ['#2f5fd8', '#0f9d58', '#d93025', '#f4b400', '#7b1fa2', '#00838f', '#ef6c00', '#5d4037'];
 const colourFor = (seed: string) => {
@@ -44,13 +44,14 @@ async function main() {
   const permissionId = new Map(permissions.map((p) => [p.key, p.id]));
 
   // ---------------------------------------------------------------------- roles
+  // Create-only: this script runs on every container start, so it must never undo what
+  // admins changed in the app. A role's permissions are seeded only when the role is new;
+  // granting an existing role a new permission needs an explicit one-off script.
   for (const [key, definition] of Object.entries(SYSTEM_ROLES)) {
-    const role = await prisma.role.upsert({
-      where: { key },
-      create: { key, name: definition.name, description: definition.description, isSystem: true },
-      update: { name: definition.name, description: definition.description, isSystem: true },
+    if (await prisma.role.findUnique({ where: { key }, select: { id: true } })) continue;
+    const role = await prisma.role.create({
+      data: { key, name: definition.name, description: definition.description, isSystem: true },
     });
-    await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
     await prisma.rolePermission.createMany({
       data: definition.permissions
         .map((p) => permissionId.get(p))
@@ -76,7 +77,7 @@ async function main() {
         plannedFor: module.plannedFor,
         sortOrder: module.sortOrder,
       },
-      update: { status: module.status, plannedFor: module.plannedFor, sortOrder: module.sortOrder },
+      update: {},
     });
   }
 
@@ -135,46 +136,34 @@ async function main() {
     { code: 'HMI', name: 'HMI Programming + Simulation', description: 'Standard 13-step HMI operator panel development, diagnostic screens, tag linking, and simulation.', items: HMI_TASKS },
   ];
 
+  // Create-only: a template that already exists belongs to the Checklists screen now.
   for (const t of templates) {
-    const template = await prisma.checklistTemplate.upsert({
-      where: { code: t.code },
-      create: { code: t.code, name: t.name, description: t.description, category: 'AUTOMATION', isActive: true },
-      update: { name: t.name, description: t.description },
+    if (await prisma.checklistTemplate.findUnique({ where: { code: t.code }, select: { id: true } })) continue;
+    const template = await prisma.checklistTemplate.create({
+      data: { code: t.code, name: t.name, description: t.description, category: 'AUTOMATION', isActive: true },
     });
 
-    for (const item of t.items) {
-      const existing = await prisma.checklistTemplateItem.findFirst({
-        where: { templateId: template.id, stepNumber: item.step },
-      });
-
-      if (existing) {
-        await prisma.checklistTemplateItem.update({
-          where: { id: existing.id },
-          data: {
-            title: item.title,
-            recommendedSeniority: item.seniority,
-            defaultDurationDays: item.days,
-            dependsOnStep: item.depends,
-            isSimulationSignoff: Boolean(item.isSim),
-          },
-        });
-      } else {
-        await prisma.checklistTemplateItem.create({
-          data: {
-            templateId: template.id,
-            stepNumber: item.step,
-            code: item.code,
-            title: item.title,
-            recommendedSeniority: item.seniority,
-            defaultDurationDays: item.days,
-            dependsOnStep: item.depends,
-            isSimulationSignoff: Boolean(item.isSim),
-            sortOrder: item.step,
-          },
-        });
-      }
-    }
+    await prisma.checklistTemplateItem.createMany({
+      data: t.items.map((item) => ({
+        templateId: template.id,
+        stepNumber: item.step,
+        code: item.code,
+        title: item.title,
+        recommendedSeniority: item.seniority,
+        defaultDurationHours: item.days * 8,
+        dependsOnStep: item.depends,
+        isSimulationSignoff: Boolean(item.isSim),
+        sortOrder: item.step,
+      })),
+    });
   }
+
+  // One-time move from whole-day durations to hours. Rows with a legacy multi-day value get
+  // days x 8 hours and are reset to 1 day, so this never touches them again (idempotent).
+  await prisma.$executeRaw`
+    UPDATE pm_checklist_template_items
+    SET "defaultDurationHours" = "defaultDurationDays" * 8, "defaultDurationDays" = 1
+    WHERE "defaultDurationDays" <> 1`;
 
   // -------------------------------------------------------------------- company
   const company = await prisma.company.upsert({
@@ -217,7 +206,7 @@ async function main() {
         name: dept.name,
         parentId: dept.parent ? departmentId.get(dept.parent) : null,
       },
-      update: { name: dept.name, parentId: dept.parent ? departmentId.get(dept.parent) : null },
+      update: {},
     });
     departmentId.set(dept.code, created.id);
   }
@@ -1323,11 +1312,19 @@ async function main() {
     },
   ];
 
+  // Create-only: never overwrite a person's details, password, manager or roles that
+  // were changed in the app. Only people created in this run get their seed defaults.
   const userId = new Map<string, string>();
+  const createdCodes = new Set<string>();
   for (const person of people) {
-    const user = await prisma.user.upsert({
-      where: { employeeCode: person.code },
-      create: {
+    const existing = await prisma.user.findUnique({ where: { employeeCode: person.code }, select: { id: true } });
+    if (existing) {
+      userId.set(person.code, existing.id);
+      continue;
+    }
+    createdCodes.add(person.code);
+    const user = await prisma.user.create({
+      data: {
         companyId: company.id,
         employeeCode: person.code,
         email: person.email,
@@ -1340,79 +1337,36 @@ async function main() {
         skills: person.skills,
         avatarColor: colourFor(person.name),
       },
-      update: {
-        email: person.email,
-        passwordHash,
-        fullName: person.name,
-        designation: person.designation,
-        grade: person.grade,
-        departmentId: person.dept ? departmentId.get(person.dept) : null,
-        skills: person.skills,
-      },
     });
     userId.set(person.code, user.id);
   }
 
-  // Set line managers
+  // Line managers: only for people created in this run.
   for (const person of people) {
-    if (!person.manager) continue;
+    if (!person.manager || !createdCodes.has(person.code)) continue;
     await prisma.user.update({
       where: { id: userId.get(person.code)! },
       data: { managerId: userId.get(person.manager) ?? null },
     });
   }
 
-  // Set Department Heads
-  if (departmentId.get('TECH') && userId.get('ACS-0061')) {
-    await prisma.department.update({ where: { id: departmentId.get('TECH')! }, data: { headId: userId.get('ACS-0061') } });
-  }
-  if (departmentId.get('DESIGN') && userId.get('ACS-0028')) {
-    await prisma.department.update({ where: { id: departmentId.get('DESIGN')! }, data: { headId: userId.get('ACS-0028') } });
-  }
-  if (departmentId.get('PROD') && userId.get('ACS-0035')) {
-    await prisma.department.update({ where: { id: departmentId.get('PROD')! }, data: { headId: userId.get('ACS-0035') } });
-  }
-  if (departmentId.get('QC') && userId.get('ACS-0057')) {
-    await prisma.department.update({ where: { id: departmentId.get('QC')! }, data: { headId: userId.get('ACS-0057') } });
-  }
-  if (departmentId.get('SALES') && userId.get('ACS-0010')) {
-    await prisma.department.update({ where: { id: departmentId.get('SALES')! }, data: { headId: userId.get('ACS-0010') } });
-  }
-  if (departmentId.get('PUR') && userId.get('ACS-0007')) {
-    await prisma.department.update({ where: { id: departmentId.get('PUR')! }, data: { headId: userId.get('ACS-0007') } });
-  }
-  if (departmentId.get('ACC') && userId.get('ACS-0021')) {
-    await prisma.department.update({ where: { id: departmentId.get('ACC')! }, data: { headId: userId.get('ACS-0021') } });
-  }
-  if (departmentId.get('STORES') && userId.get('ACS-0024')) {
-    await prisma.department.update({ where: { id: departmentId.get('STORES')! }, data: { headId: userId.get('ACS-0024') } });
+  // Department heads: only where no head is set yet.
+  const departmentHeads: Array<[string, string]> = [
+    ['TECH', 'ACS-0061'], ['DESIGN', 'ACS-0028'], ['PROD', 'ACS-0035'], ['QC', 'ACS-0057'],
+    ['SALES', 'ACS-0010'], ['PUR', 'ACS-0007'], ['ACC', 'ACS-0021'], ['STORES', 'ACS-0024'],
+  ];
+  for (const [dept, code] of departmentHeads) {
+    const deptId = departmentId.get(dept);
+    const headId = userId.get(code);
+    if (!deptId || !headId) continue;
+    await prisma.department.updateMany({ where: { id: deptId, headId: null }, data: { headId } });
   }
 
-  // Reconcile role assignments cleanly
-  const seededUserIds = Array.from(userId.values());
-  await prisma.roleAssignment.deleteMany({
-    where: {
-      userId: { in: seededUserIds },
-      scopeType: { not: 'PROJECT' },
-    },
-  });
-
-  // Clean up any stale PROJECT-scoped PROJECT_MANAGER grants whose project's managerId isn't that user
-  const allExistingProjects = await prisma.project.findMany({ select: { id: true, managerId: true } });
-  const validProjectManagers = new Set(allExistingProjects.map((p) => `${p.id}:${p.managerId}`));
-  const projectRoleAssignments = await prisma.roleAssignment.findMany({
-    where: { scopeType: 'PROJECT' },
-    select: { id: true, scopeId: true, userId: true },
-  });
-  for (const ra of projectRoleAssignments) {
-    if (!ra.scopeId || !validProjectManagers.has(`${ra.scopeId}:${ra.userId}`)) {
-      await prisma.roleAssignment.delete({ where: { id: ra.id } });
-    }
-  }
-
+  // Seed role grants: only for people created in this run. Roles given or removed in the
+  // admin screen are never touched.
   for (const person of people) {
-    const uid = userId.get(person.code);
-    if (!uid) continue;
+    if (!createdCodes.has(person.code)) continue;
+    const uid = userId.get(person.code)!;
     for (const grant of person.roles) {
       const rid = roleId.get(grant.key);
       if (!rid) continue;
@@ -1475,58 +1429,10 @@ async function main() {
     },
   ];
 
-  // Purge any old mock/test projects not in the standard set
-  const standardCodes = projectSeeds.map((p) => p.code);
-  // DEMO-* projects belong to prisma/seed-demo.ts and must survive startup seeding.
-  const oldProjects = await prisma.project.findMany({
-    where: { code: { notIn: standardCodes }, NOT: { code: { startsWith: 'DEMO-' } } },
-    select: { id: true },
-  });
-  if (oldProjects.length > 0) {
-    const oldIds = oldProjects.map((p) => p.id);
-    await prisma.taskProgressLog.deleteMany({ where: { task: { projectId: { in: oldIds } } } });
-    await prisma.taskHandover.deleteMany({ where: { task: { projectId: { in: oldIds } } } });
-    await prisma.projectHandover.deleteMany({ where: { projectId: { in: oldIds } } });
-    await prisma.taskAssignment.deleteMany({ where: { task: { projectId: { in: oldIds } } } });
-    await prisma.taskDependency.deleteMany({
-      where: {
-        OR: [
-          { predecessor: { projectId: { in: oldIds } } },
-          { successor: { projectId: { in: oldIds } } },
-        ],
-      },
-    });
-    await prisma.task.deleteMany({ where: { projectId: { in: oldIds } } });
-    await prisma.projectMember.deleteMany({ where: { projectId: { in: oldIds } } });
-    await prisma.roleAssignment.deleteMany({ where: { scopeType: 'PROJECT', scopeId: { in: oldIds } } });
-    await prisma.project.deleteMany({ where: { id: { in: oldIds } } });
-  }
-
-  // Also clean up tasks, dependencies, assignments, logs for standard projects to refresh to exact 13 steps
-  const existingStandardProjects = await prisma.project.findMany({
-    where: { code: { in: standardCodes } },
-    select: { id: true },
-  });
-  if (existingStandardProjects.length > 0) {
-    const stdIds = existingStandardProjects.map((p) => p.id);
-    await prisma.taskProgressLog.deleteMany({ where: { task: { projectId: { in: stdIds } } } });
-    await prisma.taskHandover.deleteMany({ where: { task: { projectId: { in: stdIds } } } });
-    await prisma.projectHandover.deleteMany({ where: { projectId: { in: stdIds } } });
-    await prisma.taskAssignment.deleteMany({ where: { task: { projectId: { in: stdIds } } } });
-    await prisma.taskDependency.deleteMany({
-      where: {
-        OR: [
-          { predecessor: { projectId: { in: stdIds } } },
-          { successor: { projectId: { in: stdIds } } },
-        ],
-      },
-    });
-    await prisma.task.deleteMany({ where: { projectId: { in: stdIds } } });
-    await prisma.projectMember.deleteMany({ where: { projectId: { in: stdIds } } });
-  }
-
+  // Create-only: existing projects (and everything in them) are never deleted or reset.
   const projectId = new Map<string, string>();
   for (const seed of projectSeeds) {
+    if (await prisma.project.findUnique({ where: { code: seed.code }, select: { id: true } })) continue;
     const project = await prisma.project.upsert({
       where: { code: seed.code },
       create: {
@@ -1539,6 +1445,7 @@ async function main() {
         orderValue: seed.orderValue,
         panelType: seed.panelType,
         panelCount: seed.panelCount,
+        automationTypes: [seed.panelType.split(' ')[0]!],
         priority: seed.priority,
         status: seed.status,
         startDate: seed.startDate,
@@ -1547,22 +1454,7 @@ async function main() {
         sponsorId: userId.get(seed.sponsor)!,
         departmentId: departmentId.get(seed.department),
       },
-      update: {
-        name: seed.name,
-        clientName: seed.clientName,
-        description: `Design, manufacture, test and dispatch of ${seed.panelType}.`,
-        poNumber: seed.poNumber,
-        orderValue: seed.orderValue,
-        panelType: seed.panelType,
-        panelCount: seed.panelCount,
-        priority: seed.priority,
-        status: seed.status,
-        startDate: seed.startDate,
-        targetEndDate: seed.targetEndDate,
-        managerId: userId.get(seed.manager)!,
-        sponsorId: userId.get(seed.sponsor)!,
-        departmentId: departmentId.get(seed.department),
-      },
+      update: {},
     });
     projectId.set(seed.code, project.id);
 
@@ -1885,8 +1777,10 @@ async function main() {
     },
   ];
 
+  // Tasks, assignments, dependencies and logs only for projects created in this run.
+  const newTaskSeeds = taskSeeds.filter((t) => projectId.has(t.project));
   const taskId = new Map<string, string>();
-  for (const seed of taskSeeds) {
+  for (const seed of newTaskSeeds) {
     const pid = projectId.get(seed.project)!;
     const isCompleted = seed.status === 'COMPLETED';
     const isInProgress = seed.status === 'IN_PROGRESS';
@@ -1931,7 +1825,7 @@ async function main() {
   }
 
   // Set task assignments
-  for (const seed of taskSeeds) {
+  for (const seed of newTaskSeeds) {
     if (!seed.assignee) continue;
     const uid = userId.get(seed.assignee)!;
     const tid = taskId.get(seed.key)!;
@@ -1959,7 +1853,7 @@ async function main() {
   }
 
   // Set dependencies
-  for (const seed of taskSeeds) {
+  for (const seed of newTaskSeeds) {
     if (!seed.dependsOn) continue;
     const tid = taskId.get(seed.key)!;
     for (const dep of seed.dependsOn) {
@@ -1973,7 +1867,7 @@ async function main() {
   }
 
   // Progress logs
-  const completedSeeds = taskSeeds.filter((t) => (t.percent ?? 0) > 0);
+  const completedSeeds = newTaskSeeds.filter((t) => (t.percent ?? 0) > 0);
   for (const t of completedSeeds) {
     const tid = taskId.get(t.key)!;
     const uid = userId.get(t.assignee!)!;
@@ -2020,11 +1914,33 @@ async function main() {
   for (const seed of leaveSeeds) {
     const uid = userId.get(seed.user);
     if (!uid) continue;
-    const already = await prisma.leave.findFirst({ where: { userId: uid, startDate: day(seed.from) } });
+    const already = await prisma.leave.findFirst({ where: { userId: uid, reason: seed.reason } });
     if (already) continue;
     await prisma.leave.create({
       data: { userId: uid, startDate: day(seed.from), endDate: day(seed.to), reason: seed.reason, status: 'APPROVED' },
     });
+  }
+
+  // Fill automationTypes for projects created before the field existed. Only touches
+  // projects whose list is still empty, so it is safe on every start.
+  const templateFirstSteps = await prisma.checklistTemplate.findMany({
+    select: { code: true, items: { where: { stepNumber: 1 }, select: { title: true } } },
+  });
+  const untyped = await prisma.project.findMany({
+    where: { automationTypes: { isEmpty: true } },
+    select: { id: true, tasks: { select: { title: true, type: true } } },
+  });
+  for (const project of untyped) {
+    const types = templateFirstSteps
+      .filter((tpl) =>
+        project.tasks.some(
+          (t) => (t.type === 'PHASE' && t.title.startsWith(tpl.code)) || t.title === tpl.items[0]?.title,
+        ),
+      )
+      .map((tpl) => tpl.code);
+    if (types.length > 0) {
+      await prisma.project.update({ where: { id: project.id }, data: { automationTypes: types } });
+    }
   }
 
   console.log(`Successfully seeded ${people.length} people across ${departmentTree.length} departments!`);

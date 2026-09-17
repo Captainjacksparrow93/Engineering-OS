@@ -5,6 +5,7 @@ import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
 import { getTaskDetail } from '@/modules/project-management/services/task.service';
 import { handoverCandidates, peersForHandover } from '@/modules/project-management/services/availability.service';
+import { reassignTeamFor } from '@/modules/project-management/services/access';
 import { formatDate, formatDateRange, daysUntil } from '@/core/utils/dates';
 import { Alert, Avatar, Card, PageHeader, PriorityBadge, ProgressBar, StatusBadge } from '@/components/ui';
 import { ProgressForm } from './progress-form';
@@ -29,6 +30,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
 
   const { task, blockers, downstreamCount, permissions } = detail;
 
+  const team = permissions.canAssign ? await reassignTeamFor(principal) : null;
   const [candidates, peers, assignableUsers, projectTasks] = await Promise.all([
     permissions.canHandover ? handoverCandidates(principal, task.id) : Promise.resolve([]),
     permissions.canHandover ? peersForHandover(principal, task.id) : Promise.resolve([]),
@@ -38,6 +40,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             companyId: principal.companyId,
             status: 'ACTIVE',
             roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } } } },
+            ...(team ? { id: { in: [...team] } } : {}),
           },
           select: { id: true, fullName: true, designation: true },
           orderBy: { fullName: 'asc' },
@@ -146,7 +149,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
               <div>
                 <p className="label">Planned duration</p>
                 <p className="text-body-sm text-ink">
-                  {Math.max(1, Math.ceil(task.estimatedHours / 8))} {Math.max(1, Math.ceil(task.estimatedHours / 8)) === 1 ? 'day' : 'days'}
+                  {task.estimatedHours} h ({Math.max(1, Math.ceil(task.estimatedHours / 8))} {Math.max(1, Math.ceil(task.estimatedHours / 8)) === 1 ? 'working day' : 'working days'})
                 </p>
               </div>
               <div>

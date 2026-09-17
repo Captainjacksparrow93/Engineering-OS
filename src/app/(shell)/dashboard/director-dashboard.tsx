@@ -7,6 +7,7 @@ import { formatName } from '@/core/utils/strings';
 import { formatDate } from '@/core/utils/dates';
 import { Avatar, ProgressBar } from '@/components/ui';
 import { ProjectTimeline } from '@/components/project-timeline';
+import { TypeCards } from './type-cards';
 import { getProjectTimelineAction } from '@/app/actions/pm';
 import type { DirectorDashboardData } from '@/modules/project-management/services/dashboard.service';
 import type { ProjectTimelineData } from '@/components/project-timeline';
@@ -164,6 +165,8 @@ export function DirectorDashboard({
           </p>
         </Link>
       </div>
+
+      <TypeCards counts={data.typeCounts} />
 
       {/* Middle Row: Needs Attention & Team Capacity */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

@@ -139,3 +139,31 @@ export function timeElapsedPercent(
   return Math.min(100, Math.max(0, Math.round(((today - start) / (end - start)) * 100)));
 }
 
+
+export interface TypeCounts {
+  PLC: number;
+  SCADA: number;
+  HMI: number;
+  onHold: number;
+}
+
+const ACTIVE_STATUSES = new Set(['DRAFT', 'PLANNING', 'IN_PROGRESS']);
+
+/**
+ * Dashboard type cards. PLC / SCADA / HMI count active projects (a PLC + HMI project counts
+ * in both); on-hold projects count only in On hold; completed and cancelled count nowhere.
+ */
+export function countByAutomationType(projects: Array<{ status: string; automationTypes: string[] }>): TypeCounts {
+  const counts: TypeCounts = { PLC: 0, SCADA: 0, HMI: 0, onHold: 0 };
+  for (const project of projects) {
+    if (project.status === 'ON_HOLD') {
+      counts.onHold += 1;
+      continue;
+    }
+    if (!ACTIVE_STATUSES.has(project.status)) continue;
+    for (const type of new Set(project.automationTypes)) {
+      if (type === 'PLC' || type === 'SCADA' || type === 'HMI') counts[type] += 1;
+    }
+  }
+  return counts;
+}

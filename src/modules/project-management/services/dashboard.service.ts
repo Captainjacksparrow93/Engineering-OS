@@ -6,6 +6,8 @@ import { projectVisibilityWhere } from './access';
 import { getWorkloads } from './availability.service';
 import { isExecutionStaff, type Workload } from '../domain/availability';
 import {
+  countByAutomationType,
+  type TypeCounts,
   daysLate as computeDaysLate,
   forecastFinish,
   projectHealth,
@@ -18,6 +20,7 @@ import { cleanTaskTitle, formatName } from '@/core/utils/strings';
 export interface DirectorDashboardData {
   kind: 'director';
   period: 'week' | 'month';
+  typeCounts: TypeCounts;
   headline: {
     onTime: { current: number; total: number; lateCount: number };
     deliveriesNext30Days: { count: number; nextDate: Date | string | null };
@@ -73,6 +76,7 @@ export interface DirectorDashboardData {
 
 export interface PMDashboardData {
   kind: 'pm';
+  typeCounts: TypeCounts;
   headline: {
     overdueSteps: number;
     problemsReported: number;
@@ -144,6 +148,7 @@ export async function getDashboard(
       startDate: true,
       targetEndDate: true,
       orderValue: true,
+      automationTypes: true,
       manager: { select: { id: true, fullName: true, avatarColor: true } },
       tasks: {
         where: { status: { not: 'CANCELLED' } },
@@ -406,6 +411,7 @@ export async function getDashboard(
     return {
       kind: 'director',
       period,
+      typeCounts: countByAutomationType(projects),
       headline: {
         onTime: { current: onTimeProjects.length, total: liveProjects.length, lateCount: lateProjects.length },
         deliveriesNext30Days: { count: deliveries30.length, nextDate: deliveries30[0]?.targetEndDate ?? null },
@@ -490,6 +496,7 @@ export async function getDashboard(
 
   return {
     kind: 'pm',
+    typeCounts: countByAutomationType(projects.filter((p) => p.manager?.id === principal.userId)),
     headline: {
       overdueSteps: myOverdue.length,
       problemsReported: myOpenProblems.length,
