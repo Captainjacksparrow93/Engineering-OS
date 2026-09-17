@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { ZodError } from 'zod';
 import { requirePrincipal } from '@/core/auth/session';
 import { createAutomationProjectSchema } from '@/modules/project-management/validation/schemas';
 import {
@@ -20,7 +21,10 @@ export async function createAutomationProjectAction(rawInput: CreateAutomationPr
     console.error('Failed to create automation project:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to create automation project.',
+      error: error instanceof ZodError
+        ? error.issues[0]?.message ?? 'Please check the form.'
+        : error instanceof Error
+          ? error.message : 'Failed to create automation project.',
     };
   }
 

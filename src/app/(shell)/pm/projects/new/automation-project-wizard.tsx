@@ -605,7 +605,8 @@ export function AutomationProjectWizard({
                 id="code"
                 type="text"
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                maxLength={20}
                 placeholder="e.g. ACS-PRJ-2026-0042 (auto-generated if blank)"
                 className="input text-sm w-full font-mono"
               />
