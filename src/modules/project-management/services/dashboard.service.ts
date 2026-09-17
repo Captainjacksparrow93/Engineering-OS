@@ -1,10 +1,18 @@
 import { prisma } from '@/core/db/prisma';
-import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
+import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import type { Principal } from '@/core/rbac/types';
-import { addDays, startOfDay } from '@/core/utils/dates';
+import { addDays, startOfDay, todayInIndia } from '@/core/utils/dates';
 import { projectVisibilityWhere } from './access';
 import { getWorkloads } from './availability.service';
-import { projectHealth, projectProgress, timeElapsedPercent, type HealthStatus } from '../domain/portfolio';
+import { isExecutionStaff, type Workload } from '../domain/availability';
+import {
+  daysLate as computeDaysLate,
+  forecastFinish,
+  projectHealth,
+  projectProgress,
+  timeElapsedPercent,
+  type HealthStatus,
+} from '../domain/portfolio';
 import { cleanTaskTitle, formatName } from '@/core/utils/strings';
 
 export interface DirectorDashboardData {
@@ -58,6 +66,7 @@ export interface DirectorDashboardData {
     tasksSentBack: number;
     problemsReported: number;
     problemsSolved: number;
+    openProblems: number;
     avgApprovalTimeHours: number;
   };
 }
@@ -102,28 +111,27 @@ export interface PMDashboardData {
 
 export type UnifiedDashboardResult = DirectorDashboardData | PMDashboardData | { kind: 'engineer' };
 
+const DAY_MS = 86400000;
+const STALE_DAYS = 2;
+
 export async function getDashboard(
   principal: Principal,
   period: 'week' | 'month' = 'week'
 ): Promise<UnifiedDashboardResult> {
-  const hasOversight =
-    can(principal, 'pm.oversight') ||
-    hasPermissionAnywhere(principal, 'pm.oversight');
-  const hasReportRead =
-    can(principal, 'pm.report.read') ||
-    hasPermissionAnywhere(principal, 'pm.report.read');
+  const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight');
+  const hasReportRead = hasPermissionAnywhere(principal, 'pm.report.read');
 
   if (!hasOversight && !hasReportRead) {
     return { kind: 'engineer' };
   }
 
-  const today = startOfDay(new Date());
+  const today = todayInIndia();
   const horizon30 = addDays(today, 30);
-  const periodDays = period === 'week' ? 7 : 30;
-  const periodStart = addDays(today, -periodDays);
+  const periodStart = addDays(today, period === 'week' ? -7 : -30);
   const visibility = projectVisibilityWhere(principal);
+  const ageInDays = (d: Date) => Math.max(0, Math.round((today.getTime() - startOfDay(d).getTime()) / DAY_MS));
 
-  // 1. Single efficient fetch of all relevant projects in scope
+  // 1. All projects in scope, with their steps
   const projects = await prisma.project.findMany({
     where: { ...visibility, status: { not: 'CANCELLED' } },
     select: {
@@ -152,118 +160,105 @@ export async function getDashboard(
           plannedEnd: true,
           submittedAt: true,
           completedAt: true,
-          assignments: {
-            where: { status: 'ACTIVE' },
-            select: { userId: true, user: { select: { fullName: true } } },
-          },
         },
       },
     },
     orderBy: [{ targetEndDate: 'asc' }, { priority: 'desc' }],
   });
+  const taskIds = projects.flatMap((p) => p.tasks.map((t) => t.id));
 
-  // 2. Fetch pending approvals, handovers, roadblocks
-  const [pendingApprovals, taskHandovers, projectHandovers, roadblocks, workloads] = await Promise.all([
+  // 2. Approvals, handovers, problem history, send-backs, workloads
+  const [pendingApprovals, taskHandovers, projectHandovers, problemLogs, sentBackCount, workloads] = await Promise.all([
     prisma.task.findMany({
       where: { project: visibility, status: 'IN_REVIEW' },
       select: {
         id: true,
-        code: true,
         title: true,
         submittedAt: true,
-        project: { select: { id: true, code: true, name: true, managerId: true } },
+        project: { select: { id: true, name: true, managerId: true } },
       },
       orderBy: { submittedAt: 'asc' },
     }),
     prisma.taskHandover.findMany({
-      where: { status: 'PENDING', task: { project: visibility } },
+      where: { status: 'PENDING', OR: [{ task: { project: visibility } }, { toUserId: principal.userId }] },
       select: {
         id: true,
         createdAt: true,
+        toUserId: true,
         fromUser: { select: { fullName: true } },
         toUser: { select: { fullName: true } },
-        task: { select: { id: true, title: true, projectId: true } },
+        task: { select: { id: true, title: true, project: { select: { name: true } } } },
       },
       orderBy: { createdAt: 'asc' },
     }),
     prisma.projectHandover.findMany({
-      where: { status: 'PENDING', project: visibility },
+      where: { status: 'PENDING', OR: [{ project: visibility }, { toUserId: principal.userId }] },
       select: {
         id: true,
         createdAt: true,
+        toUserId: true,
         fromUser: { select: { fullName: true } },
         toUser: { select: { fullName: true } },
         project: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'asc' },
     }),
+    // ponytail: full progress-log history in scope (small today); bound by date if it grows.
     prisma.taskProgressLog.findMany({
-      where: {
-        blocker: { not: null },
-        task: { project: visibility, status: 'BLOCKED' },
-      },
+      where: { taskId: { in: taskIds } },
       select: {
         id: true,
-        createdAt: true,
+        taskId: true,
         blocker: true,
-        task: {
-          select: {
-            id: true,
-            title: true,
-            projectId: true,
-            project: { select: { id: true, name: true } },
-          },
-        },
+        createdAt: true,
+        task: { select: { id: true, title: true, status: true, projectId: true, project: { select: { name: true } } } },
       },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
+      orderBy: { createdAt: 'asc' },
     }),
-    getWorkloads(principal, { from: today, to: addDays(today, 7) }).catch(() => []),
+    prisma.auditLog.count({
+      where: {
+        action: 'task.status_changed',
+        entityId: { in: taskIds },
+        createdAt: { gte: periodStart },
+        AND: [
+          { diff: { path: ['status', 'from'], equals: 'IN_REVIEW' } },
+          { diff: { path: ['status', 'to'], equals: 'IN_PROGRESS' } },
+        ],
+      },
+    }),
+    getWorkloads(principal, { from: today, to: addDays(today, 7) }).catch(() => [] as Workload[]),
   ]);
 
-  // Compute stats per project
+  const problems = summariseProblems(problemLogs, periodStart);
+
+  // 3. Per-project progress, forecast and health (one rule for tiles, table and attention list)
   const processedProjects = projects.map((p) => {
-    const pProgress = projectProgress(p.tasks);
-    const leafTasks = p.tasks.filter((t) => t.type !== 'PHASE' && !p.tasks.some((c) => c.parentId === t.id));
+    const parentIds = new Set(p.tasks.map((t) => t.parentId).filter(Boolean));
+    const leafTasks = p.tasks.filter((t) => t.type !== 'PHASE' && !parentIds.has(t.id));
+    const startDate = p.startDate ?? today;
+    const targetEndDate = p.targetEndDate ?? today;
 
-    const startDate = p.startDate ?? new Date();
-    const targetEndDate = p.targetEndDate ?? new Date();
-
-    let latestLeafEnd: Date = targetEndDate;
-    for (const t of leafTasks) {
-      if (t.plannedEnd && t.plannedEnd > latestLeafEnd) {
-        latestLeafEnd = t.plannedEnd;
-      }
-    }
-
-    // A genuine roadblock is an actively reported problem log on a task
-    const hasOpenRoadblock = roadblocks.some((rb) => rb.task.projectId === p.id);
-    const hasStaleApprovals = pendingApprovals.some(
-      (a) => a.project.id === p.id && a.submittedAt && a.submittedAt.getTime() < today.getTime() - 2 * 86400000
-    );
-
+    const progressPercent = projectProgress(p.tasks);
+    const forecastEndDate = forecastFinish(leafTasks, targetEndDate, today);
     const health = projectHealth({
       status: p.status,
       startDate,
       targetEndDate,
-      forecastEndDate: latestLeafEnd,
-      progressPercent: pProgress,
-      hasOpenRoadblock,
-      hasStaleApprovals,
+      forecastEndDate,
+      progressPercent,
+      hasOpenRoadblock: problems.open.some((log) => log.task.projectId === p.id),
+      hasStaleApprovals: pendingApprovals.some(
+        (a) => a.project.id === p.id && a.submittedAt && ageInDays(a.submittedAt) >= STALE_DAYS,
+      ),
       asOfDate: today,
     });
 
-    const elapsed = timeElapsedPercent(startDate, targetEndDate, today);
-    const targetEndMs = startOfDay(targetEndDate).getTime();
-    const forecastEndMs = startOfDay(latestLeafEnd).getTime();
-    const daysLate = Math.max(0, Math.round((forecastEndMs - targetEndMs) / 86400000));
-
-    const blockedCount = p.tasks.filter((t) => t.status === 'BLOCKED').length;
-    const overdueCount = p.tasks.filter(
-      (t) => t.plannedEnd && startOfDay(t.plannedEnd).getTime() < today.getTime() && !['COMPLETED', 'CANCELLED'].includes(t.status)
-    ).length;
-
-    const orderValueLakh = p.orderValue ? Math.round((Number(p.orderValue) / 100000) * 10) / 10 : null;
+    // Overdue = the engineer's work is late. Steps waiting for approval are listed under
+    // approvals instead, and paused / finished projects raise no overdue alarms.
+    const projectActive = p.status !== 'ON_HOLD' && p.status !== 'COMPLETED';
+    const overdueTasks = leafTasks
+      .filter((t) => projectActive && t.plannedEnd && startOfDay(t.plannedEnd) < today && t.status !== 'COMPLETED' && t.status !== 'IN_REVIEW')
+      .map((t) => ({ id: t.id, title: t.title, plannedEnd: t.plannedEnd! }));
 
     return {
       id: p.id,
@@ -271,269 +266,287 @@ export async function getDashboard(
       name: p.name,
       clientName: p.clientName,
       manager: p.manager,
-      orderValueLakh,
+      orderValueLakh: p.orderValue ? Math.round((Number(p.orderValue) / 100000) * 10) / 10 : null,
       orderValueNum: p.orderValue ? Number(p.orderValue) : 0,
-      progressPercent: pProgress,
-      timeElapsedPercent: elapsed,
+      progressPercent,
+      timeElapsedPercent: timeElapsedPercent(startDate, targetEndDate, today),
       startDate,
       targetEndDate,
-      forecastEndDate: latestLeafEnd,
-      daysLate,
+      forecastEndDate,
+      daysLate: computeDaysLate(forecastEndDate, targetEndDate, today, health),
       health,
       status: p.status,
-      blockedCount,
-      overdueCount,
+      blockedCount: leafTasks.filter((t) => t.status === 'BLOCKED').length,
+      overdueCount: overdueTasks.length,
+      overdueTasks,
     };
   });
 
-  const liveProjects = processedProjects.filter((p) => p.status !== 'COMPLETED' && p.status !== 'ON_HOLD');
+  // Live = not finished. On-hold projects stay listed but out of on-time counts.
+  const listedProjects = processedProjects.filter((p) => p.status !== 'COMPLETED');
+  const liveProjects = listedProjects.filter((p) => p.status !== 'ON_HOLD');
+
+  // Engineers only (no PMs / heads) so "free" and "overloaded" mean the same as in auto-assign.
+  const engineers = workloads.filter((w) => isExecutionStaff(w.person));
+  const overloadedEngineers = engineers.filter((w) => w.status === 'OVERLOADED');
+  const freeEngineers = engineers.filter((w) => w.status === 'FREE');
+  const loadPercent = (w: Workload) => Math.round((w.committedHours / Math.max(w.capacityHours, 1)) * 100);
 
   if (hasOversight) {
-    // -------------------------------------------------------------
-    // DIRECTOR / TECHNICAL HEAD DASHBOARD (UX-3a)
-    // -------------------------------------------------------------
-    const onTimeProjects = liveProjects.filter((p) => p.daysLate === 0);
-    const lateProjects = liveProjects.filter((p) => p.daysLate > 0);
+    const lateProjects = liveProjects.filter((p) => p.health === 'LATE');
+    const onTimeProjects = liveProjects.filter((p) => p.health !== 'LATE');
 
-    const deliveries30 = liveProjects.filter(
-      (p) => startOfDay(p.targetEndDate).getTime() >= today.getTime() && startOfDay(p.targetEndDate).getTime() <= horizon30.getTime()
-    );
-    const nextDelivery = deliveries30[0]?.targetEndDate ?? null;
+    const deliveries30 = liveProjects.filter((p) => {
+      const t = startOfDay(p.targetEndDate).getTime();
+      return t >= today.getTime() && t <= horizon30.getTime();
+    });
 
-    const totalDecisions = pendingApprovals.length + taskHandovers.length + projectHandovers.length;
-    let oldestDecisionDays = 0;
-    for (const a of pendingApprovals) {
-      if (a.submittedAt) {
-        const days = Math.round((today.getTime() - startOfDay(a.submittedAt).getTime()) / 86400000);
-        if (days > oldestDecisionDays) oldestDecisionDays = days;
-      }
-    }
-    for (const h of taskHandovers) {
-      const days = Math.round((today.getTime() - startOfDay(h.createdAt).getTime()) / 86400000);
-      if (days > oldestDecisionDays) oldestDecisionDays = days;
-    }
+    const decisionDates = [
+      ...pendingApprovals.map((a) => a.submittedAt).filter((d): d is Date => Boolean(d)),
+      ...taskHandovers.map((h) => h.createdAt),
+      ...projectHandovers.map((h) => h.createdAt),
+    ];
+    const oldestDecisionDays = decisionDates.reduce((max, d) => Math.max(max, ageInDays(d)), 0);
 
-    // Build Needs Attention Queue (ranked)
-    const needsAttention: DirectorDashboardData['needsAttention'] = [];
-
-    // 1. Late projects
-    for (const lp of lateProjects.sort((a, b) => b.daysLate * (b.orderValueNum || 1) - a.daysLate * (a.orderValueNum || 1))) {
-      needsAttention.push({
-        id: `late-${lp.id}`,
-        type: 'late_project',
-        title: `${lp.name} is ${lp.daysLate} days late`,
-        subtitle: `PM: ${lp.manager ? formatName(lp.manager.fullName) : 'Unassigned'} · Target finish was ${pDate(lp.targetEndDate)}`,
-        severity: 'error',
-        link: `/pm/projects/${lp.id}`,
-        actionLabel: 'View plan',
-      });
-    }
-
-    // 2. Approvals waiting > 2 days
-    for (const app of pendingApprovals) {
-      if (app.submittedAt) {
-        const age = Math.round((today.getTime() - startOfDay(app.submittedAt).getTime()) / 86400000);
-        if (age >= 2) {
-          needsAttention.push({
-            id: `app-${app.id}`,
-            type: 'stale_approval',
-            title: `Review waiting: ${cleanTaskTitle(app.title)}`,
-            subtitle: `${app.project.name} · Submitted ${age} days ago`,
-            severity: 'warning',
-            link: `/pm/approvals`,
-            actionLabel: 'Review',
-          });
-        }
-      }
-    }
-
-    // 3. Roadblocks open > 1 day
-    for (const rb of roadblocks) {
-      const age = Math.round((today.getTime() - startOfDay(rb.createdAt).getTime()) / 86400000);
-      needsAttention.push({
-        id: `rb-${rb.id}`,
-        type: 'open_problem',
-        title: `Problem on ${cleanTaskTitle(rb.task.title)}`,
-        subtitle: `${rb.task.project.name} · ${age > 0 ? `${age}d old · ` : ''}"${rb.blocker}"`,
-        severity: 'error',
-        link: `/pm/tasks/${rb.task.id}`,
+    const attention = {
+      late_project: [...lateProjects]
+        .sort((a, b) => b.daysLate * (b.orderValueNum || 1) - a.daysLate * (a.orderValueNum || 1))
+        .map((lp) => ({
+          id: `late-${lp.id}`,
+          type: 'late_project' as const,
+          title: `${lp.name} is ${lp.daysLate} ${lp.daysLate === 1 ? 'day' : 'days'} late`,
+          subtitle: `PM: ${lp.manager ? formatName(lp.manager.fullName) : 'Unassigned'} · Target ${pDate(lp.targetEndDate)} · Forecast ${pDate(lp.forecastEndDate)}`,
+          severity: 'error' as const,
+          link: `/pm/projects/${lp.id}`,
+          actionLabel: 'View plan',
+        })),
+      open_problem: problems.open.map((log) => ({
+        id: `rb-${log.taskId}`,
+        type: 'open_problem' as const,
+        title: `Problem on ${cleanTaskTitle(log.task.title)}`,
+        subtitle: `${log.task.project.name} · ${ageInDays(log.createdAt) > 0 ? `${ageInDays(log.createdAt)}d old · ` : ''}"${log.blocker}"`,
+        severity: 'error' as const,
+        link: `/pm/tasks/${log.taskId}`,
         actionLabel: 'Resolve',
-      });
-    }
-
-    // 4. Overloaded engineers
-    const overloadedEngineers = workloads.filter((w) => w.committedHours > w.capacityHours);
-    for (const eng of overloadedEngineers) {
-      const pct = Math.round((eng.committedHours / Math.max(eng.capacityHours, 1)) * 100);
-      needsAttention.push({
+      })),
+      stale_approval: pendingApprovals
+        .filter((a) => a.submittedAt && ageInDays(a.submittedAt) >= STALE_DAYS)
+        .map((a) => ({
+          id: `app-${a.id}`,
+          type: 'stale_approval' as const,
+          title: `Review waiting: ${cleanTaskTitle(a.title)}`,
+          subtitle: `${a.project.name} · Submitted ${ageInDays(a.submittedAt!)} days ago`,
+          severity: 'warning' as const,
+          link: `/pm/approvals`,
+          actionLabel: 'Review',
+        })),
+      overloaded_engineer: overloadedEngineers.map((eng) => ({
         id: `eng-${eng.person.id}`,
-        type: 'overloaded_engineer',
-        title: `${formatName(eng.person.fullName)} is at ${pct}% load`,
-        subtitle: `${eng.assignments.length} tasks scheduled in next 7 days`,
-        severity: 'warning',
+        type: 'overloaded_engineer' as const,
+        title: `${formatName(eng.person.fullName)} is at ${loadPercent(eng)}% load`,
+        subtitle: `${eng.committedHours}h booked of ${eng.capacityHours}h available in the next 7 days · ${eng.assignments.length} open steps overall`,
+        severity: 'warning' as const,
         link: `/pm/resources`,
         actionLabel: 'Rebalance',
-      });
-    }
+      })),
+      stale_handover: [
+        ...taskHandovers
+          .filter((h) => ageInDays(h.createdAt) >= STALE_DAYS)
+          .map((h) => ({
+            id: `ho-${h.id}`,
+            title: `No reply for ${ageInDays(h.createdAt)} days: ${cleanTaskTitle(h.task.title)}`,
+            subtitle: `${h.task.project.name} · ${formatName(h.fromUser.fullName)} → ${formatName(h.toUser.fullName)}`,
+          })),
+        ...projectHandovers
+          .filter((h) => ageInDays(h.createdAt) >= STALE_DAYS)
+          .map((h) => ({
+            id: `pho-${h.id}`,
+            title: `No reply for ${ageInDays(h.createdAt)} days: ${h.project.name}`,
+            subtitle: `Project handover · ${formatName(h.fromUser.fullName)} → ${formatName(h.toUser.fullName)}`,
+          })),
+      ].map((h) => ({ ...h, type: 'stale_handover' as const, severity: 'warning' as const, link: '/pm/handovers', actionLabel: 'View' })),
+    };
 
-    // Team Capacity Summary
-    const totalCapacity = workloads.reduce((sum, w) => sum + w.capacityHours, 0) || 1;
-    const totalCommitted = workloads.reduce((sum, w) => sum + w.committedHours, 0);
-    const capacityPercent = Math.min(100, Math.round((totalCommitted / totalCapacity) * 100));
+    // Round-robin across types so one busy category can't hide the others in the first rows.
+    const needsAttention = interleave<DirectorDashboardData['needsAttention'][number]>([
+      attention.late_project,
+      attention.open_problem,
+      attention.stale_approval,
+      attention.overloaded_engineer,
+      attention.stale_handover,
+    ]);
 
-    const freeNextWeek = workloads.filter((w) => w.committedHours === 0).length;
-    const onLeave = workloads.filter((w) => w.status === 'ON_LEAVE' || w.leaveDays > 0).length;
+    const totalCapacity = engineers.reduce((sum, w) => sum + w.capacityHours, 0);
+    const totalCommitted = engineers.reduce((sum, w) => sum + w.committedHours, 0);
 
-    // PM breakdown (only include projects with an assigned manager)
-    const pmMap = new Map<string, { manager: any; live: number; onTime: number; pendingApprovals: number }>();
+    const pmMap = new Map<string, { manager: DirectorDashboardData['projectManagers'][number]['manager']; live: number; onTime: number; pendingApprovals: number }>();
     for (const p of liveProjects) {
       if (!p.manager) continue;
-      const pmId = p.manager.id;
-      if (!pmMap.has(pmId)) {
-        pmMap.set(pmId, {
-          manager: p.manager,
-          live: 0,
-          onTime: 0,
-          pendingApprovals: pendingApprovals.filter((a) => a.project.managerId === pmId).length,
-        });
-      }
-      const entry = pmMap.get(pmId)!;
+      const entry = pmMap.get(p.manager.id) ?? {
+        manager: p.manager,
+        live: 0,
+        onTime: 0,
+        pendingApprovals: pendingApprovals.filter((a) => a.project.managerId === p.manager.id).length,
+      };
       entry.live += 1;
-      if (p.daysLate === 0) entry.onTime += 1;
+      if (p.health !== 'LATE') entry.onTime += 1;
+      pmMap.set(p.manager.id, entry);
     }
 
-    const projectManagers = Array.from(pmMap.values()).map((e) => ({
-      manager: e.manager,
-      liveProjectsCount: e.live,
-      onTimePercent: e.live > 0 ? Math.round((e.onTime / e.live) * 100) : 100,
-      pendingApprovalsCount: e.pendingApprovals,
-    }));
-
-    // Period completed tasks and average approval time
     const completedInPeriod = projects.flatMap((p) =>
-      p.tasks.filter((t) => t.completedAt && t.completedAt >= periodStart && t.status === 'COMPLETED')
+      p.tasks.filter((t) => t.status === 'COMPLETED' && t.completedAt && t.completedAt >= periodStart),
     );
-
-    let approvalDurationSumHours = 0;
-    let approvalCount = 0;
-    for (const t of completedInPeriod) {
-      if (t.completedAt && t.submittedAt) {
-        const diffHours = (t.completedAt.getTime() - t.submittedAt.getTime()) / 3600000;
-        if (diffHours > 0) {
-          approvalDurationSumHours += diffHours;
-          approvalCount += 1;
-        }
-      }
-    }
-    const avgApprovalTimeHours = approvalCount > 0 ? Math.round((approvalDurationSumHours / approvalCount) * 10) / 10 : 0;
+    const approvalHours = completedInPeriod
+      .filter((t) => t.submittedAt && t.completedAt! > t.submittedAt)
+      .map((t) => (t.completedAt!.getTime() - t.submittedAt!.getTime()) / 3600000);
+    const avgApprovalTimeHours = approvalHours.length
+      ? Math.round((approvalHours.reduce((a, b) => a + b, 0) / approvalHours.length) * 10) / 10
+      : 0;
 
     return {
       kind: 'director',
       period,
       headline: {
-        onTime: {
-          current: onTimeProjects.length,
-          total: liveProjects.length,
-          lateCount: lateProjects.length,
-        },
-        deliveriesNext30Days: {
-          count: deliveries30.length,
-          nextDate: nextDelivery,
-        },
+        onTime: { current: onTimeProjects.length, total: liveProjects.length, lateCount: lateProjects.length },
+        deliveriesNext30Days: { count: deliveries30.length, nextDate: deliveries30[0]?.targetEndDate ?? null },
         waitingDecisions: {
-          count: totalDecisions,
+          count: pendingApprovals.length + taskHandovers.length + projectHandovers.length,
           oldestDays: oldestDecisionDays,
         },
       },
-      needsAttention: needsAttention.slice(0, 6),
+      needsAttention,
       teamCapacity: {
         departmentName: 'TECH',
-        committedPercent: capacityPercent,
+        // Not capped at 100: an overcommitted team must be visible as such.
+        committedPercent: totalCapacity > 0 ? Math.round((totalCommitted / totalCapacity) * 100) : 0,
         overloadedCount: overloadedEngineers.length,
-        freeNextWeekCount: freeNextWeek,
-        onLeaveCount: onLeave,
+        freeNextWeekCount: freeEngineers.length,
+        onLeaveCount: engineers.filter((w) => w.status === 'ON_LEAVE' || (w.workingDays > 0 && w.leaveDays * 2 >= w.workingDays)).length,
       },
-      projects: processedProjects,
-      projectManagers,
+      projects: listedProjects,
+      projectManagers: Array.from(pmMap.values()).map((e) => ({
+        manager: e.manager,
+        liveProjectsCount: e.live,
+        onTimePercent: e.live > 0 ? Math.round((e.onTime / e.live) * 100) : 100,
+        pendingApprovalsCount: e.pendingApprovals,
+      })),
       periodStats: {
         tasksApproved: completedInPeriod.length,
-        tasksSentBack: 0,
-        problemsReported: roadblocks.length,
-        problemsSolved: 0,
+        tasksSentBack: sentBackCount,
+        problemsReported: problems.reported,
+        problemsSolved: problems.solved,
+        openProblems: problems.open.length,
         avgApprovalTimeHours,
       },
     };
   }
 
   // ---------------------------------------------------------------
-  // PM DASHBOARD (UX-3)
+  // PM DASHBOARD
   // ---------------------------------------------------------------
-  const myProjects = processedProjects.filter((p) => p.manager?.id === principal.userId);
+  const myProjects = listedProjects.filter((p) => p.manager?.id === principal.userId);
+  const myProjectIds = new Set(myProjects.map((p) => p.id));
   const myApprovals = pendingApprovals.filter((a) => a.project.managerId === principal.userId);
-  const myHandovers = taskHandovers.length + projectHandovers.length;
+  const myOpenProblems = problems.open.filter((log) => myProjectIds.has(log.task.projectId));
+  const handoversToMe = [
+    ...taskHandovers
+      .filter((h) => h.toUserId === principal.userId)
+      .map((h) => ({ id: `ho-${h.id}`, title: `Handover for you: ${cleanTaskTitle(h.task.title)}`, subtitle: `${h.task.project.name} · from ${formatName(h.fromUser.fullName)}` })),
+    ...projectHandovers
+      .filter((h) => h.toUserId === principal.userId)
+      .map((h) => ({ id: `pho-${h.id}`, title: `Project handover for you: ${h.project.name}`, subtitle: `from ${formatName(h.fromUser.fullName)}` })),
+  ];
+  const myOverdue = myProjects
+    .flatMap((p) => p.overdueTasks.map((t) => ({ ...t, projectName: p.name })))
+    .sort((a, b) => a.plannedEnd.getTime() - b.plannedEnd.getTime());
 
-  const overdueSteps = myProjects.reduce((sum, p) => sum + p.overdueCount, 0);
-  const problemsReported = myProjects.reduce((sum, p) => sum + p.blockedCount, 0);
-
-  const needsAttention: PMDashboardData['needsAttention'] = [];
-
-  for (const a of myApprovals) {
-    needsAttention.push({
+  const needsAttention = interleave<PMDashboardData['needsAttention'][number]>([
+    myApprovals.map((a) => ({
       id: `app-${a.id}`,
       type: 'approval',
       title: `Awaiting your approval: ${cleanTaskTitle(a.title)}`,
-      subtitle: `${a.project.name}`,
+      subtitle: a.project.name,
       link: `/pm/approvals`,
       actionLabel: 'Review',
-    });
-  }
-
-  for (const rb of roadblocks.filter((r) => myProjects.some((p) => p.id === r.task.projectId))) {
-    needsAttention.push({
-      id: `rb-${rb.id}`,
+    })),
+    myOpenProblems.map((log) => ({
+      id: `rb-${log.taskId}`,
       type: 'problem',
-      title: `Problem reported: ${cleanTaskTitle(rb.task.title)}`,
-      subtitle: `${rb.task.project.name} · "${rb.blocker}"`,
-      link: `/pm/tasks/${rb.task.id}`,
+      title: `Problem reported: ${cleanTaskTitle(log.task.title)}`,
+      subtitle: `${log.task.project.name} · "${log.blocker}"`,
+      link: `/pm/tasks/${log.taskId}`,
       actionLabel: 'Resolve',
-    });
-  }
-
-  const overloaded = workloads
-    .filter((w) => w.committedHours > w.capacityHours)
-    .map((w) => ({
-      id: w.person.id,
-      fullName: formatName(w.person.fullName),
-      loadPercent: Math.round((w.committedHours / Math.max(w.capacityHours, 1)) * 100),
-    }));
-
-  const free = workloads
-    .filter((w) => w.committedHours === 0)
-    .map((w) => ({
-      id: w.person.id,
-      fullName: formatName(w.person.fullName),
-      loadPercent: 0,
-    }));
+    })),
+    myOverdue.map((t) => ({
+      id: `od-${t.id}`,
+      type: 'overdue',
+      title: `Overdue: ${cleanTaskTitle(t.title)}`,
+      subtitle: `${t.projectName} · was due ${pDate(t.plannedEnd)}`,
+      link: `/pm/tasks/${t.id}`,
+      actionLabel: 'Open',
+    })),
+    handoversToMe.map((h) => ({ ...h, type: 'handover', link: '/pm/handovers', actionLabel: 'Decide' })),
+  ]);
 
   return {
     kind: 'pm',
     headline: {
-      overdueSteps,
-      problemsReported,
+      overdueSteps: myOverdue.length,
+      problemsReported: myOpenProblems.length,
       awaitingMyApproval: myApprovals.length,
-      handoversWaiting: myHandovers,
+      handoversWaiting: handoversToMe.length,
     },
-    needsAttention: needsAttention.slice(0, 6),
+    needsAttention,
     projects: myProjects,
     teamLoadSummary: {
-      overloaded,
-      free,
+      overloaded: overloadedEngineers.map((w) => ({ id: w.person.id, fullName: formatName(w.person.fullName), loadPercent: loadPercent(w) })),
+      free: freeEngineers.map((w) => ({ id: w.person.id, fullName: formatName(w.person.fullName), loadPercent: loadPercent(w) })),
     },
   };
+}
+
+interface ProblemLog {
+  taskId: string;
+  blocker: string | null;
+  createdAt: Date;
+  task: { id: string; title: string; status: string; projectId: string; project: { name: string } };
+}
+
+/**
+ * Same rule the task engine uses to keep a step BLOCKED: a problem is open while the step's
+ * latest progress log carries a blocker. A log without a blocker after one with a blocker
+ * solves it. Logs must be in ascending time order.
+ */
+export function summariseProblems<T extends ProblemLog>(logs: T[], periodStart: Date) {
+  const latest = new Map<string, T>();
+  let reported = 0;
+  let solved = 0;
+  for (const log of logs) {
+    const isProblem = Boolean(log.blocker?.trim());
+    const wasProblem = Boolean(latest.get(log.taskId)?.blocker?.trim());
+    if (log.createdAt >= periodStart) {
+      if (isProblem && !wasProblem) reported += 1;
+      if (!isProblem && wasProblem) solved += 1;
+    }
+    latest.set(log.taskId, log);
+  }
+  const open = [...latest.values()]
+    .filter((log) => log.blocker?.trim() && log.task.status !== 'COMPLETED' && log.task.status !== 'CANCELLED')
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return { open, reported, solved };
+}
+
+function interleave<T>(groups: T[][]): T[] {
+  const out: T[] = [];
+  const longest = Math.max(0, ...groups.map((g) => g.length));
+  for (let i = 0; i < longest; i += 1) {
+    for (const group of groups) if (i < group.length) out.push(group[i]!);
+  }
+  return out;
 }
 
 function pDate(d: Date | string | null | undefined): string {
   if (!d) return '-';
   const dt = typeof d === 'string' ? new Date(d) : d;
-  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }

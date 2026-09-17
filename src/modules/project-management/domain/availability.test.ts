@@ -278,6 +278,37 @@ describe('Smart Team Allocation Engine', () => {
     expect(results[1].assignedUserId).toBe('sr-2');
   });
 
+  it('spreads senior steps across seniors and keeps junior steps with the junior', () => {
+    const squad = [
+      { ...seniorCandidate, id: 'sr-1', employeeCode: 'EMP-A', freeHours: 64 },
+      { ...seniorCandidate, id: 'sr-2', employeeCode: 'EMP-B', freeHours: 64 },
+      { ...seniorCandidate, id: 'sr-3', employeeCode: 'EMP-C', freeHours: 64 },
+      { ...seniorCandidate, id: 'sr-4', employeeCode: 'EMP-D', freeHours: 64 },
+      { ...seniorCandidate, id: 'jr-1', employeeCode: 'EMP-E', grade: 'JUNIOR_ENGINEER', freeHours: 80 },
+    ];
+    const seniority = ['JUNIOR', 'JUNIOR', 'JUNIOR', 'JUNIOR', 'SENIOR', 'SENIOR', 'SENIOR', 'SENIOR', 'JUNIOR', 'SENIOR'];
+    const steps = seniority.map((s, i) => ({
+      id: `s${i + 1}`,
+      stepNumber: i + 1,
+      templateInstanceId: 'PLC',
+      name: `Step ${i + 1}`,
+      recommendedSeniority: s,
+      estimatedHours: 8,
+      ...stepDates,
+    }));
+
+    const results = allocateTeamForSteps(squad, steps, new Set(squad.map((c) => c.id)));
+    const seniorHolders = results.filter((_, i) => seniority[i] === 'SENIOR').map((r) => r.assignedUserId);
+    const juniorHolders = results.filter((_, i) => seniority[i] === 'JUNIOR').map((r) => r.assignedUserId);
+
+    // 5 senior steps over 4 seniors: fair share is 2, so at least 3 different seniors.
+    expect(new Set(seniorHolders).size).toBeGreaterThanOrEqual(3);
+    for (const id of new Set(seniorHolders)) {
+      expect(seniorHolders.filter((h) => h === id).length).toBeLessThanOrEqual(2);
+    }
+    expect(new Set(juniorHolders)).toEqual(new Set(['jr-1']));
+  });
+
   it('produces deterministic output on repeated runs', () => {
     const candidates = [
       { ...seniorCandidate, id: 'sr-1', employeeCode: 'EMP-A', freeHours: 24 },

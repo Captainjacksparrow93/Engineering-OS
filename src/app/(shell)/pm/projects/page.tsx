@@ -8,7 +8,7 @@ import { ProjectsClient } from './projects-client';
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Projects · Engineering OS',
+  title: 'Projects',
 };
 
 export default async function ProjectsPage({

@@ -11,8 +11,9 @@ import { notify } from '@/core/notifications/notify';
 import { assertProjectPermission, assertProjectVisible, projectVisibilityWhere } from './access';
 import type { CreateProjectInput, UpdateProjectInput } from '../validation/schemas';
 import { computeSchedule, rollUpProgress, type Graph } from '../domain/scheduling';
-import { projectProgress } from '../domain/portfolio';
+import { forecastFinish, projectProgress } from '../domain/portfolio';
 import { formatName } from '@/core/utils/strings';
+import { todayInIndia } from '@/core/utils/dates';
 
 
 /**
@@ -744,12 +745,8 @@ export async function getProjectTimeline(principal: Principal, projectId: string
   const phaseTasks = project.tasks.filter((t) => t.type === 'PHASE' || (project.tasks.some((c) => c.parentId === t.id) && !t.parentId));
   const leafTasks = project.tasks.filter((t) => t.type !== 'PHASE' && !project.tasks.some((c) => c.parentId === t.id));
 
-  let latestLeafEnd: Date = project.targetEndDate ?? new Date();
-  for (const t of leafTasks) {
-    if (t.plannedEnd && t.plannedEnd > latestLeafEnd) {
-      latestLeafEnd = t.plannedEnd;
-    }
-  }
+  const today = todayInIndia();
+  const latestLeafEnd = forecastFinish(leafTasks, project.targetEndDate ?? today, today);
 
   const lanes = phaseTasks.length > 0
     ? phaseTasks.map((phase) => {

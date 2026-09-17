@@ -1,12 +1,19 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import { formatDate } from '@/core/utils/dates';
 import { ProgressBar } from '@/components/ui';
 import type { PMDashboardData } from '@/modules/project-management/services/dashboard.service';
+import { HealthBadge } from './director-dashboard';
+
+const ATTENTION_PREVIEW = 6;
 
 export function PMDashboard({ data }: { data: PMDashboardData }) {
+  const [showAll, setShowAll] = useState(false);
+  const attentionRows = showAll ? data.needsAttention : data.needsAttention.slice(0, ATTENTION_PREVIEW);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -36,7 +43,7 @@ export function PMDashboard({ data }: { data: PMDashboardData }) {
         >
           <p className="text-caption font-semibold uppercase tracking-wider text-muted">Problems reported</p>
           <p className="mt-2 text-2xl font-bold font-mono text-error">{data.headline.problemsReported}</p>
-          <p className="mt-0.5 text-caption text-muted">Active roadblocks</p>
+          <p className="mt-0.5 text-caption text-muted">Open, not yet solved</p>
         </Link>
 
         <Link
@@ -54,7 +61,7 @@ export function PMDashboard({ data }: { data: PMDashboardData }) {
         >
           <p className="text-caption font-semibold uppercase tracking-wider text-muted">Handovers waiting</p>
           <p className="mt-2 text-2xl font-bold font-mono text-ink">{data.headline.handoversWaiting}</p>
-          <p className="mt-0.5 text-caption text-muted">Pending peer handovers</p>
+          <p className="mt-0.5 text-caption text-muted">Waiting on your decision</p>
         </Link>
       </div>
 
@@ -66,7 +73,7 @@ export function PMDashboard({ data }: { data: PMDashboardData }) {
             <span className="text-caption text-muted">{data.needsAttention.length} items</span>
           </header>
           <div className="divide-y divide-hairline">
-            {data.needsAttention.map((item) => (
+            {attentionRows.map((item) => (
               <div key={item.id} className="flex items-center justify-between py-3 gap-4">
                 <div className="space-y-0.5 min-w-0">
                   <p className="text-body-sm font-semibold text-ink truncate">{item.title}</p>
@@ -77,6 +84,15 @@ export function PMDashboard({ data }: { data: PMDashboardData }) {
                 </Link>
               </div>
             ))}
+            {data.needsAttention.length > ATTENTION_PREVIEW ? (
+              <button
+                type="button"
+                onClick={() => setShowAll((v) => !v)}
+                className="w-full pt-3 text-caption font-medium text-ink hover:underline"
+              >
+                {showAll ? 'Show fewer' : `See all ${data.needsAttention.length}`}
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -106,7 +122,7 @@ export function PMDashboard({ data }: { data: PMDashboardData }) {
               </thead>
               <tbody>
                 {data.projects.map((p) => {
-                  const isLate = p.daysLate > 0;
+                  const isLate = p.health === 'LATE';
                   return (
                     <tr key={p.id} className="hover:bg-canvas-soft transition-colors">
                       <td>
@@ -132,18 +148,14 @@ export function PMDashboard({ data }: { data: PMDashboardData }) {
                             {formatDate(p.targetEndDate)}
                           </p>
                           {isLate ? (
-                            <p className="text-[11px] font-semibold text-error">+{p.daysLate}d late</p>
+                            <p className="text-[11px] font-semibold text-error">
+                              +{p.daysLate} {p.daysLate === 1 ? 'day' : 'days'} late · forecast {formatDate(p.forecastEndDate)}
+                            </p>
                           ) : null}
                         </div>
                       </td>
                       <td className="text-right">
-                        {p.health === 'LATE' ? (
-                          <span className="badge badge-error">Late</span>
-                        ) : p.health === 'AT_RISK' ? (
-                          <span className="badge border border-hairline bg-surface text-ink">At risk</span>
-                        ) : (
-                          <span className="badge badge-success">On track</span>
-                        )}
+                        <HealthBadge health={p.health} />
                       </td>
                     </tr>
                   );

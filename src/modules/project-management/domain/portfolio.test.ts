@@ -1,5 +1,7 @@
 ﻿import { describe, expect, it } from 'vitest';
-import { projectHealth, projectProgress } from './portfolio';
+import { daysLate, forecastFinish, projectHealth, projectProgress } from './portfolio';
+import { summariseProblems } from '../services/dashboard.service';
+import { todayInIndia } from '@/core/utils/dates';
 
 describe('projectProgress', () => {
   it('returns 0 when there are no tasks or only cancelled tasks', () => {
@@ -100,5 +102,61 @@ describe('projectHealth', () => {
         asOfDate: new Date('2026-09-15'),
       }),
     ).toBe('ON_TRACK');
+  });
+});
+
+describe('forecastFinish', () => {
+  const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
+
+  it('pushes the lane back by how late its overdue open step is', () => {
+    // Mon 14 Sept step not done; today Thu 17 Sept -> 3 working days late (15, 16, 17).
+    const steps = [
+      { parentId: 'plc', status: 'IN_PROGRESS', plannedEnd: d('2026-09-14') },
+      { parentId: 'plc', status: 'TODO', plannedEnd: d('2026-09-30') },
+    ];
+    const forecast = forecastFinish(steps, d('2026-09-30'), d('2026-09-17'));
+    expect(forecast.toISOString().slice(0, 10)).toBe('2026-10-03'); // 30 Sept + 3 working days
+    const health = projectHealth({
+      status: 'IN_PROGRESS', startDate: d('2026-09-01'), targetEndDate: d('2026-09-30'),
+      forecastEndDate: forecast, progressPercent: 40, asOfDate: d('2026-09-17'),
+    });
+    expect(health).toBe('LATE');
+    expect(daysLate(forecast, d('2026-09-30'), d('2026-09-17'), health)).toBe(3);
+  });
+
+  it('ignores completed steps and does not delay other lanes beyond their own slip', () => {
+    const steps = [
+      { parentId: 'plc', status: 'COMPLETED', plannedEnd: d('2026-09-10') },
+      { parentId: 'plc', status: 'TODO', plannedEnd: d('2026-09-25') },
+      { parentId: 'hmi', status: 'TODO', plannedEnd: d('2026-09-28') },
+    ];
+    expect(forecastFinish(steps, d('2026-09-30'), d('2026-09-17')).toISOString().slice(0, 10)).toBe('2026-09-30');
+  });
+});
+
+describe('summariseProblems', () => {
+  const task = (status = 'BLOCKED') => ({ id: 't1', title: 'DI Mapping', status, projectId: 'p1', project: { name: 'P' } });
+  const log = (blocker: string | null, day: string, status?: string) => ({
+    taskId: 't1', blocker, createdAt: new Date(`${day}T10:00:00.000Z`), task: task(status),
+  });
+
+  it('counts a problem once, and a later note without a blocker solves it', () => {
+    const logs = [log('waiting drawing', '2026-09-12'), log('still waiting', '2026-09-13'), log(null, '2026-09-15')];
+    const result = summariseProblems(logs, new Date('2026-09-10T00:00:00.000Z'));
+    expect(result.reported).toBe(1);
+    expect(result.solved).toBe(1);
+    expect(result.open).toHaveLength(0);
+  });
+
+  it('keeps an unsolved problem open once, not once per note', () => {
+    const logs = [log('waiting drawing', '2026-09-12'), log('still waiting', '2026-09-13')];
+    expect(summariseProblems(logs, new Date('2026-09-10T00:00:00.000Z')).open).toHaveLength(1);
+  });
+});
+
+describe('todayInIndia', () => {
+  it('rolls to the next date after 18:30 UTC', () => {
+    expect(todayInIndia(new Date('2026-09-16T19:00:00.000Z')).toISOString().slice(0, 10)).toBe('2026-09-17');
+    expect(todayInIndia(new Date('2026-09-16T18:00:00.000Z')).toISOString().slice(0, 10)).toBe('2026-09-16');
   });
 });

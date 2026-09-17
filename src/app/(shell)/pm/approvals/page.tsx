@@ -5,7 +5,7 @@ import { ApprovalsTable } from './approvals-table';
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Approvals · Engineering OS',
+  title: 'Approvals',
 };
 
 export default async function ApprovalsPage() {

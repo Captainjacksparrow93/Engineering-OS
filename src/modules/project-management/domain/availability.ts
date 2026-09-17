@@ -284,13 +284,22 @@ export function isCandidateOnHeavyLeave(candidate: SmartCandidate, step: SmartSt
   return stepLeaveDays / stepWorkingDays > 0.5;
 }
 
+/**
+ * People who execute checklist steps: not PMs, assistant managers, heads or directors.
+ * Shared by auto-assign and the dashboards so "free engineers" means the same pool everywhere.
+ * ponytail: grade/designation based until role-based candidate pools land (audit round 2, step 4).
+ */
+export function isExecutionStaff(person: { grade: string; designation?: string | null }): boolean {
+  if (['MANAGER', 'HEAD', 'DIRECTOR'].includes(person.grade)) return false;
+  return !(person.designation && /manager|asst/i.test(person.designation));
+}
+
 export function applyHardRules(candidate: SmartCandidate, step: SmartStepRequirement): boolean {
   // H5: Inactive account
   if (candidate.status !== 'ACTIVE') return false;
 
   // H4: Exclude PMs / Assistant Managers / Directors / Upper management from task execution
-  if (['MANAGER', 'HEAD', 'DIRECTOR'].includes(candidate.grade)) return false;
-  if (candidate.designation && /manager|asst/i.test(candidate.designation)) return false;
+  if (!isExecutionStaff(candidate)) return false;
 
   // H1: Approved leave covering >50% of the task's working days
   if (isCandidateOnHeavyLeave(candidate, step)) return false;
@@ -314,7 +323,12 @@ export interface AllocationContext {
     templateInstanceId?: string;
     userId: string;
   }>;
+  /** Max steps each candidate should take in this run before others of the same grade. */
+  fairShare?: Map<string, number>;
 }
+
+/** Score points removed once a candidate already holds their fair share of steps. */
+const OVER_SHARE_PENALTY = 30;
 
 export function scoreForStep(
   candidate: SmartCandidate,
@@ -333,12 +347,11 @@ export function scoreForStep(
   }
 
   // A — Availability (35%)
+  // No window-wide "thin capacity" penalty: it halved the only junior's score after a few
+  // steps and pushed junior steps onto seniors. Load spreading is handled by fairShare.
   const required = Math.max(1, step.estimatedHours);
   const free = Math.max(0, candidate.freeHours);
-  let A = 100 * Math.min(1, free / (required * 1.5));
-  if (candidate.workingDays > 0 && free / candidate.workingDays < 2.0) {
-    A = A * 0.5; // Thin-capacity penalty
-  }
+  const A = 100 * Math.min(1, free / (required * 1.5));
 
   // C — Context Continuity (10%)
   const sameTemplateAssigned = context.assignedSteps.filter(
@@ -354,7 +367,13 @@ export function scoreForStep(
   // Q — Squad integrity (15%)
   const Q = context.pmSquadUserIds.has(candidate.id) ? 100 : 0;
 
-  const score = Math.round(0.4 * M + 0.35 * A + 0.1 * C + 0.15 * Q);
+  // Load balance: once someone holds their fair share, peers of the same grade go first.
+  // Continuity (max 4 points) keeps consecutive steps together only within that share.
+  const share = context.fairShare?.get(candidate.id);
+  const held = context.assignedSteps.filter((s) => s.userId === candidate.id).length;
+  const overShare = share !== undefined && held >= share ? OVER_SHARE_PENALTY : 0;
+
+  const score = Math.round(0.4 * M + 0.35 * A + 0.1 * C + 0.15 * Q) - overShare;
 
   return {
     score: Math.max(0, Math.min(100, score)),
@@ -385,6 +404,34 @@ function buildDeterministicRationale(
 }
 
 /**
+ * How many steps each candidate should take before same-grade peers get priority:
+ * steps meant for their grade split evenly across the peers of that grade (PM squad
+ * first, else everyone eligible). 5 senior steps and 4 seniors -> 2 each, so work
+ * spreads in small consecutive blocks instead of all landing on the first winner.
+ */
+export function computeFairShare(
+  candidates: SmartCandidate[],
+  steps: SmartStepRequirement[],
+  pmSquadUserIds: Set<string>,
+): Map<string, number> {
+  const workers = candidates.filter((c) => c.status === 'ACTIVE' && !['MANAGER', 'HEAD', 'DIRECTOR'].includes(c.grade));
+  const squad = workers.filter((c) => pmSquadUserIds.has(c.id));
+  const pool = squad.length > 0 ? squad : workers;
+
+  const share = new Map<string, number>();
+  if (pool.length === 0 || steps.length === 0) return share;
+  const overall = Math.ceil(steps.length / pool.length);
+
+  for (const c of workers) {
+    const rank = GRADE_RANK[c.grade] ?? 2;
+    const peers = pool.filter((p) => (GRADE_RANK[p.grade] ?? 2) === rank).length;
+    const stepsForGrade = steps.filter((s) => (TARGET_RANK[s.recommendedSeniority] ?? 2) === rank).length;
+    share.set(c.id, peers > 0 && stepsForGrade > 0 ? Math.ceil(stepsForGrade / peers) : overall);
+  }
+  return share;
+}
+
+/**
  * Sequential, capacity-consuming team allocation across project steps.
  */
 export function allocateTeamForSteps(
@@ -406,6 +453,7 @@ export function allocateTeamForSteps(
   }> = [];
 
   const results: SmartStepAllocation[] = [];
+  const fairShare = computeFairShare(candidates, steps, pmSquadUserIds);
 
   for (const step of steps) {
     let eligible = candidates.filter((c) => applyHardRules(c, step));
@@ -449,6 +497,7 @@ export function allocateTeamForSteps(
       const { score, breakdown } = scoreForStep(candidate, step, {
         pmSquadUserIds,
         assignedSteps,
+        fairShare,
       });
       return { candidate, score, breakdown };
     });

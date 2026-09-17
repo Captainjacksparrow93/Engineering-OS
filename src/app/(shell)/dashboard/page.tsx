@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
-import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
+import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { getDashboard } from '@/modules/project-management/services/dashboard.service';
 import { getProjectTimeline } from '@/modules/project-management/services/project.service';
 import { DirectorDashboard } from './director-dashboard';
@@ -8,26 +8,25 @@ import { PMDashboard } from './pm-dashboard';
 
 export const dynamic = 'force-dynamic';
 
+// The root layout's title template appends " · Engineering OS".
 export const metadata = {
-  title: 'Dashboard · Engineering OS',
+  title: 'Dashboard',
 };
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
   const principal = await requirePrincipal();
 
   // Redirect users without report or oversight access directly to My work
-  const hasOversight =
-    can(principal, 'pm.oversight') ||
-    hasPermissionAnywhere(principal, 'pm.oversight');
-  const hasReportRead =
-    can(principal, 'pm.report.read') ||
-    hasPermissionAnywhere(principal, 'pm.report.read');
-
-  if (!hasOversight && !hasReportRead) {
+  if (!hasPermissionAnywhere(principal, 'pm.oversight') && !hasPermissionAnywhere(principal, 'pm.report.read')) {
     redirect('/pm/my-work');
   }
 
-  const data = await getDashboard(principal);
+  const { period } = await searchParams;
+  const data = await getDashboard(principal, period === 'month' ? 'month' : 'week');
 
   if (data.kind === 'director') {
     // Pick the most at-risk or first live project for the timeline

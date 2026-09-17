@@ -11,6 +11,16 @@ import { getProjectTimelineAction } from '@/app/actions/pm';
 import type { DirectorDashboardData } from '@/modules/project-management/services/dashboard.service';
 import type { ProjectTimelineData } from '@/components/project-timeline';
 
+const ATTENTION_PREVIEW = 6;
+
+export function HealthBadge({ health }: { health: string }) {
+  if (health === 'LATE') return <span className="badge badge-error">Late</span>;
+  if (health === 'AT_RISK') return <span className="badge border border-hairline-strong bg-surface text-ink">At risk</span>;
+  if (health === 'ON_HOLD') return <span className="badge bg-surface-strong text-muted">On hold</span>;
+  if (health === 'COMPLETED') return <span className="badge bg-surface-strong text-ink">Completed</span>;
+  return <span className="badge badge-success">On track</span>;
+}
+
 export function DirectorDashboard({
   data,
   initialTimeline,
@@ -21,7 +31,9 @@ export function DirectorDashboard({
   const [filterHealth, setFilterHealth] = useState<'ALL' | 'LATE' | 'AT_RISK' | 'ON_TRACK'>('ALL');
   const [selectedProjectId, setSelectedProjectId] = useState<string>(initialTimeline.projectId);
   const [timelineData, setTimelineData] = useState<ProjectTimelineData>(initialTimeline);
-  const [period, setPeriod] = useState<'week' | 'month'>(data.period);
+  const [showAllAttention, setShowAllAttention] = useState(false);
+  const period = data.period;
+  const attentionRows = showAllAttention ? data.needsAttention : data.needsAttention.slice(0, ATTENTION_PREVIEW);
 
   const filteredProjects = data.projects.filter((p) => {
     if (filterHealth === 'ALL') return true;
@@ -73,26 +85,20 @@ export function DirectorDashboard({
 
         <div className="flex items-center gap-3">
           <div className="flex rounded-lg border border-hairline bg-surface p-1">
-            <button
-              type="button"
-              onClick={() => setPeriod('week')}
-              className={clsx(
-                'rounded-md px-3 py-1 text-xs font-medium transition-colors',
-                period === 'week' ? 'bg-surface-strong text-ink' : 'text-muted hover:text-ink'
-              )}
-            >
-              This week
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriod('month')}
-              className={clsx(
-                'rounded-md px-3 py-1 text-xs font-medium transition-colors',
-                period === 'month' ? 'bg-surface-strong text-ink' : 'text-muted hover:text-ink'
-              )}
-            >
-              This month
-            </button>
+            {(['week', 'month'] as const).map((value) => (
+              <Link
+                key={value}
+                href={`/dashboard?period=${value}`}
+                scroll={false}
+                aria-current={period === value ? 'true' : undefined}
+                className={clsx(
+                  'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+                  period === value ? 'bg-surface-strong text-ink' : 'text-muted hover:text-ink'
+                )}
+              >
+                {value === 'week' ? 'Last 7 days' : 'Last 30 days'}
+              </Link>
+            ))}
           </div>
 
           <Link href="/pm/projects/new" className="btn btn-primary text-body-sm px-4 py-2 font-medium">
@@ -115,7 +121,7 @@ export function DirectorDashboard({
             </span>
             <span className="text-sm text-muted font-mono">of {data.headline.onTime.total}</span>
           </div>
-          <p className="mt-1 text-caption font-medium text-error">
+          <p className={clsx('mt-1 text-caption font-medium', data.headline.onTime.lateCount > 0 ? 'text-error' : 'text-muted')}>
             {data.headline.onTime.lateCount > 0 ? `${data.headline.onTime.lateCount} late` : 'All projects on schedule'}
           </p>
         </Link>
@@ -174,7 +180,7 @@ export function DirectorDashboard({
             </div>
           ) : (
             <div className="divide-y divide-hairline">
-              {data.needsAttention.map((item) => (
+              {attentionRows.map((item) => (
                 <div key={item.id} className="flex items-center justify-between py-3 gap-4">
                   <div className="space-y-0.5 min-w-0">
                     <p className={clsx('text-body-sm font-semibold truncate', item.severity === 'error' ? 'text-error' : 'text-ink')}>
@@ -187,6 +193,15 @@ export function DirectorDashboard({
                   </Link>
                 </div>
               ))}
+              {data.needsAttention.length > ATTENTION_PREVIEW ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllAttention((v) => !v)}
+                  className="w-full pt-3 text-caption font-medium text-ink hover:underline"
+                >
+                  {showAllAttention ? 'Show fewer' : `See all ${data.needsAttention.length}`}
+                </button>
+              ) : null}
             </div>
           )}
         </div>
@@ -271,7 +286,7 @@ export function DirectorDashboard({
             </thead>
             <tbody>
               {filteredProjects.map((p) => {
-                const isLate = p.daysLate > 0;
+                const isLate = p.health === 'LATE';
                 return (
                   <tr
                     key={p.id}
@@ -329,20 +344,18 @@ export function DirectorDashboard({
                           {formatDate(p.targetEndDate)}
                         </p>
                         {isLate ? (
-                          <p className="text-[11px] font-semibold text-error">+{p.daysLate} days late</p>
+                          <p className="text-[11px] font-semibold text-error">
+                            +{p.daysLate} {p.daysLate === 1 ? 'day' : 'days'} late · forecast {formatDate(p.forecastEndDate)}
+                          </p>
+                        ) : p.status === 'ON_HOLD' ? (
+                          <p className="text-[11px] text-muted-soft">On hold</p>
                         ) : (
                           <p className="text-[11px] text-muted-soft">On schedule</p>
                         )}
                       </div>
                     </td>
                     <td className="text-right">
-                      {p.health === 'LATE' ? (
-                        <span className="badge badge-error">Late</span>
-                      ) : p.health === 'AT_RISK' ? (
-                        <span className="badge border border-hairline-strong bg-surface text-ink">At risk</span>
-                      ) : (
-                        <span className="badge badge-success">On track</span>
-                      )}
+                      <HealthBadge health={p.health} />
                     </td>
                   </tr>
                 );
@@ -389,13 +402,17 @@ export function DirectorDashboard({
         <div className="card border-hairline bg-surface p-5 space-y-3">
           <header className="border-b border-hairline pb-3">
             <h2 className="card-title text-ink font-semibold">
-              {period === 'week' ? 'This week' : 'This month'} in numbers
+              {period === 'week' ? 'Last 7 days' : 'Last 30 days'} in numbers
             </h2>
           </header>
-          <div className="grid grid-cols-2 gap-4 pt-2">
+          <div className="grid grid-cols-2 gap-4 pt-2 sm:grid-cols-3">
             <div className="rounded-lg bg-surface-strong/40 p-4 space-y-1">
               <p className="text-caption text-muted">Steps approved</p>
               <p className="text-2xl font-bold font-mono text-success">{data.periodStats.tasksApproved}</p>
+            </div>
+            <div className="rounded-lg bg-surface-strong/40 p-4 space-y-1">
+              <p className="text-caption text-muted">Sent back for rework</p>
+              <p className="text-2xl font-bold font-mono text-ink">{data.periodStats.tasksSentBack}</p>
             </div>
             <div className="rounded-lg bg-surface-strong/40 p-4 space-y-1">
               <p className="text-caption text-muted">Avg. approval time</p>
@@ -404,12 +421,16 @@ export function DirectorDashboard({
               </p>
             </div>
             <div className="rounded-lg bg-surface-strong/40 p-4 space-y-1">
+              <p className="text-caption text-muted">Problems reported</p>
+              <p className="text-2xl font-bold font-mono text-ink">{data.periodStats.problemsReported}</p>
+            </div>
+            <div className="rounded-lg bg-surface-strong/40 p-4 space-y-1">
               <p className="text-caption text-muted">Problems solved</p>
               <p className="text-2xl font-bold font-mono text-ink">{data.periodStats.problemsSolved}</p>
             </div>
             <div className="rounded-lg bg-surface-strong/40 p-4 space-y-1">
-              <p className="text-caption text-muted">Open problems</p>
-              <p className="text-2xl font-bold font-mono text-error">{data.periodStats.problemsReported}</p>
+              <p className="text-caption text-muted">Open problems (now)</p>
+              <p className="text-2xl font-bold font-mono text-error">{data.periodStats.openProblems}</p>
             </div>
           </div>
         </div>

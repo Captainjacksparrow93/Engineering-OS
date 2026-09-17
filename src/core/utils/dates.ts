@@ -12,6 +12,17 @@ export function startOfDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
+const IST_OFFSET_MS = 330 * 60 * 1000;
+
+/**
+ * Today's calendar date in India, as a UTC-midnight Date (the convention used everywhere
+ * here). The server runs in UTC, so plain startOfDay(new Date()) is still "yesterday"
+ * between 00:00 and 05:30 IST.
+ */
+export function todayInIndia(now: Date = new Date()): Date {
+  return startOfDay(new Date(now.getTime() + IST_OFFSET_MS));
+}
+
 export function addDays(date: Date, days: number): Date {
   const next = new Date(date);
   next.setUTCDate(next.getUTCDate() + days);

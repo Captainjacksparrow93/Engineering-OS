@@ -1477,8 +1477,9 @@ async function main() {
 
   // Purge any old mock/test projects not in the standard set
   const standardCodes = projectSeeds.map((p) => p.code);
+  // DEMO-* projects belong to prisma/seed-demo.ts and must survive startup seeding.
   const oldProjects = await prisma.project.findMany({
-    where: { code: { notIn: standardCodes } },
+    where: { code: { notIn: standardCodes }, NOT: { code: { startsWith: 'DEMO-' } } },
     select: { id: true },
   });
   if (oldProjects.length > 0) {

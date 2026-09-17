@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const project = await prisma.project.findUnique({ where: { id }, select: { name: true } });
   return {
-    title: `${project?.name || 'Project'} · Engineering OS`,
+    title: project?.name || 'Project',
   };
 }
 

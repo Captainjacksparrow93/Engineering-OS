@@ -1,4 +1,48 @@
-import { startOfDay } from '@/core/utils/dates';
+import { addDays, addWorkingDays, startOfDay, workingDaysBetween } from '@/core/utils/dates';
+
+export interface ForecastStep {
+  parentId?: string | null;
+  status: string;
+  plannedEnd?: Date | string | null;
+}
+
+/**
+ * Realistic finish date. Steps in one lane (same parent phase) run in sequence, so an
+ * open step that is N working days past its planned end pushes the rest of that lane back
+ * by N working days. Lanes run in parallel; the project finishes with its latest lane.
+ * Never earlier than the target date (an early plan is still reported against target).
+ */
+export function forecastFinish(steps: ForecastStep[], targetEndDate: Date | string, today: Date): Date {
+  const lanes = new Map<string, { end: Date; slip: number }>();
+  for (const step of steps) {
+    if (!step.plannedEnd) continue;
+    const end = startOfDay(new Date(step.plannedEnd));
+    const key = step.parentId ?? '';
+    const lane = lanes.get(key) ?? { end, slip: 0 };
+    if (end > lane.end) lane.end = end;
+    const open = step.status !== 'COMPLETED' && step.status !== 'CANCELLED';
+    if (open && end < today) {
+      lane.slip = Math.max(lane.slip, workingDaysBetween(addDays(end, 1), today));
+    }
+    lanes.set(key, lane);
+  }
+
+  let forecast = startOfDay(new Date(targetEndDate));
+  for (const lane of lanes.values()) {
+    const laneFinish = lane.slip > 0 ? addWorkingDays(lane.end, lane.slip) : lane.end;
+    if (laneFinish > forecast) forecast = laneFinish;
+  }
+  return forecast;
+}
+
+/** Calendar days a project is late: forecast past target, or target already passed. */
+export function daysLate(forecast: Date, targetEndDate: Date | string, today: Date, health: string): number {
+  const dayMs = 86400000;
+  const target = startOfDay(new Date(targetEndDate)).getTime();
+  const byForecast = Math.round((startOfDay(forecast).getTime() - target) / dayMs);
+  if (byForecast > 0) return byForecast;
+  return health === 'LATE' ? Math.max(1, Math.round((today.getTime() - target) / dayMs)) : 0;
+}
 
 export interface ProgressTask {
   id?: string;
