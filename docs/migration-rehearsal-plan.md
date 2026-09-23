@@ -79,12 +79,13 @@ Both fixes are applied in the working tree and verified (typecheck, 94/94 tests,
 **Rule going forward: never hardcode a client reference number anywhere, and never derive
 one from a row count. Always allocate from the maximum existing value for that company.**
 
-### Still open — user decision pending, do not change unprompted
+### Resolved — now Task 0 in `docs/follow-up-plan-gemini.md`
 
 `entrypoint.sh` prints the same reassuring "Notice: Seed check completed." whether the seed
-succeeded or failed. That is how this bug would have reached production invisibly. Awaiting
-a decision between making the failure message honest (no behaviour change) and letting a
-seed failure stop the container. **Leave `entrypoint.sh` alone until then.**
+succeeded or failed. That is how this bug would have reached production invisibly, and it
+went on to hide a second one after deploy. **Decision: make the failure message honest, keep
+the non-fatal behaviour** — a hard stop would turn a data bug into an outage. Tracked as
+Task 0; change nothing else in that file.
 
 ### What round 2 must do
 

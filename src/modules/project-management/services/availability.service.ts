@@ -89,7 +89,10 @@ export async function getWorkloads(principal: Principal, query: AvailabilityQuer
       where: {
         userId: { in: userIds },
         status: 'ACTIVE',
-        task: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+        task: {
+          status: { notIn: ['COMPLETED', 'CANCELLED'] },
+          project: { status: { not: 'ON_HOLD' } },
+        },
       },
       select: {
         userId: true,

@@ -11,6 +11,7 @@ import { AddTaskForm } from './add-task-form';
 import { TeamPanel } from './team-panel';
 import { CompleteProjectButton } from './complete-project-button';
 import { HandoverProjectButton } from './handover-project-button';
+import { HoldProjectButton } from './hold-project-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,10 +86,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             <Link href={`/pm/resources?projectId=${project.id}`} className="btn btn-secondary text-body-sm">
               Team load
             </Link>
-            {permissions.canManageMembers ? (
+            {permissions.canManageMembers && project.status !== 'ON_HOLD' ? (
               <HandoverProjectButton projectId={project.id} colleagues={colleagues} />
             ) : null}
-            {permissions.canCreateTask ? (
+            {permissions.canEditProject ? (
+              <HoldProjectButton projectId={project.id} projectName={project.name} status={project.status} />
+            ) : null}
+            {permissions.canCreateTask && project.status !== 'ON_HOLD' ? (
               <Link href={`/pm/adhoc?projectId=${project.id}`} className="btn btn-primary text-body-sm">
                 Add urgent task
               </Link>
@@ -96,6 +100,35 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           </div>
         }
       />
+
+      {/* On Hold Banner */}
+      {project.status === 'ON_HOLD' ? (
+        <div className="mb-5 rounded-lg border border-warning/40 bg-warning/[0.08] p-4 text-ink">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-ink">Project is on hold</span>
+                {project.heldAt ? (
+                  <span className="text-caption text-muted">
+                    since {formatDate(project.heldAt)}
+                  </span>
+                ) : null}
+              </div>
+              {project.holdReason ? (
+                <p className="mt-1 text-body-sm text-ink/90 font-medium">
+                  Reason: <span className="font-normal">{project.holdReason}</span>
+                </p>
+              ) : null}
+              <p className="mt-1 text-caption text-muted">
+                Tasks are frozen and excluded from My Work and Team Load capacity until resumed.
+              </p>
+            </div>
+            {permissions.canEditProject ? (
+              <HoldProjectButton projectId={project.id} projectName={project.name} status={project.status} />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {/* Interactive Project Visual Timeline */}
       <ProjectTimeline data={timeline} className="mb-6" />

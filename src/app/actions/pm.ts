@@ -17,9 +17,11 @@ import {
   addProjectMember,
   completeAutomationProject,
   getProjectTimeline,
+  holdProject,
   quickFind,
   reassignAllMemberTasks,
   removeProjectMember,
+  resumeProject,
 } from '@/modules/project-management/services/project.service';
 import {
   addComment,
@@ -385,6 +387,38 @@ export async function completeAutomationProjectAction(projectId: string) {
     return { success: true };
   } catch (error) {
     return { success: false, error: toState(error).error ?? 'Failed to complete project.' };
+  }
+}
+
+export async function holdProjectAction(projectId: string, reason: string) {
+  const principal = await requirePrincipal();
+  try {
+    await holdProject(principal, projectId, reason);
+    await drainOutbox().catch(() => undefined);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/pm/resources');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to place project on hold.' };
+  }
+}
+
+export async function resumeProjectAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    await resumeProject(principal, projectId);
+    await drainOutbox().catch(() => undefined);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/pm/resources');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to resume project.' };
   }
 }
 

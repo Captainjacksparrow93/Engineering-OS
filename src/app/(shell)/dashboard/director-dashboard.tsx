@@ -84,24 +84,7 @@ export function DirectorDashboard({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex rounded-lg border border-hairline bg-surface p-1">
-            {(['week', 'month'] as const).map((value) => (
-              <Link
-                key={value}
-                href={`/dashboard?period=${value}`}
-                scroll={false}
-                aria-current={period === value ? 'true' : undefined}
-                className={clsx(
-                  'rounded-md px-3 py-1 text-xs font-medium transition-colors',
-                  period === value ? 'bg-surface-strong text-ink' : 'text-muted hover:text-ink'
-                )}
-              >
-                {value === 'week' ? 'Last 7 days' : 'Last 30 days'}
-              </Link>
-            ))}
-          </div>
-
+        <div>
           <Link href="/pm/projects/new" className="btn btn-primary text-body-sm px-4 py-2 font-medium">
             New project
           </Link>
@@ -403,10 +386,24 @@ export function DirectorDashboard({
 
         {/* Period Stats */}
         <div className="card border-hairline bg-surface p-5 space-y-3">
-          <header className="border-b border-hairline pb-3">
-            <h2 className="card-title text-ink font-semibold">
-              {period === 'week' ? 'Last 7 days' : 'Last 30 days'} in numbers
-            </h2>
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline pb-3">
+            <h2 className="card-title text-ink font-semibold">In numbers</h2>
+            <div className="flex rounded-lg border border-hairline bg-surface p-1">
+              {(['week', 'month'] as const).map((value) => (
+                <Link
+                  key={value}
+                  href={`/dashboard?period=${value}`}
+                  scroll={false}
+                  aria-current={period === value ? 'true' : undefined}
+                  className={clsx(
+                    'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+                    period === value ? 'bg-surface-strong text-ink' : 'text-muted hover:text-ink'
+                  )}
+                >
+                  {value === 'week' ? 'Last 7 days' : 'Last 30 days'}
+                </Link>
+              ))}
+            </div>
           </header>
           <div className="grid grid-cols-2 gap-4 pt-2 sm:grid-cols-3">
             <div className="rounded-lg bg-surface-strong/40 p-4 space-y-1">

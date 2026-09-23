@@ -583,6 +583,11 @@ export async function listMyTasks(
     where: {
       userId: principal.userId,
       status: filters.includeCompleted || filters.onlyCompleted ? undefined : 'ACTIVE',
+      task: {
+        project: {
+          status: { not: 'ON_HOLD' },
+        },
+      },
     },
     include: {
       task: {

@@ -189,6 +189,20 @@ export async function createAutomationProject(principal: Principal, input: Creat
     }
   }
 
+  // Every panel must have an assigned engineer before creating the project.
+  const unassignedPanels = new Set<string>();
+  for (const task of input.tasks) {
+    if (!task.assigneeId) {
+      unassignedPanels.add(`${task.templateCode} Panel ${task.unitIndex}`);
+    }
+  }
+  if (unassignedPanels.size > 0) {
+    const list = Array.from(unassignedPanels);
+    throw new DomainError(
+      `Every panel must have an assigned engineer: ${list.join(', ')} ${list.length > 1 ? 'have' : 'has'} no engineer assigned.`,
+    );
+  }
+
   // Panels run in parallel on the same planned dates, so an engineer on two panels owes
   // double the hours in the same window and the target date becomes unachievable.
   const panelsByAssignee = new Map<string, Set<string>>();

@@ -154,8 +154,6 @@ export function TeamLoadTable({ workloads }: { workloads: Workload[] }) {
                 {sorted.map((workload) => {
                   const isExpanded = expandedPersonIds.has(workload.person.id);
                   const freeDays = Math.max(0, Math.round((workload.freeHours / 8) * 10) / 10);
-                  const commDays = Math.round((workload.committedHours / 8) * 10) / 10;
-                  const totalDays = workload.workingDays;
 
                   return (
                     <tbody key={workload.person.id} className="divide-y divide-hairline">
@@ -197,8 +195,7 @@ export function TeamLoadTable({ workloads }: { workloads: Workload[] }) {
                         {/* Load Bar */}
                         <td className="px-4 py-3 w-48">
                           <div className="w-full">
-                            <div className="flex items-center justify-between text-caption text-muted mb-1 font-mono">
-                              <span>{commDays}d of {totalDays}d</span>
+                            <div className="flex items-center justify-end text-caption text-muted mb-1 font-mono">
                               <span
                                 className={
                                   workload.utilizationPercent > 100
@@ -305,8 +302,6 @@ export function TeamLoadTable({ workloads }: { workloads: Workload[] }) {
             {sorted.map((workload) => {
               const isExpanded = expandedPersonIds.has(workload.person.id);
               const freeDays = Math.max(0, Math.round((workload.freeHours / 8) * 10) / 10);
-              const commDays = Math.round((workload.committedHours / 8) * 10) / 10;
-              const totalDays = workload.workingDays;
 
               return (
                 <div key={workload.person.id} className="p-4 space-y-3 bg-canvas">
@@ -335,8 +330,7 @@ export function TeamLoadTable({ workloads }: { workloads: Workload[] }) {
                   </div>
 
                   <div>
-                    <div className="flex items-center justify-between text-caption text-muted mb-1 font-mono">
-                      <span>{commDays}d of {totalDays}d committed</span>
+                    <div className="flex items-center justify-end text-caption text-muted mb-1 font-mono">
                       <span className={workload.utilizationPercent > 100 ? 'font-bold text-error' : 'font-medium text-ink'}>
                         {workload.utilizationPercent}%
                       </span>

@@ -1,14 +1,54 @@
 # Follow-up plan — remaining work after the September 2026 update
 
-Hand this to Gemini (or any agent) as the next work order. It assumes the September update
-in `docs/change-plan-2026-09.md` is already implemented and verified locally.
+Hand this to Gemini (or any agent) as the next work order. The September update is
+**implemented, verified and deployed** (commit `911d58d`).
 
-**Before starting:** line numbers below are from commit `0a7a93c` plus the uncommitted
-September changes. They will shift as soon as editing begins — search for the quoted code
-instead of trusting the number.
+## Work queue — do them in this order
 
-**Definition of done for every task:** `npm run typecheck && npm run test && npm run build`
-all pass. Do not run `npm run lint` — it is broken for an unrelated reason (see Task 6).
+| # | Task | Why this order |
+|---|---|---|
+| 1 | **Task 0** — honest seed logging in `entrypoint.sh` | Has hidden two bugs already. Cheap. Do it before anything that touches the seed. |
+| 2 | **Task 4b** — Team Load: percentage only | Small, user-requested, self-contained. |
+| 3 | **Task 4c** — move the dashboard period toggle | Small, self-contained. |
+| 4 | **Task 5** — server-side "every panel has an engineer" | ~5 lines beside an existing check. |
+| 5 | **Task 2** — project On Hold | The real feature. Decisions already made; needs a migration. |
+| 6 | **Task 7** — RBAC remediation | **BLOCKED** on user approval. Land alone, after everything else is stable. |
+
+Tasks 1, 3, 4 and 6 are **done** — see the ✅ markers. Do not redo them.
+
+## Rules
+
+- **Line numbers are stale the moment editing starts.** Search for the quoted code instead.
+- **Definition of done:** `npm run typecheck && npm run test && npm run build` all pass.
+  There is no `lint` script and one must not be added (see Task 6).
+- **Pushing to `main` deploys to production** via `.github/workflows/deploy.yml`. Commit
+  freely, but **do not push** — the user decides when things ship.
+- **Any task needing a schema change also needs a migration**, and migrations on this
+  project are applied **by hand with `psql`**, not `prisma migrate deploy`. Read
+  `docs/deployment-runbook.md` before writing one, and **never run `prisma migrate dev`
+  against the VPS** — the schema has drifted from the migration history and it would offer
+  to reset the database.
+
+---
+
+## Task 0 — Make seed failures visible (priority: high, quick)
+
+**File:** `entrypoint.sh`
+
+```sh
+node node_modules/tsx/dist/cli.mjs prisma/seed.ts || echo "Notice: Seed check completed."
+```
+
+On failure this prints the **same reassuring message as on success**, and the container
+carries on. It has now hidden two separate problems: the round-1 client reference collision,
+and a boot-time seed that left the client table short until the seed was re-run by hand.
+
+**Change:** make the failure branch say plainly that the seed FAILED and the data may be
+incomplete, for all three seed/script lines. Keep the non-fatal behaviour — a hard stop
+would turn a data bug into an outage, and that trade-off has not been approved.
+
+Do not change anything else in `entrypoint.sh`. The `db push` line stays as it is: the
+schema is applied by hand beforehand, so it is a no-op by design.
 
 ---
 
@@ -20,6 +60,15 @@ all pass. Do not run `npm run lint` — it is broken for an unrelated reason (se
 - **Double-booking guard** — fixed in both the wizard and
   `automation-project.service.ts` (`panelsByAssignee` check). Client-side blocks submit and
   marks the clashing selects; server-side throws `DomainError`.
+- **Stale Team Load date inputs** — fixed in `src/app/(shell)/pm/resources/page.tsx`. The
+  From/To inputs are uncontrolled, so `defaultValue` only applied on mount: clicking a
+  preset navigated and re-rendered but left the old dates in the boxes, contradicting the
+  data shown. They now carry a `key` derived from the window so they remount. **Keep the
+  keys** — removing them reintroduces the bug.
+- **September 2026 release is DEPLOYED** to the VPS (commit `911d58d`). Migrations applied
+  by hand via `psql`; `db push` reports in sync; 13 projects, 16 clients, 0 orphans.
+  `docs/deployment-runbook.md` records the procedure. **Pushing to `main` auto-deploys** via
+  `.github/workflows/deploy.yml` — assume any commit ships.
 
 ---
 
@@ -135,21 +184,56 @@ for anyone carrying overdue work. The number is accurate for on-schedule work on
 
 ---
 
-## Task 4 — Capacity hours disagree between two screens (priority: medium)
+## Task 4 — Capacity hours mismatch ✅ DONE
 
-`getWorkloads` uses each person's real `user.dailyCapacityHours`, but
-`autoAssignAutomationTeam` hardcodes it:
+`autoAssignAutomationTeam` used to hardcode `dailyCapacityHours: 8` while `getWorkloads`
+read each person's real value, so the wizard and Team Load disagreed about anyone not on a
+standard 8-hour day. Now reads `user.dailyCapacityHours ?? 8` in
+`src/modules/project-management/services/automation-project.service.ts`.
 
-```ts
-dailyCapacityHours: 8,
-```
+---
 
-in `src/modules/project-management/services/automation-project.service.ts` (in the
-`candidates` mapping, search for `personWorkloadData`). For anyone not on a standard 8-hour
-day, the wizard's auto-assign and the Team Load board will disagree about the same person.
+## Task 4b — Team Load: show only the percentage (priority: medium, quick)
 
-**Fix:** use `user.dailyCapacityHours` — it is already selected on the `users` query in
-that function.
+**User feedback:** `22.5d of 12d` is confusing. Show the percentage alone.
+
+**File:** `src/app/(shell)/pm/resources/team-load-table.tsx`
+
+Remove the `{commDays}d of {totalDays}d` text in **both** places — the desktop table
+(~line 201) and the mobile card (~line 339, where it reads `...d committed`). Keep the
+percentage and the progress bar exactly as they are, including the red styling above 100%.
+
+Then delete the `commDays` and `totalDays` locals if nothing else uses them (~lines 156–157
+and 307–308), and check whether `freeDays` is still needed — the **Free** column uses it, so
+it probably stays.
+
+Do not change how the numbers are calculated. This is presentation only.
+
+Verify with `npm run typecheck && npm run build`.
+
+---
+
+## Task 4c — Dashboard: move the period toggle to the card it controls (priority: low)
+
+**File:** `src/app/(shell)/dashboard/director-dashboard.tsx`
+
+The `Last 7 days / Last 30 days` toggle currently sits in the **page header** (~line 87),
+beside the "New project" button, where it reads as a dashboard-wide filter. It is not — it
+controls exactly one card, `{/* Period Stats */}` (~line 404), whose heading already reads
+*"Last 7 days in numbers"*. Verified: every use of `period` resolves into that card's six
+stats (`periodStats`), including `completedInPeriod` → `avgApprovalTimeHours` and
+`summariseProblems`. Nothing else on the page changes with it.
+
+**Do not remove the toggle** — the stats are meaningless without a stated period.
+
+Move it into that card's `<header>`, right-aligned opposite the title. Keep the links and
+the `period === value` active styling exactly as they are; this is a move, not a rewrite.
+With the toggle adjacent to the title, drop the duplicated period wording from the heading
+so it reads simply `In numbers` (or keep the title and let the toggle carry the period —
+either is fine, just do not say it twice).
+
+Leaves the page header with the title and one primary action, which is what
+`docs/design-system.md` wants: orange appears once per screen.
 
 ---
 
@@ -203,21 +287,30 @@ Expect regressions in visibility when this lands — `pm/projects`, the dashboar
 
 ---
 
-## Deployment — BLOCKED, see `docs/migration-rehearsal-plan.md`
+## Deployment — ✅ DONE for the September release, and how to do the next one
 
-**Do not deploy to the VPS yet.** `entrypoint.sh` runs `prisma db push --skip-generate`,
-not `migrate deploy`, so the two migration files never execute in production — the client
-and `workOrderNo` backfills would simply not happen. Worse, `db push` will *fail* on this
-schema (a required unique column added to a populated table, plus two dropped columns), and
-because `entrypoint.sh` uses `set -e` with no `|| true`, the container will not start.
+The September release is **live on the VPS** (commit `911d58d`). Verified after deploy:
+`db push` reports in sync, 13 projects, 16 clients, 0 orphans, container healthy.
 
-`docs/migration-rehearsal-plan.md` has the full analysis, the recommended fix (baseline the
-production database, switch the entrypoint to `migrate deploy`) and a step-by-step local
-rehearsal. **Run that rehearsal and report before anything is pushed.**
+**How this project deploys, because it is not standard:**
 
-The dump stays mandatory whatever path is chosen — the migrations drop `poNumber` and
-`orderValue`:
+1. `entrypoint.sh` runs `prisma db push --skip-generate`, **not** `migrate deploy`. Migration
+   files are never executed by the container.
+2. So any schema change is applied **by hand with `psql`** on the VPS *before* the code ships,
+   which makes the container's `db push` a no-op.
+3. **Pushing to `main` is the deploy** — `.github/workflows/deploy.yml` SSHes to the VPS,
+   pulls and rebuilds. There is no approval step.
+4. Because of (3), the migration SQL cannot arrive via `git pull` — it must be `scp`'d to the
+   VPS separately, *before* pushing.
 
-```bash
-pg_dump "$DATABASE_URL" > backup-before-2026-09-update.sql
-```
+`docs/deployment-runbook.md` has the exact sequence, the verification queries and the
+rollback. **Follow it for any future change that touches the schema.** Take a `pg_dump`
+first, every time.
+
+**Never run `prisma migrate dev` against the VPS.** The live schema has drifted from the
+migration history (an entire table and several columns were applied by `db push` and never
+recorded), so `migrate dev` would detect the drift and offer to reset the database.
+
+**Worth doing at some point:** gate the deploy workflow behind `workflow_dispatch` only, so
+a push to `main` stops being a production deploy. Every future schema change hits the same
+ordering trap, and next time it may not be caught in advance.

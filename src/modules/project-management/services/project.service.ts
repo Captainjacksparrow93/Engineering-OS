@@ -241,6 +241,131 @@ export async function updateProject(
   });
 }
 
+export async function holdProject(
+  principal: Principal,
+  projectId: string,
+  reason: string,
+) {
+  await assertProjectPermission(principal, projectId, 'pm.project.update');
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) {
+    throw new DomainError('A reason is required to place a project on hold.');
+  }
+
+  const before = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+  if (before.status === 'ON_HOLD') {
+    throw new DomainError('Project is already on hold.');
+  }
+  if (before.status === 'COMPLETED') {
+    throw new DomainError('A completed project cannot be placed on hold.');
+  }
+
+  const now = new Date();
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.project.update({
+      where: { id: projectId },
+      data: {
+        status: 'ON_HOLD',
+        holdReason: trimmedReason,
+        heldAt: now,
+      },
+    });
+
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'pm',
+        action: 'project.hold',
+        entityType: 'Project',
+        entityId: projectId,
+        diff: {
+          status: { from: before.status, to: 'ON_HOLD' },
+          holdReason: { from: before.holdReason, to: trimmedReason },
+          heldAt: { from: before.heldAt, to: now.toISOString() },
+        },
+      },
+      tx,
+    );
+
+    await publish(
+      {
+        name: EVENTS.PROJECT_STATUS_CHANGED,
+        module: 'pm',
+        entityType: 'Project',
+        entityId: projectId,
+        actorId: principal.userId,
+        payload: {
+          from: before.status,
+          to: 'ON_HOLD',
+          code: updated.code,
+          reason: trimmedReason,
+          heldAt: now.toISOString(),
+        },
+      },
+      tx,
+    );
+
+    return updated;
+  });
+}
+
+export async function resumeProject(
+  principal: Principal,
+  projectId: string,
+) {
+  await assertProjectPermission(principal, projectId, 'pm.project.update');
+  const before = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+  if (before.status !== 'ON_HOLD') {
+    throw new DomainError('Only projects that are on hold can be resumed.');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.project.update({
+      where: { id: projectId },
+      data: {
+        status: 'IN_PROGRESS',
+        holdReason: null,
+        heldAt: null,
+      },
+    });
+
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'pm',
+        action: 'project.resumed',
+        entityType: 'Project',
+        entityId: projectId,
+        diff: {
+          status: { from: 'ON_HOLD', to: 'IN_PROGRESS' },
+          holdReason: { from: before.holdReason, to: null },
+          heldAt: { from: before.heldAt?.toISOString() ?? null, to: null },
+        },
+      },
+      tx,
+    );
+
+    await publish(
+      {
+        name: EVENTS.PROJECT_STATUS_CHANGED,
+        module: 'pm',
+        entityType: 'Project',
+        entityId: projectId,
+        actorId: principal.userId,
+        payload: {
+          from: 'ON_HOLD',
+          to: 'IN_PROGRESS',
+          code: updated.code,
+          previousReason: before.holdReason,
+        },
+      },
+      tx,
+    );
+
+    return updated;
+  });
+}
+
 export interface ProjectListFilters {
   status?: string;
   search?: string;

@@ -424,6 +424,8 @@ model Project {
   automationTypes String[]      @default([])
   status        ProjectStatus   @default(DRAFT)
   priority      ProjectPriority @default(MEDIUM)
+  holdReason    String?
+  heldAt        DateTime?
   startDate     DateTime?       @db.Date
   targetEndDate DateTime?       @db.Date
   actualEndDate DateTime?       @db.Date

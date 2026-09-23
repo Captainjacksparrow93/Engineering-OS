@@ -117,14 +117,18 @@ export default async function ResourcesPage({
           })}
         </div>
 
+        {/* The `key`s matter: these inputs are uncontrolled, so `defaultValue` only applies
+            on mount. Without a key that changes with the window, clicking a preset navigates
+            and re-renders but leaves the old dates sitting in the boxes, contradicting the
+            data on screen. */}
         <form className="flex flex-wrap items-end gap-2" action="/pm/resources">
           <div>
             <label className="label" htmlFor="from">From</label>
-            <input id="from" name="from" type="date" defaultValue={toIsoDate(from)} className="input w-40" />
+            <input key={`from-${toIsoDate(from)}`} id="from" name="from" type="date" defaultValue={toIsoDate(from)} className="input w-40" />
           </div>
           <div>
             <label className="label" htmlFor="to">To</label>
-            <input id="to" name="to" type="date" defaultValue={toIsoDate(to)} className="input w-40" />
+            <input key={`to-${toIsoDate(to)}`} id="to" name="to" type="date" defaultValue={toIsoDate(to)} className="input w-40" />
           </div>
           <div>
             <label className="label" htmlFor="departmentId">Department</label>

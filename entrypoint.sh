@@ -11,13 +11,13 @@ fi
 
 echo "==> Synchronizing system roles, permissions and seed data..."
 if [ -f "node_modules/tsx/dist/cli.mjs" ]; then
-  node node_modules/tsx/dist/cli.mjs prisma/seed.ts || echo "Notice: Seed check completed."
-  node node_modules/tsx/dist/cli.mjs prisma/seed-demo.ts || echo "Notice: Demo seed check completed."
-  node node_modules/tsx/dist/cli.mjs prisma/scripts/set-passwords-from-csv.ts || echo "Notice: Password sync failed."
+  node node_modules/tsx/dist/cli.mjs prisma/seed.ts || echo "ERROR: Main seed failed — see exception above" >&2
+  node node_modules/tsx/dist/cli.mjs prisma/seed-demo.ts || echo "ERROR: Demo seed failed — see exception above" >&2
+  node node_modules/tsx/dist/cli.mjs prisma/scripts/set-passwords-from-csv.ts || echo "ERROR: Password sync failed — see exception above" >&2
 elif command -v npx >/dev/null 2>&1; then
-  npx prisma db seed || echo "Notice: Seed check completed."
-  npx tsx prisma/seed-demo.ts || echo "Notice: Demo seed check completed."
-  npx tsx prisma/scripts/set-passwords-from-csv.ts || echo "Notice: Password sync failed."
+  npx prisma db seed || echo "ERROR: Main seed failed — see exception above" >&2
+  npx tsx prisma/seed-demo.ts || echo "ERROR: Demo seed failed — see exception above" >&2
+  npx tsx prisma/scripts/set-passwords-from-csv.ts || echo "ERROR: Password sync failed — see exception above" >&2
 fi
 
 echo "==> Starting Engineering OS Next.js server..."
