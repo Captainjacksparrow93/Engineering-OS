@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
 import { getProjectWorkspace, getProjectTimeline } from '@/modules/project-management/services/project.service';
-import { can } from '@/core/rbac/engine';
 import { formatDate, daysUntil } from '@/core/utils/dates';
 import { Alert, Card, PageHeader, ProgressBar, Stat, StatusBadge, PriorityBadge } from '@/components/ui';
 import { ProjectTimeline } from '@/components/project-timeline';
@@ -71,9 +70,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           <span className="flex flex-wrap items-center gap-2">
             <span>{project.clientName}</span>
             <span className="text-muted-soft">·</span>
-            {project.poNumber ? (
+            {project.workOrderNo ? (
               <>
-                <span className="text-caption text-muted">PO {project.poNumber}</span>
+                <span className="text-caption text-muted font-mono">WO {project.workOrderNo}</span>
                 <span className="text-muted-soft">·</span>
               </>
             ) : null}
@@ -182,10 +181,16 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                   <dd className="text-right font-medium">{project.panelCount} · {project.panelType}</dd>
                 </div>
               ) : null}
-              {project.orderValue && (permissions.canEditProject || can(principal, 'pm.oversight')) ? (
+              {project.endUserName ? (
                 <div className="flex justify-between gap-2">
-                  <dt className="text-muted">Order value</dt>
-                  <dd className="font-medium font-mono">₹{Number(project.orderValue).toLocaleString('en-IN')}</dd>
+                  <dt className="text-muted">End user</dt>
+                  <dd className="text-right font-medium">{project.endUserName}</dd>
+                </div>
+              ) : null}
+              {project.applicationName ? (
+                <div className="flex justify-between gap-2">
+                  <dt className="text-muted">Application</dt>
+                  <dd className="text-right font-medium">{project.applicationName}</dd>
                 </div>
               ) : null}
             </dl>

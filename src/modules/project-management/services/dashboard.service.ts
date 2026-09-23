@@ -48,7 +48,7 @@ export interface DirectorDashboardData {
     name: string;
     clientName: string;
     manager: { id: string; fullName: string; avatarColor?: string | null };
-    orderValueLakh: number | null;
+    workOrderNo?: string | null;
     progressPercent: number;
     timeElapsedPercent: number;
     startDate: Date | string;
@@ -147,7 +147,7 @@ export async function getDashboard(
       priority: true,
       startDate: true,
       targetEndDate: true,
-      orderValue: true,
+      workOrderNo: true,
       automationTypes: true,
       manager: { select: { id: true, fullName: true, avatarColor: true } },
       tasks: {
@@ -271,8 +271,7 @@ export async function getDashboard(
       name: p.name,
       clientName: p.clientName,
       manager: p.manager,
-      orderValueLakh: p.orderValue ? Math.round((Number(p.orderValue) / 100000) * 10) / 10 : null,
-      orderValueNum: p.orderValue ? Number(p.orderValue) : 0,
+      workOrderNo: p.workOrderNo,
       progressPercent,
       timeElapsedPercent: timeElapsedPercent(startDate, targetEndDate, today),
       startDate,
@@ -315,7 +314,7 @@ export async function getDashboard(
 
     const attention = {
       late_project: [...lateProjects]
-        .sort((a, b) => b.daysLate * (b.orderValueNum || 1) - a.daysLate * (a.orderValueNum || 1))
+        .sort((a, b) => b.daysLate - a.daysLate)
         .map((lp) => ({
           id: `late-${lp.id}`,
           type: 'late_project' as const,
@@ -556,4 +555,326 @@ function pDate(d: Date | string | null | undefined): string {
   if (!d) return '-';
   const dt = typeof d === 'string' ? new Date(d) : d;
   return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+export interface EngineerPortfolioData {
+  kind: 'engineer_portfolio';
+  engineer: {
+    id: string;
+    fullName: string;
+    employeeCode: string;
+    designation?: string | null;
+    avatarColor?: string | null;
+    skills: string[];
+  };
+  capacity: {
+    workload?: Workload;
+    committedHours: number;
+    capacityHours: number;
+    utilizationPercent: number;
+    status: string;
+  };
+  headline: {
+    openTasks: number;
+    overdueTasks: number;
+    panelsOwned: number;
+    handoversWaiting: number;
+  };
+  projects: Array<{
+    id: string;
+    code: string;
+    name: string;
+    clientName: string;
+    status: string;
+    progressPercent: number;
+    health: HealthStatus;
+    targetEndDate: Date | string;
+    manager: { id: string; fullName: string };
+  }>;
+  panels: Array<{
+    id: string;
+    code: string;
+    title: string;
+    projectName: string;
+    projectId: string;
+    progressPercent: number;
+    totalTasks: number;
+    completedTasks: number;
+    status: string;
+  }>;
+  openTasks: Array<{
+    id: string;
+    code: string;
+    title: string;
+    projectName: string;
+    projectId: string;
+    status: string;
+    plannedEnd: Date | string | null;
+    isOverdue: boolean;
+    estimatedHours: number;
+  }>;
+  handovers: {
+    incoming: Array<{
+      id: string;
+      taskId: string;
+      taskTitle: string;
+      projectName: string;
+      fromUserName: string;
+      createdAt: Date | string;
+    }>;
+    outgoing: Array<{
+      id: string;
+      taskId: string;
+      taskTitle: string;
+      projectName: string;
+      toUserName: string;
+      createdAt: Date | string;
+    }>;
+  };
+}
+
+export async function getEngineerPortfolio(
+  principal: Principal,
+  userId: string,
+  windowDays: number = 14
+): Promise<EngineerPortfolioData> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      fullName: true,
+      employeeCode: true,
+      designation: true,
+      avatarColor: true,
+      skills: true,
+      companyId: true,
+    },
+  });
+
+  if (!user || user.companyId !== principal.companyId) {
+    throw new Error('Engineer not found.');
+  }
+
+  const today = todayInIndia();
+  const windowEnd = addDays(today, windowDays);
+
+  const [workloads, assignments, incomingHandovers, outgoingHandovers] = await Promise.all([
+    getWorkloads(principal, { from: today, to: windowEnd }).catch(() => [] as Workload[]),
+    prisma.taskAssignment.findMany({
+      where: {
+        userId,
+        status: 'ACTIVE',
+        task: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+      },
+      select: {
+        id: true,
+        task: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            status: true,
+            type: true,
+            parentId: true,
+            plannedEnd: true,
+            estimatedHours: true,
+            percentComplete: true,
+            project: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                clientName: true,
+                status: true,
+                startDate: true,
+                targetEndDate: true,
+                manager: { select: { id: true, fullName: true } },
+                tasks: {
+                  where: { status: { not: 'CANCELLED' } },
+                  select: { id: true, type: true, parentId: true, status: true, estimatedHours: true, plannedEnd: true, percentComplete: true },
+                },
+              },
+            },
+            parent: {
+              select: {
+                id: true,
+                code: true,
+                title: true,
+                status: true,
+                percentComplete: true,
+                children: {
+                  select: { id: true, status: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.taskHandover.findMany({
+      where: { toUserId: userId, status: 'PENDING' },
+      select: {
+        id: true,
+        createdAt: true,
+        task: { select: { id: true, title: true, project: { select: { name: true } } } },
+        fromUser: { select: { fullName: true } },
+      },
+    }),
+    prisma.taskHandover.findMany({
+      where: { fromUserId: userId, status: 'PENDING' },
+      select: {
+        id: true,
+        createdAt: true,
+        task: { select: { id: true, title: true, project: { select: { name: true } } } },
+        toUser: { select: { fullName: true } },
+      },
+    }),
+  ]);
+
+  const workload = workloads.find((w) => w.person.id === userId);
+
+  // Collect distinct projects the engineer has tasks or membership in
+  const projectMap = new Map<string, typeof assignments[0]['task']['project']>();
+  for (const a of assignments) {
+    if (a.task.project) {
+      projectMap.set(a.task.project.id, a.task.project);
+    }
+  }
+
+  const projectsData = Array.from(projectMap.values()).map((p) => {
+    const parentIds = new Set(p.tasks.map((t) => t.parentId).filter(Boolean));
+    const leafTasks = p.tasks.filter((t) => t.type !== 'PHASE' && !parentIds.has(t.id));
+    const startDate = p.startDate ?? today;
+    const targetEndDate = p.targetEndDate ?? today;
+    const progressPercent = projectProgress(p.tasks);
+    const forecastEndDate = forecastFinish(leafTasks, targetEndDate, today);
+    const health = projectHealth({
+      status: p.status,
+      startDate,
+      targetEndDate,
+      forecastEndDate,
+      progressPercent,
+      hasOpenRoadblock: false,
+      hasStaleApprovals: false,
+      asOfDate: today,
+    });
+
+    return {
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      clientName: p.clientName,
+      status: p.status,
+      progressPercent,
+      health,
+      targetEndDate,
+      manager: {
+        id: p.manager?.id ?? '',
+        fullName: p.manager?.fullName ? formatName(p.manager.fullName) : 'Unassigned',
+      },
+    };
+  });
+
+  // Collect panels (PHASE tasks) where engineer owns child tasks
+  const panelMap = new Map<string, {
+    id: string;
+    code: string;
+    title: string;
+    projectName: string;
+    projectId: string;
+    progressPercent: number;
+    totalTasks: number;
+    completedTasks: number;
+    status: string;
+  }>();
+
+  const openTasksList: EngineerPortfolioData['openTasks'] = [];
+
+  for (const a of assignments) {
+    const t = a.task;
+    const isOverdue = Boolean(t.plannedEnd && startOfDay(t.plannedEnd) < today && t.status !== 'COMPLETED' && t.status !== 'IN_REVIEW');
+    openTasksList.push({
+      id: t.id,
+      code: t.code,
+      title: cleanTaskTitle(t.title),
+      projectName: t.project.name,
+      projectId: t.project.id,
+      status: t.status,
+      plannedEnd: t.plannedEnd,
+      isOverdue,
+      estimatedHours: t.estimatedHours,
+    });
+
+    if (t.parent) {
+      const p = t.parent;
+      if (!panelMap.has(p.id)) {
+        const total = p.children.length;
+        const completed = p.children.filter((c) => c.status === 'COMPLETED').length;
+        panelMap.set(p.id, {
+          id: p.id,
+          code: p.code,
+          title: cleanTaskTitle(p.title),
+          projectName: t.project.name,
+          projectId: t.project.id,
+          progressPercent: p.percentComplete,
+          totalTasks: total,
+          completedTasks: completed,
+          status: p.status,
+        });
+      }
+    }
+  }
+
+  const panelsData = Array.from(panelMap.values());
+  const overdueCount = openTasksList.filter((t) => t.isOverdue).length;
+
+  return {
+    kind: 'engineer_portfolio',
+    engineer: {
+      id: user.id,
+      fullName: formatName(user.fullName),
+      employeeCode: user.employeeCode,
+      designation: user.designation,
+      avatarColor: user.avatarColor,
+      skills: user.skills,
+    },
+    capacity: {
+      workload,
+      committedHours: workload?.committedHours ?? 0,
+      capacityHours: workload?.capacityHours ?? 0,
+      utilizationPercent: workload?.utilizationPercent ?? 0,
+      status: workload?.status ?? 'AVAILABLE',
+    },
+    headline: {
+      openTasks: openTasksList.length,
+      overdueTasks: overdueCount,
+      panelsOwned: panelsData.length,
+      handoversWaiting: incomingHandovers.length,
+    },
+    projects: projectsData,
+    panels: panelsData,
+    openTasks: openTasksList.sort((a, b) => {
+      if (a.isOverdue && !b.isOverdue) return -1;
+      if (!a.isOverdue && b.isOverdue) return 1;
+      return 0;
+    }),
+    handovers: {
+      incoming: incomingHandovers.map((h) => ({
+        id: h.id,
+        taskId: h.task.id,
+        taskTitle: cleanTaskTitle(h.task.title),
+        projectName: h.task.project.name,
+        fromUserName: formatName(h.fromUser.fullName),
+        createdAt: h.createdAt,
+      })),
+      outgoing: outgoingHandovers.map((h) => ({
+        id: h.id,
+        taskId: h.task.id,
+        taskTitle: cleanTaskTitle(h.task.title),
+        projectName: h.task.project.name,
+        toUserName: formatName(h.toUser.fullName),
+        createdAt: h.createdAt,
+      })),
+    },
+  };
 }

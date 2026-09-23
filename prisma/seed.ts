@@ -1031,7 +1031,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0063',
       skills: ['project coordination', 'vendor follow up', 'scheduling'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
+      roles: [{ key: 'ASST_MANAGER', scopeType: 'GLOBAL' }, { key: 'PM_BASE', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0071',
@@ -1086,7 +1086,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0074',
       skills: ['site management', 'resource planning'],
-      roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
+      roles: [{ key: 'ASST_MANAGER', scopeType: 'GLOBAL' }, { key: 'PM_BASE', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0076',
@@ -1377,14 +1377,54 @@ async function main() {
     }
   }
 
+  // --------------------------------------------------------------------- clients
+  // Reference numbers are ALLOCATED here, never hardcoded. The client master is not
+  // owned by this seed: the migration backfill creates a row per existing project's
+  // client, and users create more in the app. A fixed 'ACS-0001' collides with whoever
+  // already holds it, and because the seed runs on every container start that collision
+  // aborts the rest of the seed (see entrypoint.sh).
+  const clientSeeds = ['Tata Chemicals Ltd', 'Sunrise Cement Industries', 'Godrej Foods Pvt Ltd'];
+
+  const clientId = new Map<string, string>();
+  for (const name of clientSeeds) {
+    const existing = await prisma.client.findUnique({
+      where: { companyId_name: { companyId: company.id, name } },
+      select: { id: true },
+    });
+    if (existing) {
+      clientId.set(name, existing.id);
+      continue;
+    }
+
+    const taken = await prisma.client.findMany({
+      where: { companyId: company.id },
+      select: { refNumber: true },
+    });
+    let maxSeq = 0;
+    for (const c of taken) {
+      const match = c.refNumber.match(/^ACS-(\d{4})$/i);
+      if (match) maxSeq = Math.max(maxSeq, Number.parseInt(match[1]!, 10));
+    }
+
+    const created = await prisma.client.create({
+      data: {
+        companyId: company.id,
+        name,
+        refNumber: `ACS-${String(maxSeq + 1).padStart(4, '0')}`,
+      },
+    });
+    clientId.set(name, created.id);
+  }
+
   // ------------------------------------------------------------------- projects
   const projectSeeds = [
     {
       code: 'PRJ-2026-001',
       name: 'Tata Chemicals - PLC Automation',
       clientName: 'Tata Chemicals Ltd',
-      poNumber: 'TCL/PO/2026/0781',
-      orderValue: 12_400_000,
+      workOrderNo: '10041',
+      endUserName: 'Tata Chemicals Ltd (Mithapur Plant)',
+      applicationName: 'Chlor-Alkali PLC Automation',
       panelType: 'PLC Programming & Simulation',
       panelCount: 14,
       priority: 'HIGH' as const,
@@ -1399,8 +1439,9 @@ async function main() {
       code: 'PRJ-2026-002',
       name: 'Sunrise Cement - SCADA Automation',
       clientName: 'Sunrise Cement Industries',
-      poNumber: 'SCI/PO/26/114',
-      orderValue: 5_600_000,
+      workOrderNo: '10042',
+      endUserName: 'Sunrise Cement (Line 2)',
+      applicationName: 'Kiln & Raw Mill SCADA',
       panelType: 'SCADA Programming & Simulation',
       panelCount: 6,
       priority: 'MEDIUM' as const,
@@ -1415,8 +1456,9 @@ async function main() {
       code: 'PRJ-2026-003',
       name: 'Godrej Foods - HMI Automation',
       clientName: 'Godrej Foods Pvt Ltd',
-      poNumber: 'GF/PO/2026/0034',
-      orderValue: 8_900_000,
+      workOrderNo: '10043',
+      endUserName: 'Godrej Consumer Products',
+      applicationName: 'Packaging Line HMI Integration',
       panelType: 'HMI Programming & Simulation',
       panelCount: 9,
       priority: 'CRITICAL' as const,
@@ -1440,9 +1482,11 @@ async function main() {
         code: seed.code,
         name: seed.name,
         clientName: seed.clientName,
+        clientId: clientId.get(seed.clientName) ?? null,
+        workOrderNo: seed.workOrderNo,
+        endUserName: seed.endUserName,
+        applicationName: seed.applicationName,
         description: `Design, manufacture, test and dispatch of ${seed.panelType}.`,
-        poNumber: seed.poNumber,
-        orderValue: seed.orderValue,
         panelType: seed.panelType,
         panelCount: seed.panelCount,
         automationTypes: [seed.panelType.split(' ')[0]!],

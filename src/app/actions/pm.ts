@@ -40,7 +40,10 @@ import {
   decideProjectHandover,
   requestHandover,
   requestProjectHandover,
+  requestPanelHandover,
+  decidePanelHandover,
 } from '@/modules/project-management/services/handover.service';
+import { createClient, listClients } from '@/modules/project-management/services/client.service';
 import { autoAssignAutomationTeam } from '@/modules/project-management/services/automation-project.service';
 import { markAllRead, markRead } from '@/core/notifications/notify';
 import { toState, value, list, type ActionState } from '@/core/utils/actions';
@@ -278,6 +281,66 @@ export async function cancelHandoverAction(_prev: ActionState, form: FormData): 
   const state = await run(() => cancelHandover(principal, String(form.get('handoverId'))));
   revalidatePath('/pm/handovers');
   return state;
+}
+
+export async function requestPanelHandoverAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const phaseTaskId = String(form.get('phaseTaskId'));
+  const projectId = form.get('projectId') ? String(form.get('projectId')) : undefined;
+  const toUserId = String(form.get('toUserId') || '');
+  const reason = String(form.get('reason') || '');
+
+  if (!toUserId) return { error: 'Please choose an engineer to take over remaining tasks.' };
+  if (!reason.trim() || reason.trim().length < 5) return { error: 'Please provide a reason of at least 5 characters.' };
+
+  const state = await run(async () => {
+    return requestPanelHandover(principal, {
+      phaseTaskId,
+      toUserId,
+      reason,
+    });
+  });
+
+  if (projectId) revalidatePath(`/pm/projects/${projectId}`);
+  revalidatePath('/pm/handovers');
+  return state.error ? state : { success: 'Panel handover requested.' };
+}
+
+export async function decidePanelHandoverAction(
+  phaseTaskId: string,
+  decision: 'ACCEPTED' | 'DECLINED' | 'REJECTED',
+  note?: string,
+) {
+  const principal = await requirePrincipal();
+  try {
+    const result = await decidePanelHandover(principal, { phaseTaskId, decision, note });
+    revalidatePath('/pm/handovers');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    return { success: true, count: result.count };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to decide panel handover.' };
+  }
+}
+
+export async function createClientAction(name: string, refNumber: string) {
+  const principal = await requirePrincipal();
+  try {
+    const client = await createClient(principal, { name, refNumber });
+    return { success: true, client };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to create client.' };
+  }
+}
+
+export async function getClientsAction() {
+  const principal = await requirePrincipal();
+  try {
+    const clients = await listClients(principal.companyId);
+    return { success: true, clients };
+  } catch (err: unknown) {
+    return { success: false, error: 'Failed to list clients.' };
+  }
 }
 
 // -------------------------------------------------------------- notifications

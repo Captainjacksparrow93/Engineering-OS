@@ -41,6 +41,7 @@ model Company {
   departments Department[]
   users       User[]
   projects    Project[]
+  clients     Client[]
 
   @@map("core_companies")
 }
@@ -368,8 +369,25 @@ model Leave {
 }
 
 // =====================================================================================
-// PM :: Projects
+// PM :: Clients & Projects
 // =====================================================================================
+
+model Client {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  refNumber String   // e.g. ACS-0042 — the client reference number
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projects Project[]
+
+  @@unique([companyId, name])
+  @@unique([companyId, refNumber])
+  @@map("pm_clients")
+}
 
 enum ProjectStatus {
   DRAFT
@@ -393,13 +411,13 @@ model Project {
   id            String          @id @default(cuid())
   companyId     String
   code          String          @unique
+  workOrderNo   String          @unique
   name          String
   description   String?
+  clientId      String?
   clientName    String
-  /// Panel-manufacturing specifics. ERP will later own the commercial fields and PM
-  /// will read them through the ERP service instead of storing them here.
-  poNumber      String?
-  orderValue    Decimal?        @db.Decimal(14, 2)
+  endUserName   String?
+  applicationName String?
   panelType     String?
   panelCount    Int             @default(0)
   /// Checklist packages in this project: PLC, SCADA, HMI (drives the dashboard type cards).
@@ -416,6 +434,7 @@ model Project {
   updatedAt     DateTime        @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client  Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
   manager User    @relation("ProjectManager", fields: [managerId], references: [id])
   sponsor User?   @relation("ProjectSponsor", fields: [sponsorId], references: [id], onDelete: SetNull)
 
@@ -426,6 +445,7 @@ model Project {
 
   @@index([companyId, status])
   @@index([managerId])
+  @@index([clientId])
   @@map("pm_projects")
 }
 

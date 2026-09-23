@@ -281,7 +281,7 @@ export function DirectorDashboard({
               <tr className="select-none text-caption text-muted">
                 <th>Project & Client</th>
                 <th>PM</th>
-                <th>Value</th>
+                <th>Work Order</th>
                 <th className="w-48">Done vs Time Used</th>
                 <th>Finish</th>
                 <th className="text-right">Health</th>
@@ -321,7 +321,7 @@ export function DirectorDashboard({
                     </td>
                     <td>
                       <span className="font-mono text-body-sm text-ink font-medium">
-                        {p.orderValueLakh ? `₹${p.orderValueLakh}L` : '—'}
+                        {p.workOrderNo ? `WO ${p.workOrderNo}` : '—'}
                       </span>
                     </td>
                     <td>

@@ -179,7 +179,13 @@ export function TeamLoadTable({ workloads }: { workloads: Workload[] }) {
                             />
                             <div className="min-w-0 flex-1 truncate">
                               <p className="truncate text-body-sm font-semibold text-ink">
-                                {formatName(workload.person.fullName)}
+                                <Link
+                                  href={`/pm/resources/${workload.person.id}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="hover:underline hover:text-primary transition-colors"
+                                >
+                                  {formatName(workload.person.fullName)}
+                                </Link>
                               </p>
                               <p className="truncate text-caption text-muted">
                                 {workload.person.designation || workload.person.grade.replaceAll('_', ' ').toLowerCase()}
@@ -313,7 +319,12 @@ export function TeamLoadTable({ workloads }: { workloads: Workload[] }) {
                       />
                       <div>
                         <p className="font-semibold text-ink text-body-sm">
-                          {formatName(workload.person.fullName)}
+                          <Link
+                            href={`/pm/resources/${workload.person.id}`}
+                            className="hover:underline hover:text-primary transition-colors"
+                          >
+                            {formatName(workload.person.fullName)}
+                          </Link>
                         </p>
                         <p className="text-caption text-muted">
                           {workload.person.designation || workload.person.grade.replaceAll('_', ' ').toLowerCase()}

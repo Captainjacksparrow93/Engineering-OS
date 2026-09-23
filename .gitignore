@@ -18,3 +18,11 @@ prisma/*.db
 .token-savior-cache.json
 *Vertex*.json
 *vertex*.json
+
+# Agent session state
+.claude/
+
+# Database dumps - never commit live data
+*.sql.bak
+vps-snapshot.sql
+backups/

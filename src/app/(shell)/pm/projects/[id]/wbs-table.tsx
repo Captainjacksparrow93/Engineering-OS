@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { ProgressBar, StatusBadge } from '@/components/ui';
 import { AssigneeCell } from '@/components/assignee-cell';
 import { cleanTaskTitle } from '@/core/utils/strings';
+import { HandoverPanelButton } from './handover-panel-button';
 
 interface WbsTask {
   id: string;
@@ -99,6 +100,8 @@ export function WbsTable({
               Math.max(leafTasks.length, 1)
           ),
           tasks: filteredLeafTasks,
+          remainingCount: 0,
+          canHandover: false,
           showCriticalBadge: hasNonCriticalOpenStep,
         },
       ];
@@ -114,16 +117,21 @@ export function WbsTable({
       const hasNonCriticalOpenStep = allUnitTasks.some(
         (t) => !critical.has(t.id) && !['COMPLETED', 'CANCELLED'].includes(t.status)
       );
+      const remainingTasks = allUnitTasks.filter((t) => !['COMPLETED', 'CANCELLED'].includes(t.status));
+      const isMyPanel = currentUserId ? remainingTasks.some((t) => t.assignments.some((a) => a.user.id === currentUserId)) : false;
+      const canHandover = (canAssign || isMyPanel) && remainingTasks.length > 0;
 
       return {
         id: phase.id,
         title: phase.title,
         progress: unitProgress,
         tasks: unitTasks,
+        remainingCount: remainingTasks.length,
+        canHandover,
         showCriticalBadge: hasNonCriticalOpenStep,
       };
     });
-  }, [phases, leafTasks, filteredLeafTasks, critical]);
+  }, [phases, leafTasks, filteredLeafTasks, critical, canAssign, currentUserId]);
 
   return (
     <div>
@@ -178,11 +186,22 @@ export function WbsTable({
                   <span className="text-title-sm font-semibold text-ink">{cleanTaskTitle(unit.title)}</span>
                   <span className="badge bg-surface text-muted text-caption">{unit.tasks.length} steps</span>
                 </div>
-                <div className="flex items-center gap-3 w-44">
-                  <ProgressBar value={unit.progress} className="flex-1" />
-                  <span className="text-caption text-muted font-mono font-semibold w-10 text-right">
-                    {unit.progress}%
-                  </span>
+                <div className="flex items-center gap-4">
+                  {unit.canHandover && projectId && colleagues.length > 0 && unit.id !== 'default' && (
+                    <HandoverPanelButton
+                      projectId={projectId}
+                      phaseTaskId={unit.id}
+                      panelTitle={unit.title}
+                      remainingTaskCount={unit.remainingCount}
+                      colleagues={colleagues}
+                    />
+                  )}
+                  <div className="flex items-center gap-3 w-40">
+                    <ProgressBar value={unit.progress} className="flex-1" />
+                    <span className="text-caption text-muted font-mono font-semibold w-10 text-right">
+                      {unit.progress}%
+                    </span>
+                  </div>
                 </div>
               </div>
 

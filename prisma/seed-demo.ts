@@ -48,7 +48,9 @@ interface ProjectSpec {
   pm: string;
   status: ProjectStatus;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  orderValue: number;
+  workOrderNo: string;
+  endUserName?: string;
+  applicationName?: string;
   /** Project start, in working days relative to today (negative = in the past). */
   startWd: number;
   /** Target date = last planned step end + this many working days. */
@@ -76,7 +78,7 @@ const SHIVAM = 'ACS-0064';
 const PROJECTS: ProjectSpec[] = [
   {
     code: 'DEMO-01', name: 'Demo · Reliance Petro - PLC Automation', client: 'Reliance Petrochem', pm: PARTH,
-    status: 'IN_PROGRESS', priority: 'MEDIUM', orderValue: 7_500_000, startWd: -4, bufferWd: 3,
+    status: 'IN_PROGRESS', priority: 'MEDIUM', workOrderNo: '20001', endUserName: 'Reliance Industries (Jamnagar)', applicationName: 'Refinery Water Treatment PLC', startWd: -4, bufferWd: 3,
     lanes: [{
       template: 'PLC', quantity: 1,
       steps: approvedThrough(4, { 3: { state: 'approved', problemSolvedDaysAgo: 3 }, 5: { state: 'progress', percent: 50 } }),
@@ -85,7 +87,7 @@ const PROJECTS: ProjectSpec[] = [
   },
   {
     code: 'DEMO-02', name: 'Demo · UltraTech - SCADA Automation', client: 'UltraTech Cement', pm: PARAS,
-    status: 'IN_PROGRESS', priority: 'HIGH', orderValue: 12_000_000, startWd: -8, bufferWd: 0,
+    status: 'IN_PROGRESS', priority: 'HIGH', workOrderNo: '20002', endUserName: 'UltraTech Gujarat Cement Works', applicationName: 'Raw Mill Grinding SCADA', startWd: -8, bufferWd: 0,
     lanes: [{
       template: 'SCADA', quantity: 1,
       steps: approvedThrough(5, { 4: { state: 'approved', lateDays: 1 }, 5: { state: 'approved', sentBackDaysAgo: 4 }, 6: { state: 'progress', percent: 60 } }),
@@ -93,7 +95,7 @@ const PROJECTS: ProjectSpec[] = [
   },
   {
     code: 'DEMO-03', name: 'Demo · Amul Dairy - HMI Automation', client: 'Amul Dairy', pm: PARTH,
-    status: 'IN_PROGRESS', priority: 'MEDIUM', orderValue: 4_200_000, startWd: -3, bufferWd: 4,
+    status: 'IN_PROGRESS', priority: 'MEDIUM', workOrderNo: '20003', endUserName: 'GCMMF Anand Plant', applicationName: 'Pasteurization Unit HMI', startWd: -3, bufferWd: 4,
     lanes: [{
       template: 'HMI', quantity: 1,
       steps: approvedThrough(3, { 4: { state: 'problem', percent: 30, blocker: 'Client has not approved the revised P&ID yet', daysAgo: 2 } }),
@@ -101,7 +103,7 @@ const PROJECTS: ProjectSpec[] = [
   },
   {
     code: 'DEMO-04', name: 'Demo · Tata Power - PLC Automation (2 panels)', client: 'Tata Power', pm: PARAS,
-    status: 'IN_PROGRESS', priority: 'HIGH', orderValue: 18_500_000, startWd: -6, bufferWd: 4,
+    status: 'IN_PROGRESS', priority: 'HIGH', workOrderNo: '20004', endUserName: 'Tata Power Solar Division', applicationName: 'Inverter Duty PLC Panels', startWd: -6, bufferWd: 4,
     lanes: [{
       template: 'PLC', quantity: 2,
       steps: approvedThrough(2, { 2: { state: 'approved', sentBackDaysAgo: 5 }, 3: { state: 'review', submittedDaysAgo: 3 } }),
@@ -109,7 +111,7 @@ const PROJECTS: ProjectSpec[] = [
   },
   {
     code: 'DEMO-05', name: 'Demo · Adani Ports - PLC + HMI Automation', client: 'Adani Ports', pm: PARTH,
-    status: 'IN_PROGRESS', priority: 'CRITICAL', orderValue: 22_000_000, startWd: -2, bufferWd: 5,
+    status: 'IN_PROGRESS', priority: 'CRITICAL', workOrderNo: '20005', endUserName: 'Mundra Port SEZ', applicationName: 'Coal Handling Plant Automation', startWd: -2, bufferWd: 5,
     lanes: [
       {
         template: 'PLC', quantity: 1,
@@ -124,17 +126,17 @@ const PROJECTS: ProjectSpec[] = [
   },
   {
     code: 'DEMO-06', name: 'Demo · JSW Steel - SCADA Automation', client: 'JSW Steel', pm: PARAS,
-    status: 'ON_HOLD', priority: 'LOW', orderValue: 6_800_000, startWd: -10, bufferWd: 5,
+    status: 'ON_HOLD', priority: 'LOW', workOrderNo: '20006', endUserName: 'JSW Dolvi Works', applicationName: 'Blast Furnace Gas Cleaning SCADA', startWd: -10, bufferWd: 5,
     lanes: [{ template: 'SCADA', quantity: 1, steps: approvedThrough(6) }],
   },
   {
     code: 'DEMO-07', name: 'Demo · Asian Paints - HMI Automation', client: 'Asian Paints', pm: PARTH,
-    status: 'COMPLETED', priority: 'MEDIUM', orderValue: 3_900_000, startWd: -18, bufferWd: 2,
+    status: 'COMPLETED', priority: 'MEDIUM', workOrderNo: '20007', endUserName: 'Asian Paints Ankleshwar', applicationName: 'Resin Batch Mixing HMI', startWd: -18, bufferWd: 2,
     lanes: [{ template: 'HMI', quantity: 1, steps: approvedThrough(13) }],
   },
   {
     code: 'DEMO-08', name: 'Demo · L&T Hydro - PLC Automation', client: 'Larsen & Toubro', pm: PARAS,
-    status: 'PLANNING', priority: 'MEDIUM', orderValue: 9_600_000, startWd: 4, bufferWd: 2,
+    status: 'PLANNING', priority: 'MEDIUM', workOrderNo: '20008', endUserName: 'L&T Hydrocarbon Engineering', applicationName: 'Flare Gas Recovery PLC', startWd: 4, bufferWd: 2,
     lanes: [{ template: 'PLC', quantity: 1, steps: {} }],
   },
 ];
@@ -192,15 +194,43 @@ async function main() {
     const lastEnd = lanes.flatMap((l) => l.steps).reduce((max, s) => (s.plannedEnd > max ? s.plannedEnd : max), projectStart);
     const targetEndDate = addWorkingDays(lastEnd, spec.bufferWd);
 
+    let clientRecord = await prisma.client.findFirst({
+      where: { companyId: pm.companyId, name: spec.client },
+    });
+    if (!clientRecord) {
+      // Allocate from the highest existing number, not from the row count: the migration
+      // backfill numbers clients with a sequence that is global across companies, so each
+      // company's reference numbers have gaps and `count + 1` lands on a taken one.
+      const taken = await prisma.client.findMany({
+        where: { companyId: pm.companyId },
+        select: { refNumber: true },
+      });
+      let maxSeq = 0;
+      for (const c of taken) {
+        const match = c.refNumber.match(/^ACS-(\d{4})$/i);
+        if (match) maxSeq = Math.max(maxSeq, Number.parseInt(match[1]!, 10));
+      }
+      const refNumber = `ACS-${String(maxSeq + 1).padStart(4, '0')}`;
+      clientRecord = await prisma.client.create({
+        data: {
+          companyId: pm.companyId,
+          name: spec.client,
+          refNumber,
+        },
+      });
+    }
+
     const project = await prisma.project.create({
       data: {
         companyId: pm.companyId,
         code: spec.code,
         name: spec.name,
         clientName: spec.client,
+        clientId: clientRecord.id,
+        workOrderNo: spec.workOrderNo,
+        endUserName: spec.endUserName,
+        applicationName: spec.applicationName,
         description: 'Demo project generated by prisma/seed-demo.ts.',
-        poNumber: `PO-${spec.code}`,
-        orderValue: spec.orderValue,
         panelType: spec.lanes.map((l) => `${l.template} x${l.quantity}`).join(' + '),
         panelCount: spec.lanes.reduce((sum, l) => sum + l.quantity, 0),
         automationTypes: [...new Set(spec.lanes.map((l) => l.template))],

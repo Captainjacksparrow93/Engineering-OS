@@ -7,7 +7,7 @@ import { formatName, cleanTaskTitle } from '@/core/utils/strings';
 import { addWorkingDays, formatDate, workingDaysBetween } from '@/core/utils/dates';
 import { minWorkingDaysForHours, planLaneByHours } from '@/modules/project-management/domain/scheduling';
 import { createAutomationProjectAction } from '@/app/actions/automation-project';
-import { autoAssignAutomationTeamAction } from '@/app/actions/pm';
+import { autoAssignAutomationTeamAction, createClientAction } from '@/app/actions/pm';
 
 interface TemplateItem {
   id: string;
@@ -20,9 +20,9 @@ interface TemplateItem {
   isSimulationSignoff: boolean;
 }
 
-/** Planned hours for one step in a package of `quantity` panels (template hours x panels). */
-function stepHours(item: { defaultDurationHours: number }, quantity: number): number {
-  return (item.defaultDurationHours || 8) * quantity;
+/** Planned hours for one step in a panel (standard template duration, no quantity multiplier). */
+function stepHours(item: { defaultDurationHours: number }): number {
+  return item.defaultDurationHours || 8;
 }
 
 interface Template {
@@ -49,45 +49,48 @@ interface Manager {
   grade: string;
 }
 
-const SENIORITY_ORDER: Record<string, number> = {
-  LEAD_ENGINEER: 1,
-  MANAGER: 1,
-  ASST_MANAGER: 1,
-  SENIOR_ENGINEER: 2,
-  ENGINEER: 3,
-  JUNIOR_ENGINEER: 3,
-  TRAINEE: 4,
-};
-
-const SENIORITY_SECTION_LABELS: Record<number, string> = {
-  1: 'Assistant Managers / Leads',
-  2: 'Senior Engineers',
-  3: 'Junior Engineers',
-  4: 'Trainee Engineers',
-};
+interface ClientOption {
+  id: string;
+  name: string;
+  refNumber: string;
+}
 
 export function AutomationProjectWizard({
   managers,
   teamsByPM,
   allEngineers,
   templates,
+  initialClients = [],
+  defaultClientRef = 'ACS-0001',
 }: {
   managers: Manager[];
   teamsByPM: Record<string, string[]>;
   allEngineers: Engineer[];
   templates: Template[];
+  initialClients?: ClientOption[];
+  defaultClientRef?: string;
 }) {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
 
   // Step 1: Order details
-  const [name, setName] = useState('');
+  const [workOrderNo, setWorkOrderNo] = useState('');
+  const [clientId, setClientId] = useState('');
   const [clientName, setClientName] = useState('');
+  const [clientRefNumber, setClientRefNumber] = useState('');
+  const [endUserName, setEndUserName] = useState('');
+  const [applicationName, setApplicationName] = useState('');
   const [code, setCode] = useState('');
-  const [poNumber, setPoNumber] = useState('');
-  const [orderValue, setOrderValue] = useState('');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]!);
   const [targetEndDate, setTargetEndDate] = useState('');
   const [step1Error, setStep1Error] = useState<string | null>(null);
+
+  // Clients & Inline client creation
+  const [clients, setClients] = useState<ClientOption[]>(initialClients);
+  const [showAddClient, setShowAddClient] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientRef, setNewClientRef] = useState(defaultClientRef);
+  const [isCreatingClient, setIsCreatingClient] = useState(false);
+  const [clientModalError, setClientModalError] = useState<string | null>(null);
 
   // Step 2: Scope & PM selection
   const [selectedScopes, setSelectedScopes] = useState<Record<string, { enabled: boolean; qty: number }>>({
@@ -99,19 +102,67 @@ export function AutomationProjectWizard({
   const filterPMTeamOnly = true;
   const [step2Error, setStep2Error] = useState<string | null>(null);
 
-  // Step 3: Team assignments & dates
-  // key: `${templateCode}_${stepNumber}`
+  // Step 3: Team assignments & dates (One engineer per panel)
+  // key: `${templateCode}_${unitIndex}` e.g. "PLC_1"
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
   const [rationales, setRationales] = useState<
     Record<string, { rationale: string; isWeakMatch: boolean; score: number }>
   >({});
   const [isAutoAssigning, setIsAutoAssigning] = useState(false);
   const [autoAssignBanner, setAutoAssignBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [expandedPackages, setExpandedPackages] = useState<Set<string>>(new Set(['PLC', 'SCADA', 'HMI']));
+  const [expandedPanels, setExpandedPanels] = useState<Set<string>>(new Set());
 
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  // Handle client selection
+  const handleClientSelect = (selectedId: string) => {
+    setClientId(selectedId);
+    const found = clients.find((c) => c.id === selectedId);
+    if (found) {
+      setClientName(found.name);
+      setClientRefNumber(found.refNumber);
+    } else {
+      setClientName('');
+      setClientRefNumber('');
+    }
+  };
+
+  // Add new client inline
+  const handleCreateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setClientModalError(null);
+    const trimmedName = newClientName.trim();
+    const trimmedRef = newClientRef.trim().toUpperCase();
+
+    if (!trimmedName || trimmedName.length < 2) {
+      setClientModalError('Client name must be at least 2 characters.');
+      return;
+    }
+    if (!trimmedRef || !/^ACS-\d{4}$/.test(trimmedRef)) {
+      setClientModalError('Client reference must follow format ACS-XXXX (e.g. ACS-0042).');
+      return;
+    }
+
+    setIsCreatingClient(true);
+    try {
+      const res = await createClientAction(trimmedName, trimmedRef);
+      if (res.success && res.client) {
+        setClients((prev) => [...prev, res.client!]);
+        setClientId(res.client.id);
+        setClientName(res.client.name);
+        setClientRefNumber(res.client.refNumber);
+        setShowAddClient(false);
+        setNewClientName('');
+      } else {
+        setClientModalError(res.error || 'Failed to create client.');
+      }
+    } catch (err: unknown) {
+      setClientModalError(err instanceof Error ? err.message : 'Failed to create client.');
+    } finally {
+      setIsCreatingClient(false);
+    }
+  };
 
   const toggleScope = (tplCode: string) => {
     setSelectedScopes((prev) => ({
@@ -133,11 +184,11 @@ export function AutomationProjectWizard({
     }));
   };
 
-  const togglePackageExpand = (tplCode: string) => {
-    setExpandedPackages((prev) => {
+  const togglePanelExpand = (panelKey: string) => {
+    setExpandedPanels((prev) => {
       const next = new Set(prev);
-      if (next.has(tplCode)) next.delete(tplCode);
-      else next.add(tplCode);
+      if (next.has(panelKey)) next.delete(panelKey);
+      else next.add(panelKey);
       return next;
     });
   };
@@ -146,10 +197,39 @@ export function AutomationProjectWizard({
   const activeScopes = useMemo(() => {
     return Object.entries(selectedScopes)
       .filter(([_, val]) => val.enabled && val.qty > 0)
-      .map(([code, val]) => ({ templateCode: code, quantity: val.qty }));
+      .map(([tCode, val]) => ({ templateCode: tCode, quantity: val.qty }));
   }, [selectedScopes]);
 
-  // Minimum required finish date computation (inclusive working days, Sundays skipped)
+  // Panels list (parallel panel units)
+  const panelsList = useMemo(() => {
+    const list: Array<{
+      panelKey: string;
+      templateCode: string;
+      unitIndex: number;
+      title: string;
+      template: Template;
+      totalHours: number;
+    }> = [];
+
+    for (const scope of activeScopes) {
+      const tpl = templates.find((t) => t.code === scope.templateCode);
+      if (!tpl) continue;
+      const totalHours = tpl.items.reduce((sum, item) => sum + stepHours(item), 0);
+      for (let unit = 1; unit <= scope.quantity; unit++) {
+        list.push({
+          panelKey: `${scope.templateCode}_${unit}`,
+          templateCode: scope.templateCode,
+          unitIndex: unit,
+          title: `${scope.templateCode} Panel ${unit}`,
+          template: tpl,
+          totalHours,
+        });
+      }
+    }
+    return list;
+  }, [activeScopes, templates]);
+
+  // Minimum required finish date computation (panels run in parallel, so max of single panels)
   const { minWorkingDays, minFinishDateStr, minFinishDateObj } = useMemo(() => {
     if (activeScopes.length === 0 || !startDate) {
       return { minWorkingDays: 13, minFinishDateStr: '', minFinishDateObj: new Date() };
@@ -159,11 +239,11 @@ export function AutomationProjectWizard({
     for (const scope of activeScopes) {
       const tpl = templates.find((t) => t.code === scope.templateCode);
       if (!tpl) continue;
-      const packageDays = minWorkingDaysForHours(tpl.items.map((item) => stepHours(item, scope.quantity)));
-      if (packageDays > maxDays) maxDays = packageDays;
+      // Per panel duration (1x template hours)
+      const panelDays = minWorkingDaysForHours(tpl.items.map((item) => stepHours(item)));
+      if (panelDays > maxDays) maxDays = panelDays;
     }
     const days = Math.max(1, maxDays);
-    // Inclusive working days: 1 day finishes on startDt, N days finishes on addWorkingDays(startDt, N - 1)
     const finishObj = addWorkingDays(startDt, days - 1);
     const finishStr = finishObj.toISOString().split('T')[0];
     return { minWorkingDays: days, minFinishDateStr: finishStr, minFinishDateObj: finishObj };
@@ -185,17 +265,17 @@ export function AutomationProjectWizard({
 
   const isTargetDateTooEarly = selectedDurationWorkingDays < minWorkingDays;
 
-  // Planned dates per step: steps run in sequence inside each package, by cumulative hours
-  // (8 h = 1 working day), stretched to the target date when it is later than the minimum.
+  // Planned dates per step inside a panel (1x template duration)
   const stepPlanMap = useMemo(() => {
     const map: Record<string, { plannedStart: string; plannedEnd: string; hours: number }> = {};
     if (!startDate) return map;
     const startDt = new Date(startDate);
     const availableDays = targetEndDate ? workingDaysBetween(startDt, new Date(targetEndDate)) : undefined;
+
     for (const scope of activeScopes) {
       const tpl = templates.find((t) => t.code === scope.templateCode);
       if (!tpl) continue;
-      const hours = tpl.items.map((item) => stepHours(item, scope.quantity));
+      const hours = tpl.items.map((item) => stepHours(item));
       const plan = planLaneByHours(hours, startDt, availableDays);
       tpl.items.forEach((item, idx) => {
         map[`${scope.templateCode}_${item.stepNumber}`] = {
@@ -208,7 +288,7 @@ export function AutomationProjectWizard({
     return map;
   }, [startDate, targetEndDate, activeScopes, templates]);
 
-  // Candidates for selected PM
+  // Candidate engineers in selected PM's team
   const candidateEngineers = useMemo(() => {
     if (!selectedPMId) return allEngineers;
     if (!filterPMTeamOnly) return allEngineers;
@@ -216,20 +296,7 @@ export function AutomationProjectWizard({
     return allEngineers.filter((e) => teamUserIds.includes(e.id) || e.id === selectedPMId);
   }, [selectedPMId, filterPMTeamOnly, allEngineers, teamsByPM]);
 
-  // Grouped engineers by seniority for dropdown
-  const groupedEngineers = useMemo(() => {
-    const groups: Record<number, Engineer[]> = { 1: [], 2: [], 3: [], 4: [] };
-    for (const eng of allEngineers) {
-      const level = SENIORITY_ORDER[eng.grade] || 3;
-      groups[level].push(eng);
-    }
-    for (const lvl of [1, 2, 3, 4]) {
-      groups[lvl].sort((a, b) => a.fullName.localeCompare(b.fullName));
-    }
-    return groups;
-  }, [allEngineers]);
-
-  // Auto-assign helper
+  // Auto-assign team to panels
   const handleAutoAssign = useCallback(async () => {
     if (!selectedPMId) {
       setAutoAssignBanner({
@@ -245,6 +312,7 @@ export function AutomationProjectWizard({
     try {
       const tasksPayload: Array<{
         templateCode: string;
+        unitIndex: number;
         stepNumber: number;
         title: string;
         recommendedSeniority: string;
@@ -256,18 +324,21 @@ export function AutomationProjectWizard({
       for (const scope of activeScopes) {
         const tpl = templates.find((t) => t.code === scope.templateCode);
         if (!tpl) continue;
-        for (const item of tpl.items) {
-          const plan = stepPlanMap[`${scope.templateCode}_${item.stepNumber}`];
-          if (!plan) continue;
-          tasksPayload.push({
-            templateCode: scope.templateCode,
-            stepNumber: item.stepNumber,
-            title: `${item.title} (${scope.templateCode}${scope.quantity > 1 ? ` × ${scope.quantity}` : ''})`,
-            recommendedSeniority: item.recommendedSeniority,
-            plannedStart: plan.plannedStart,
-            plannedEnd: plan.plannedEnd,
-            estimatedHours: plan.hours,
-          });
+        for (let unit = 1; unit <= scope.quantity; unit++) {
+          for (const item of tpl.items) {
+            const plan = stepPlanMap[`${scope.templateCode}_${item.stepNumber}`];
+            if (!plan) continue;
+            tasksPayload.push({
+              templateCode: scope.templateCode,
+              unitIndex: unit,
+              stepNumber: item.stepNumber,
+              title: `${item.title} (${scope.templateCode} Panel ${unit})`,
+              recommendedSeniority: item.recommendedSeniority,
+              plannedStart: plan.plannedStart,
+              plannedEnd: plan.plannedEnd,
+              estimatedHours: plan.hours,
+            });
+          }
         }
       }
 
@@ -280,42 +351,43 @@ export function AutomationProjectWizard({
         managerId: selectedPMId,
         startDate,
         targetEndDate,
+        scopes: activeScopes,
         tasks: tasksPayload,
       });
 
       if (res.success && res.assignments) {
-        const newAssignments: Record<string, string> = { ...taskAssignments };
+        const newAssignments = { ...taskAssignments };
         const newRationales: Record<string, { rationale: string; isWeakMatch: boolean; score: number }> = {};
-        let assignedCount = 0;
 
         for (const a of res.assignments) {
           if (a.assignedUserId) {
             newAssignments[a.stepId] = a.assignedUserId;
-            assignedCount++;
           }
-          newRationales[a.stepId] = {
-            rationale: a.rationale,
-            isWeakMatch: a.isWeakMatch,
-            score: a.score,
-          };
+          if (a.rationale) {
+            newRationales[a.stepId] = {
+              rationale: a.rationale,
+              isWeakMatch: Boolean(a.isWeakMatch),
+              score: a.score,
+            };
+          }
         }
 
         setTaskAssignments(newAssignments);
         setRationales(newRationales);
         setAutoAssignBanner({
           type: 'success',
-          message: `Auto-assigned ${assignedCount} of ${tasksPayload.length} steps based on optimal skill matching and free capacity.`,
+          message: `Auto-assigned engineers for ${res.assignments.length} panels based on workload and skills.`,
         });
       } else {
         setAutoAssignBanner({
           type: 'error',
-          message: res.error || 'Failed to auto-assign team.',
+          message: res.error || 'Failed to auto-assign engineers.',
         });
       }
     } catch {
       setAutoAssignBanner({
         type: 'error',
-        message: 'An unexpected error occurred during auto-assignment.',
+        message: 'An error occurred during auto-assignment.',
       });
     } finally {
       setIsAutoAssigning(false);
@@ -325,12 +397,16 @@ export function AutomationProjectWizard({
   // Step 1 validation
   const handleProceedToStep2 = () => {
     setStep1Error(null);
-    if (!name.trim()) {
-      setStep1Error('Project name is required.');
+    if (!workOrderNo.trim()) {
+      setStep1Error('Work Order No. is required.');
       return;
     }
-    if (!clientName.trim()) {
-      setStep1Error('Client name is required.');
+    if (!/^\d+$/.test(workOrderNo.trim())) {
+      setStep1Error('Work Order No. must contain digits only.');
+      return;
+    }
+    if (!clientId) {
+      setStep1Error('Please select a client.');
       return;
     }
     if (!targetEndDate) {
@@ -365,7 +441,7 @@ export function AutomationProjectWizard({
     }
     setCurrentStep(3);
 
-    // Run auto-assign if not yet populated
+    // Auto-assign on first entry to step 3 if empty
     if (Object.keys(taskAssignments).length === 0) {
       setTimeout(() => {
         handleAutoAssign();
@@ -373,13 +449,49 @@ export function AutomationProjectWizard({
     }
   };
 
-  // Final submit handler
+  /**
+   * Panels are scheduled in parallel - every panel carries the same planned dates - so one
+   * engineer on two panels means double the work in the same window. The wizard blocks it
+   * rather than quietly promising a delivery date nobody can hit.
+   */
+  const doubleBookedEngineers = useMemo(() => {
+    const panelsByEngineer = new Map<string, string[]>();
+    for (const panel of panelsList) {
+      const engineerId = taskAssignments[panel.panelKey];
+      if (!engineerId) continue;
+      const titles = panelsByEngineer.get(engineerId) ?? [];
+      titles.push(panel.title);
+      panelsByEngineer.set(engineerId, titles);
+    }
+
+    return Array.from(panelsByEngineer.entries())
+      .filter(([, panelTitles]) => panelTitles.length > 1)
+      .map(([engineerId, panelTitles]) => ({
+        engineerId,
+        engineerName: formatName(
+          allEngineers.find((eng) => eng.id === engineerId)?.fullName ?? 'This engineer',
+        ),
+        panelTitles,
+      }));
+  }, [panelsList, taskAssignments, allEngineers]);
+
+  const doubleBookedIds = useMemo(
+    () => new Set(doubleBookedEngineers.map((entry) => entry.engineerId)),
+    [doubleBookedEngineers],
+  );
+
+  const unassignedPanels = useMemo(
+    () => panelsList.filter((panel) => !taskAssignments[panel.panelKey]).map((panel) => panel.title),
+    [panelsList, taskAssignments],
+  );
+
+  // Submit Handler
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!name.trim() || !clientName.trim() || !selectedPMId) {
-      setError('Please fill in Project Name, Client Name, and select a Project Manager.');
+    if (!workOrderNo.trim() || !clientId || !selectedPMId) {
+      setError('Please fill in Work Order No, select a Client, and choose a Project Manager.');
       return;
     }
 
@@ -393,9 +505,23 @@ export function AutomationProjectWizard({
       return;
     }
 
-    // Build task list payload
+    if (unassignedPanels.length > 0) {
+      setError(`Assign an engineer to every panel. Still unassigned: ${unassignedPanels.join(', ')}.`);
+      return;
+    }
+
+    if (doubleBookedEngineers.length > 0) {
+      const [first] = doubleBookedEngineers;
+      setError(
+        `${first!.engineerName} is assigned to ${first!.panelTitles.join(' and ')}. Panels run in parallel on the same dates, so one engineer per panel is required - otherwise the delivery date is not achievable.`,
+      );
+      return;
+    }
+
+    // Build tasks payload: fans out panel's assigned engineer to all 13 steps of that panel
     const tasksPayload: Array<{
       templateCode: string;
+      unitIndex: number;
       stepNumber: number;
       title: string;
       assigneeId?: string;
@@ -407,29 +533,37 @@ export function AutomationProjectWizard({
     for (const scope of activeScopes) {
       const tpl = templates.find((t) => t.code === scope.templateCode);
       if (!tpl) continue;
-      for (const item of tpl.items) {
-        const taskKey = `${scope.templateCode}_${item.stepNumber}`;
-        const plan = stepPlanMap[taskKey];
-        if (!plan) continue;
-        tasksPayload.push({
-          templateCode: scope.templateCode,
-          stepNumber: item.stepNumber,
-          title: item.title,
-          assigneeId: taskAssignments[taskKey] || undefined,
-          plannedStart: plan.plannedStart,
-          plannedEnd: plan.plannedEnd,
-          estimatedHours: plan.hours,
-        });
+      for (let unit = 1; unit <= scope.quantity; unit++) {
+        const panelKey = `${scope.templateCode}_${unit}`;
+        const panelAssigneeId = taskAssignments[panelKey] || undefined;
+
+        for (const item of tpl.items) {
+          const plan = stepPlanMap[`${scope.templateCode}_${item.stepNumber}`];
+          if (!plan) continue;
+          tasksPayload.push({
+            templateCode: scope.templateCode,
+            unitIndex: unit,
+            stepNumber: item.stepNumber,
+            title: item.title,
+            assigneeId: panelAssigneeId,
+            plannedStart: plan.plannedStart,
+            plannedEnd: plan.plannedEnd,
+            estimatedHours: plan.hours,
+          });
+        }
       }
     }
 
     startTransition(async () => {
       const res = await createAutomationProjectAction({
-        name: name.trim(),
+        name: `WO ${workOrderNo.trim()}`,
+        workOrderNo: workOrderNo.trim(),
+        clientId,
         clientName: clientName.trim(),
+        clientRefNumber: clientRefNumber.trim() || undefined,
         code: code.trim() || undefined,
-        poNumber: poNumber.trim() || undefined,
-        orderValue: orderValue ? parseFloat(orderValue) : undefined,
+        endUserName: endUserName.trim() || undefined,
+        applicationName: applicationName.trim() || undefined,
         startDate,
         targetEndDate,
         managerId: selectedPMId,
@@ -482,8 +616,7 @@ export function AutomationProjectWizard({
           <button
             type="button"
             onClick={() => {
-              if (currentStep === 1) handleProceedToStep2();
-              else setCurrentStep(2);
+              if (currentStep > 2) setCurrentStep(2);
             }}
             className={clsx(
               'flex items-center gap-2 text-xs sm:text-body-sm font-semibold transition-colors',
@@ -491,7 +624,7 @@ export function AutomationProjectWizard({
                 ? 'text-ink'
                 : currentStep > 2
                 ? 'text-muted hover:text-ink'
-                : 'text-muted/60'
+                : 'text-muted/60 cursor-not-allowed'
             )}
           >
             <span
@@ -515,17 +648,11 @@ export function AutomationProjectWizard({
           <button
             type="button"
             onClick={() => {
-              if (currentStep === 1) {
-                handleProceedToStep2();
-              } else if (currentStep === 2) {
-                handleProceedToStep3();
-              }
+              if (currentStep === 3) setCurrentStep(3);
             }}
             className={clsx(
               'flex items-center gap-2 text-xs sm:text-body-sm font-semibold transition-colors',
-              currentStep === 3
-                ? 'text-ink'
-                : 'text-muted/60'
+              currentStep === 3 ? 'text-ink' : 'text-muted/60 cursor-not-allowed'
             )}
           >
             <span
@@ -538,25 +665,25 @@ export function AutomationProjectWizard({
             >
               3
             </span>
-            <span>Team & dates</span>
+            <span>Review Panels & Team</span>
           </button>
         </div>
       </nav>
 
-      {/* Global Error Alert */}
+      {/* Global Error Banner */}
       {error ? (
-        <div className="rounded-md border border-error/30 bg-error/[0.04] p-4 text-body-sm text-error">
+        <div className="rounded-md border border-error/30 bg-error/[0.04] p-3 text-caption text-error">
           {error}
         </div>
       ) : null}
 
       {/* STEP 1: ORDER DETAILS */}
       {currentStep === 1 ? (
-        <section className="card p-5 space-y-4 bg-surface">
+        <section className="card p-5 space-y-6 bg-surface">
           <div>
-            <h2 className="text-title-sm font-semibold text-ink">1. Order Details</h2>
+            <h2 className="text-title-sm font-semibold text-ink">1. Order & Customer Details</h2>
             <p className="text-caption text-muted">
-              Commercial parameters and delivery commitments for this automation order.
+              Enter the Work Order No., select customer client, and schedule milestone dates.
             </p>
           </div>
 
@@ -567,36 +694,72 @@ export function AutomationProjectWizard({
           ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
+            {/* Work Order No. (Digits Only) */}
             <div>
-              <label className="label text-xs font-semibold" htmlFor="projectName">
-                Project Name *
+              <label className="label text-xs font-semibold" htmlFor="workOrderNo">
+                Work Order No. *
               </label>
               <input
-                id="projectName"
+                id="workOrderNo"
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. 5-Axis Milling Station Automation"
-                className="input text-sm w-full"
+                pattern="\d+"
+                inputMode="numeric"
+                value={workOrderNo}
+                onChange={(e) => setWorkOrderNo(e.target.value.replace(/\D/g, ''))}
+                placeholder="e.g. 1042"
+                className="input text-sm w-full font-mono"
                 required
               />
+              <span className="text-[11px] text-muted">Digits only, unique across all projects.</span>
             </div>
 
+            {/* Client Select & Add Client */}
             <div>
-              <label className="label text-xs font-semibold" htmlFor="clientName">
-                Client / Customer Name *
+              <div className="flex items-center justify-between">
+                <label className="label text-xs font-semibold" htmlFor="clientId">
+                  Client / Customer *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowAddClient(true)}
+                  className="text-xs text-primary font-semibold hover:underline"
+                >
+                  ➕ Add new client
+                </button>
+              </div>
+              <select
+                id="clientId"
+                value={clientId}
+                onChange={(e) => handleClientSelect(e.target.value)}
+                className="select text-sm w-full font-medium"
+                required
+              >
+                <option value="">[ Choose Client ]</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.refNumber})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Client Reference No. (Read-only) */}
+            <div>
+              <label className="label text-xs font-semibold" htmlFor="clientRefNumber">
+                Client Reference No.
               </label>
               <input
-                id="clientName"
+                id="clientRefNumber"
                 type="text"
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                placeholder="e.g. Tata Motors Ltd"
-                className="input text-sm w-full"
-                required
+                value={clientRefNumber}
+                readOnly
+                placeholder="Autofilled from client selection"
+                className="input text-sm w-full font-mono bg-surface-strong/30 cursor-not-allowed text-muted"
               />
+              <span className="text-[11px] text-muted">Used to generate project code (e.g. {clientRefNumber || 'ACS-XXXX'}-0001).</span>
             </div>
 
+            {/* Project Code (Optional override) */}
             <div>
               <label className="label text-xs font-semibold" htmlFor="code">
                 Project Code (Optional)
@@ -607,41 +770,42 @@ export function AutomationProjectWizard({
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 maxLength={20}
-                placeholder="e.g. ACS-PRJ-2026-0042 (auto-generated if blank)"
+                placeholder={clientRefNumber ? `e.g. ${clientRefNumber}-0001` : 'Auto-generated if blank'}
                 className="input text-sm w-full font-mono"
               />
             </div>
 
+            {/* End User Name */}
             <div>
-              <label className="label text-xs font-semibold" htmlFor="poNumber">
-                PO / Order Number
+              <label className="label text-xs font-semibold" htmlFor="endUserName">
+                End User Name
               </label>
               <input
-                id="poNumber"
+                id="endUserName"
                 type="text"
-                value={poNumber}
-                onChange={(e) => setPoNumber(e.target.value)}
-                placeholder="e.g. PO-88491-REV2"
-                className="input text-sm w-full font-mono"
+                value={endUserName}
+                onChange={(e) => setEndUserName(e.target.value)}
+                placeholder="e.g. Mithapur Plant Unit 2"
+                className="input text-sm w-full"
               />
             </div>
 
+            {/* Application Name */}
             <div>
-              <label className="label text-xs font-semibold" htmlFor="orderValue">
-                Order Value (₹ Lakhs)
+              <label className="label text-xs font-semibold" htmlFor="applicationName">
+                Application Name
               </label>
               <input
-                id="orderValue"
-                type="number"
-                step="0.01"
-                min="0"
-                value={orderValue}
-                onChange={(e) => setOrderValue(e.target.value)}
-                placeholder="e.g. 45.50"
-                className="input text-sm w-full font-mono"
+                id="applicationName"
+                type="text"
+                value={applicationName}
+                onChange={(e) => setApplicationName(e.target.value)}
+                placeholder="e.g. Baking Soda Batch Reactor Control"
+                className="input text-sm w-full"
               />
             </div>
 
+            {/* Project Start Date */}
             <div>
               <label className="label text-xs font-semibold" htmlFor="startDate">
                 Project Start Date
@@ -656,27 +820,35 @@ export function AutomationProjectWizard({
               />
             </div>
 
-            <div className="sm:col-span-2">
-              <label className="label text-xs font-semibold" htmlFor="targetEndDate">
-                Target Delivery Date *
-              </label>
+            {/* Target Delivery Date */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="label text-xs font-semibold" htmlFor="targetEndDate">
+                  Target Delivery Date *
+                </label>
+                {minFinishDateStr ? (
+                  <span className="text-[11px] font-mono text-muted">
+                    Min required: {formatDate(minFinishDateObj)} ({minWorkingDays} working days)
+                  </span>
+                ) : null}
+              </div>
               <input
                 id="targetEndDate"
                 type="date"
                 value={targetEndDate}
                 onChange={(e) => setTargetEndDate(e.target.value)}
-                className={clsx('input text-sm w-full font-mono', isTargetDateTooEarly && 'border-error')}
+                min={minFinishDateStr || undefined}
+                className={clsx(
+                  'input text-sm w-full font-mono',
+                  isTargetDateTooEarly && 'border-error text-error'
+                )}
                 required
               />
               {isTargetDateTooEarly ? (
-                <p className="text-caption text-error font-medium mt-1">
-                  ⚠️ Needs at least {minWorkingDays} working days (finishes {formatDate(minFinishDateObj)}). Working days exclude Sundays.
+                <p className="mt-1 text-[11px] text-error">
+                  Target date allows {selectedDurationWorkingDays} working days, but parallel panels require at least {minWorkingDays} working days.
                 </p>
-              ) : (
-                <p className="text-caption text-muted mt-1">
-                  Target finish date promised to customer ({selectedDurationWorkingDays} working days). Minimum requirement: {minWorkingDays} working days ({formatDate(minFinishDateObj)}).
-                </p>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -693,6 +865,73 @@ export function AutomationProjectWizard({
             </button>
           </div>
         </section>
+      ) : null}
+
+      {/* Add Client Inline Modal */}
+      {showAddClient ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 text-left">
+          <div className="card w-full max-w-md bg-surface border border-hairline shadow-xl">
+            <header className="card-header border-b border-hairline pb-3 flex justify-between items-center">
+              <h3 className="card-title text-base font-semibold text-ink">Add New Client</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddClient(false)}
+                className="text-muted hover:text-ink font-bold text-lg p-1"
+              >
+                &times;
+              </button>
+            </header>
+            <form onSubmit={handleCreateClient} className="card-body space-y-4 pt-4">
+              <div>
+                <label className="label text-xs font-semibold">Client Name *</label>
+                <input
+                  type="text"
+                  value={newClientName}
+                  onChange={(e) => setNewClientName(e.target.value)}
+                  placeholder="e.g. Reliance Industries Ltd"
+                  className="input text-sm w-full"
+                  required
+                />
+              </div>
+              <div>
+                <label className="label text-xs font-semibold">Client Reference Number *</label>
+                <input
+                  type="text"
+                  value={newClientRef}
+                  onChange={(e) => setNewClientRef(e.target.value.toUpperCase())}
+                  placeholder="e.g. ACS-0042"
+                  pattern="ACS-\d{4}"
+                  className="input text-sm w-full font-mono uppercase"
+                  required
+                />
+                <span className="text-[11px] text-muted">Format: ACS-XXXX (e.g. ACS-0042)</span>
+              </div>
+
+              {clientModalError ? (
+                <div className="rounded border border-error/30 bg-error/[0.04] p-2 text-caption text-error">
+                  {clientModalError}
+                </div>
+              ) : null}
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-hairline">
+                <button
+                  type="button"
+                  onClick={() => setShowAddClient(false)}
+                  className="btn btn-secondary text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingClient}
+                  className="btn btn-primary text-sm"
+                >
+                  {isCreatingClient ? 'Saving...' : 'Save Client'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       ) : null}
 
       {/* STEP 2: SCOPE & PROJECT MANAGER */}
@@ -719,7 +958,6 @@ export function AutomationProjectWizard({
             <div className="grid gap-3 sm:grid-cols-3">
               {templates.map((tpl) => {
                 const scope = selectedScopes[tpl.code] || { enabled: false, qty: 1 };
-                const packageDays = scope.qty * 13;
                 return (
                   <div
                     key={tpl.id}
@@ -752,9 +990,9 @@ export function AutomationProjectWizard({
                     {scope.enabled ? (
                       <div className="flex items-center justify-between border-t border-hairline pt-2.5">
                         <div className="flex flex-col">
-                          <span className="text-caption text-muted">Quantity:</span>
+                          <span className="text-caption text-muted">Panel Qty:</span>
                           <span className="text-[10px] text-muted font-mono font-medium">
-                            {packageDays} working days
+                            13 days/panel (parallel)
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -790,7 +1028,7 @@ export function AutomationProjectWizard({
           <div className="grid gap-4 sm:grid-cols-2 border-t border-hairline pt-4">
             <div>
               <label className="label text-xs font-semibold" htmlFor="managerId">
-                Designated Project Manager *
+                Designated Project Manager / Asst. Manager *
               </label>
               <select
                 id="managerId"
@@ -799,22 +1037,13 @@ export function AutomationProjectWizard({
                 className="select text-sm w-full font-medium"
                 required
               >
-                <option value="">Select Project Manager...</option>
+                <option value="">[ Choose Project Manager ]</option>
                 {managers.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {formatName(m.fullName)} {m.designation ? `(${m.designation})` : ''}
+                    {formatName(m.fullName)} ({m.designation || 'Project Manager'})
                   </option>
                 ))}
               </select>
-              <p className="text-caption text-muted mt-1">
-                The PM controls project execution, reviews step deliverables, and approves task completions.
-              </p>
-            </div>
-
-            <div className="flex items-center sm:pt-6">
-              <p className="text-caption text-muted">
-                Steps can be assigned only to engineers in the selected PM's team.
-              </p>
             </div>
           </div>
 
@@ -824,27 +1053,27 @@ export function AutomationProjectWizard({
               onClick={() => setCurrentStep(1)}
               className="btn btn-secondary"
             >
-              ← Back: Order Details
+              ← Back to Order
             </button>
             <button
               type="button"
               onClick={handleProceedToStep3}
               className="btn btn-primary"
             >
-              Next: Review Team & Dates →
+              Next: Review Panels & Team →
             </button>
           </div>
         </section>
       ) : null}
 
-      {/* STEP 3: REVIEW TEAM & DATES */}
+      {/* STEP 3: REVIEW PANELS & TEAM */}
       {currentStep === 3 ? (
         <section className="card p-5 space-y-6 bg-surface">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-title-sm font-semibold text-ink">3. Review Team & Sequential Tasks</h2>
+              <h2 className="text-title-sm font-semibold text-ink">3. Review Panels & Assign Engineers</h2>
               <p className="text-caption text-muted">
-                Quantity multiplies task duration (e.g. PLC × 2 = 13 steps of 2 working days each). Expand any package to inspect assignees.
+                Each panel runs in parallel with its own assigned engineer. Expand any panel to inspect the 13 sequential steps and dates.
               </p>
             </div>
 
@@ -883,86 +1112,98 @@ export function AutomationProjectWizard({
             </div>
           ) : null}
 
-          {/* Package Summaries */}
-          <div className="space-y-4">
-            {activeScopes.map((scope) => {
-              const tpl = templates.find((t) => t.code === scope.templateCode);
-              if (!tpl) return null;
-
-              const isExpanded = expandedPackages.has(scope.templateCode);
-              const packageDays = scope.quantity * 13;
-
-              // Collect assigned engineers for this package
-              const assignedNames = new Set<string>();
-              let unassignedCount = 0;
-
-              for (const item of tpl.items) {
-                const itemKey = `${scope.templateCode}_${item.stepNumber}`;
-                const assignedId = taskAssignments[itemKey];
-                if (assignedId) {
-                  const eng = allEngineers.find((e) => e.id === assignedId);
-                  if (eng) assignedNames.add(formatName(eng.fullName));
-                } else {
-                  unassignedCount++;
-                }
-              }
+          {/* Panels List */}
+          <div className="space-y-3">
+            {panelsList.map((panel) => {
+              const isExpanded = expandedPanels.has(panel.panelKey);
+              const assignedId = taskAssignments[panel.panelKey] || '';
+              const rationale = rationales[panel.panelKey];
 
               return (
                 <div
-                  key={scope.templateCode}
+                  key={panel.panelKey}
                   className="rounded-lg border border-hairline bg-canvas overflow-hidden divide-y divide-hairline"
                 >
-                  {/* Package Summary Header */}
+                  {/* Panel Row */}
                   <div className="flex flex-wrap items-center justify-between gap-3 p-4">
                     <div className="flex items-center gap-3">
-                      <span className="flex h-8 w-8 items-center justify-center rounded bg-surface-strong text-xs font-mono font-bold text-ink">
-                        {scope.templateCode}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => togglePanelExpand(panel.panelKey)}
+                        className="flex h-7 w-7 items-center justify-center rounded bg-surface-strong text-xs font-mono font-bold text-ink hover:bg-surface-strong/80"
+                      >
+                        {isExpanded ? '▼' : '▸'}
+                      </button>
                       <div>
-                        <p className="font-semibold text-ink text-body-sm">
-                          {tpl.name} {scope.quantity > 1 ? `× ${scope.quantity}` : ''}
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-ink text-body-sm">{panel.title}</span>
+                          <span className="badge bg-surface-strong text-caption text-muted font-mono">
+                            13 steps · {panel.totalHours}h
+                          </span>
+                        </div>
+                        <p className="text-caption text-muted font-mono">
+                          {formatDate(startDate)} → {formatDate(targetEndDate)}
                         </p>
-                        <p className="text-caption text-muted">
-                          13 steps · {packageDays} working days total ({scope.quantity} {scope.quantity === 1 ? 'day' : 'days'}/step) · {assignedNames.size > 0 ? `Assigned: ${Array.from(assignedNames).join(', ')}` : 'Unassigned'}
-                          {unassignedCount > 0 ? ` (${unassignedCount} pending)` : ''}
-                        </p>
+                        {rationale ? (
+                          <p className="text-[11px] text-primary mt-0.5">{rationale.rationale}</p>
+                        ) : null}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <span className="text-caption text-muted font-mono hidden sm:inline">
-                        {formatDate(startDate)} → {formatDate(targetEndDate)}
-                      </span>
+                      <div className="w-56">
+                        <select
+                          value={assignedId}
+                          onChange={(e) =>
+                            setTaskAssignments((prev) => ({
+                              ...prev,
+                              [panel.panelKey]: e.target.value,
+                            }))
+                          }
+                          className={clsx(
+                            'select text-xs w-full font-medium',
+                            assignedId && doubleBookedIds.has(assignedId) && 'border-error',
+                          )}
+                        >
+                          <option value="">[ Choose Engineer ]</option>
+                          {candidateEngineers.map((eng) => (
+                            <option key={eng.id} value={eng.id}>
+                              {formatName(eng.fullName)} ({eng.grade.replaceAll('_', ' ')})
+                            </option>
+                          ))}
+                        </select>
+                        {assignedId && doubleBookedIds.has(assignedId) ? (
+                          <p className="text-[11px] text-error font-medium mt-1">
+                            Already on another panel - panels run on the same dates.
+                          </p>
+                        ) : null}
+                      </div>
                       <button
                         type="button"
-                        onClick={() => togglePackageExpand(scope.templateCode)}
+                        onClick={() => togglePanelExpand(panel.panelKey)}
                         className="btn btn-secondary btn-sm text-xs font-medium"
                       >
-                        {isExpanded ? 'Hide steps ▲' : 'Customize steps ▼'}
+                        {isExpanded ? 'Hide steps' : 'Inspect steps'}
                       </button>
                     </div>
                   </div>
 
-                  {/* Step-by-Step Checklist Table (When Expanded) */}
+                  {/* Read-only steps inspection table when expanded */}
                   {isExpanded ? (
                     <div className="overflow-x-auto p-3 bg-surface">
                       <table className="w-full text-left text-xs">
                         <thead className="border-b border-hairline text-caption font-semibold text-muted">
                           <tr>
                             <th className="py-2 px-2 w-12">#</th>
-                            <th className="py-2 px-2">Task / Milestone</th>
+                            <th className="py-2 px-2">Task Step</th>
                             <th className="py-2 px-2 w-28">Seniority</th>
-                            <th className="py-2 px-2 w-32">Time to complete</th>
-                            <th className="py-2 px-2 w-64">Assignee</th>
+                            <th className="py-2 px-2 w-24">Hours</th>
+                            <th className="py-2 px-2 w-48">Planned Dates</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-hairline">
-                          {tpl.items.map((item) => {
-                            const itemKey = `${scope.templateCode}_${item.stepNumber}`;
-                            const selectedUserId = taskAssignments[itemKey] || '';
-                            const plan = stepPlanMap[itemKey];
-                            const rationaleInfo = rationales[itemKey];
-
+                          {panel.template.items.map((item) => {
+                            const plan = stepPlanMap[`${panel.templateCode}_${item.stepNumber}`];
                             return (
                               <tr key={item.id} className="hover:bg-canvas/50">
                                 <td className="py-2 px-2 font-mono font-semibold text-muted">
@@ -979,78 +1220,11 @@ export function AutomationProjectWizard({
                                 <td className="py-2 px-2 text-muted">
                                   {item.recommendedSeniority.replaceAll('_', ' ')}
                                 </td>
-                                <td className="py-2 px-2">
-                                  <span className="font-mono font-medium text-ink text-xs">
-                                    {plan ? `${plan.hours} h` : '—'}
-                                  </span>
-                                  {plan ? (
-                                    <span className="text-[10px] text-muted block font-mono">
-                                      {plan.plannedStart === plan.plannedEnd
-                                        ? formatDate(new Date(plan.plannedStart))
-                                        : `${formatDate(new Date(plan.plannedStart))} – ${formatDate(new Date(plan.plannedEnd))}`}
-                                    </span>
-                                  ) : null}
+                                <td className="py-2 px-2 font-mono text-muted">
+                                  {item.defaultDurationHours} h
                                 </td>
-                                <td className="py-2 px-2">
-                                  <select
-                                    value={selectedUserId}
-                                    onChange={(e) => {
-                                      const uid = e.target.value;
-                                      setTaskAssignments((prev) => ({
-                                        ...prev,
-                                        [itemKey]: uid,
-                                      }));
-                                    }}
-                                    className="select text-xs py-1 w-full"
-                                  >
-                                    <option value="">[ Unassigned ]</option>
-                                    {filterPMTeamOnly ? (
-                                      <>
-                                        {selectedUserId &&
-                                          !candidateEngineers.some((e) => e.id === selectedUserId) &&
-                                          allEngineers.find((e) => e.id === selectedUserId) && (
-                                            <option value={selectedUserId}>
-                                              {formatName(allEngineers.find((e) => e.id === selectedUserId)!.fullName)} (
-                                              {allEngineers.find((e) => e.id === selectedUserId)!.designation ||
-                                                allEngineers.find((e) => e.id === selectedUserId)!.grade}
-                                              )
-                                            </option>
-                                          )}
-                                        {candidateEngineers.map((eng) => (
-                                          <option key={eng.id} value={eng.id}>
-                                            {formatName(eng.fullName)} ({eng.designation || eng.grade})
-                                          </option>
-                                        ))}
-                                      </>
-                                    ) : (
-                                      <>
-                                        {[1, 2, 3, 4].map((lvl) => {
-                                          const group = groupedEngineers[lvl];
-                                          if (!group || group.length === 0) return null;
-                                          return (
-                                            <optgroup key={lvl} label={SENIORITY_SECTION_LABELS[lvl]}>
-                                              {group.map((eng) => (
-                                                <option key={eng.id} value={eng.id}>
-                                                  {formatName(eng.fullName)} ({eng.designation || eng.grade})
-                                                </option>
-                                              ))}
-                                            </optgroup>
-                                          );
-                                        })}
-                                      </>
-                                    )}
-                                  </select>
-                                  {rationaleInfo ? (
-                                    <p
-                                      className={clsx(
-                                        'text-[10px] mt-0.5 truncate',
-                                        rationaleInfo.isWeakMatch ? 'text-error' : 'text-success'
-                                      )}
-                                      title={rationaleInfo.rationale}
-                                    >
-                                      {rationaleInfo.rationale}
-                                    </p>
-                                  ) : null}
+                                <td className="py-2 px-2 font-mono text-muted">
+                                  {plan ? `${plan.plannedStart} → ${plan.plannedEnd}` : '—'}
                                 </td>
                               </tr>
                             );
@@ -1070,14 +1244,14 @@ export function AutomationProjectWizard({
               onClick={() => setCurrentStep(2)}
               className="btn btn-secondary"
             >
-              ← Back: Scope & PM
+              ← Back to Scope
             </button>
             <button
               type="submit"
-              disabled={isPending || isTargetDateTooEarly}
-              className="btn btn-primary px-6"
+              disabled={isPending}
+              className="btn btn-primary"
             >
-              {isPending ? 'Creating Project...' : 'Create Project & Tasks'}
+              {isPending ? 'Creating Project & WBS...' : 'Create Automation Project ✓'}
             </button>
           </div>
         </section>

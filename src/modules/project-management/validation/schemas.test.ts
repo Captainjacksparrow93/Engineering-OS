@@ -24,7 +24,8 @@ describe('updateProjectSchema', () => {
 describe('createAutomationProjectSchema', () => {
   it('validates valid automation project payload', () => {
     const valid = {
-      name: 'Test Project',
+      workOrderNo: '4821',
+      clientId: 'client-1',
       clientName: 'Client A',
       managerId: 'pm-1',
       scopes: [{ templateCode: 'PLC', name: 'PLC', quantity: 1 }],
@@ -40,14 +41,35 @@ describe('createAutomationProjectSchema', () => {
       ],
     };
     const parsed = createAutomationProjectSchema.parse(valid);
-    expect(parsed.name).toBe('Test Project');
+    expect(parsed.workOrderNo).toBe('4821');
+    expect(parsed.clientId).toBe('client-1');
     expect(parsed.scopes.length).toBe(1);
     expect(parsed.tasks.length).toBe(1);
   });
 
+  it('rejects non-numeric workOrderNo', () => {
+    const invalid = {
+      workOrderNo: 'WO-1234',
+      clientId: 'client-1',
+      clientName: 'Client A',
+      managerId: 'pm-1',
+      scopes: [{ templateCode: 'PLC', name: 'PLC', quantity: 1 }],
+      tasks: [
+        {
+          templateCode: 'PLC',
+          unitIndex: 1,
+          stepNumber: 1,
+          title: 'IO List',
+        },
+      ],
+    };
+    expect(() => createAutomationProjectSchema.parse(invalid)).toThrow('Work Order No. must contain digits only');
+  });
+
   it('rejects empty scopes', () => {
     const invalid = {
-      name: 'Test Project',
+      workOrderNo: '4821',
+      clientId: 'client-1',
       clientName: 'Client A',
       managerId: 'pm-1',
       scopes: [],

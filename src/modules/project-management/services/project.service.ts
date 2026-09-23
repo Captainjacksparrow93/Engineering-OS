@@ -50,10 +50,12 @@ export async function createProject(principal: Principal, input: CreateProjectIn
         companyId: principal.companyId,
         code,
         name: input.name,
+        workOrderNo: input.workOrderNo,
         description: input.description,
+        clientId: input.clientId ?? null,
         clientName: input.clientName,
-        poNumber: input.poNumber,
-        orderValue: input.orderValue ?? null,
+        endUserName: input.endUserName ?? null,
+        applicationName: input.applicationName ?? null,
         panelType: input.panelType,
         panelCount: input.panelCount,
         priority: input.priority,
@@ -146,6 +148,27 @@ export async function nextProjectCode(companyId: string, customPrefix?: string):
   return `${prefix}${String(sequence).padStart(3, '0')}`;
 }
 
+/** Generates <CLIENT_REF>-<4-digit seq> e.g. ACS-0042-0001, scoped per client and company. */
+export async function nextClientProjectCode(companyId: string, clientRef: string): Promise<string> {
+  const prefix = `${clientRef.trim().toUpperCase()}-`;
+  const projects = await prisma.project.findMany({
+    where: { companyId, code: { startsWith: prefix } },
+    select: { code: true },
+  });
+
+  let maxSeq = 0;
+  for (const p of projects) {
+    const tail = p.code.slice(prefix.length);
+    if (/^\d+$/.test(tail)) {
+      const num = parseInt(tail, 10);
+      if (num > maxSeq) maxSeq = num;
+    }
+  }
+
+  const nextSeq = maxSeq + 1;
+  return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+}
+
 
 export async function updateProject(
   principal: Principal,
@@ -158,9 +181,10 @@ export async function updateProject(
   const data = {
     name: input.name,
     description: input.description,
+    clientId: input.clientId,
     clientName: input.clientName,
-    poNumber: input.poNumber,
-    orderValue: input.orderValue,
+    endUserName: input.endUserName,
+    applicationName: input.applicationName,
     panelType: input.panelType,
     panelCount: input.panelCount,
     priority: input.priority,
@@ -278,7 +302,6 @@ export async function listProjects(principal: Principal, filters: ProjectListFil
 
     return {
       ...project,
-      orderValue: project.orderValue ? Number(project.orderValue) : null,
       stats: {
         taskCount: total,
         completedCount: completed,
@@ -388,10 +411,7 @@ export async function getProjectWorkspace(principal: Principal, projectId: strin
   const actualHours = processedTasks.reduce((sum, t) => sum + t.actualHours, 0);
 
   return {
-    project: {
-      ...project,
-      orderValue: project.orderValue ? Number(project.orderValue) : null,
-    },
+    project,
     tasks: processedTasks,
     dependencies,
     schedule,

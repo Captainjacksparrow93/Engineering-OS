@@ -53,7 +53,8 @@ export function QuickFind() {
     setQuery('');
   }, []);
 
-  // Global Ctrl+K / Cmd+K listener
+  // Global Ctrl+K / Cmd+K and Escape listener. Escape is handled here rather than only
+  // on the input, so the panel still closes after focus has moved elsewhere.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -63,6 +64,9 @@ export function QuickFind() {
         } else {
           handleOpen();
         }
+      } else if (e.key === 'Escape' && isOpen) {
+        e.preventDefault();
+        handleClose();
       }
     };
 

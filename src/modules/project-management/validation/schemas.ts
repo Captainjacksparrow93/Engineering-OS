@@ -15,12 +15,14 @@ export const createProjectSchema = z.object({
   code: z
     .string()
     .transform((v) => v.trim().toUpperCase().replace(/[\s_]+/g, '-'))
-    .pipe(z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,19}$/, 'Project code must be 3-20 characters: letters, digits or dashes (e.g. ACS-PRJ-0042)'))
+    .pipe(z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,19}$/, 'Project code must be 3-20 characters: letters, digits or dashes (e.g. ACS-0042-0001)'))
     .optional(),
+  workOrderNo: z.string().trim().regex(/^\d+$/, 'Work Order No. must contain digits only'),
   description: z.string().trim().max(4000).optional(),
+  clientId: z.string().optional(),
   clientName: z.string().trim().min(2, 'Client name is required').max(160),
-  poNumber: z.string().trim().max(60).optional(),
-  orderValue: z.coerce.number().nonnegative().optional(),
+  endUserName: z.string().trim().max(160).optional(),
+  applicationName: z.string().trim().max(160).optional(),
   panelType: z.string().trim().max(120).optional(),
   panelCount: z.coerce.number().int().min(0).max(10_000).default(0),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).default('MEDIUM'),
@@ -109,15 +111,18 @@ export const handoverDecisionSchema = z.object({
 });
 
 export const createAutomationProjectSchema = z.object({
-  name: z.string().trim().min(3, 'Project name is too short').max(160),
+  name: z.string().trim().min(3, 'Project name is too short').max(160).optional(),
+  workOrderNo: z.string().trim().regex(/^\d+$/, 'Work Order No. must contain digits only'),
   code: z
     .string()
     .transform((v) => v.trim().toUpperCase().replace(/[\s_]+/g, '-'))
-    .pipe(z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,19}$/, 'Project code must be 3-20 characters: letters, digits or dashes (e.g. ACS-PRJ-0042)'))
+    .pipe(z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,19}$/, 'Project code must be 3-20 characters: letters, digits or dashes (e.g. ACS-0042-0001)'))
     .optional(),
+  clientId: z.string().min(1, 'Client is required'),
   clientName: z.string().trim().min(2, 'Client name is required').max(160),
-  poNumber: z.string().trim().max(60).optional(),
-  orderValue: z.coerce.number().nonnegative().optional(),
+  clientRefNumber: z.string().trim().optional(),
+  endUserName: z.string().trim().max(160).optional(),
+  applicationName: z.string().trim().max(160).optional(),
   managerId: z.string().min(1, 'Pick a project manager'),
   departmentId: z.string().optional(),
   startDate: z.string().optional(),
@@ -136,7 +141,7 @@ export const createAutomationProjectSchema = z.object({
     .array(
       z.object({
         templateCode: z.string().min(1),
-        unitIndex: z.coerce.number().int().min(1).max(20).optional(),
+        unitIndex: z.coerce.number().int().min(1).max(20),
         stepNumber: z.coerce.number().int().min(1).max(100),
         title: z.string().trim().min(1).max(200),
         assigneeId: z.string().optional(),

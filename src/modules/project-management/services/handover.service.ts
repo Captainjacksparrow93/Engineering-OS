@@ -726,3 +726,238 @@ const projectHandoverInclude = {
   fromUser: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
   toUser: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
 } as const;
+
+/**
+ * Reassign all remaining incomplete tasks in a panel phase.
+ */
+export async function requestPanelHandover(
+  principal: Principal,
+  input: { phaseTaskId: string; toUserId: string; reason: string },
+) {
+  const phaseTask = await prisma.task.findUniqueOrThrow({
+    where: { id: input.phaseTaskId },
+    include: {
+      project: { select: { id: true, code: true, name: true, managerId: true, departmentId: true } },
+      children: {
+        where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+        include: {
+          assignments: { where: { status: 'ACTIVE', role: 'OWNER' } },
+        },
+        orderBy: { code: 'asc' },
+      },
+    },
+  });
+
+  if (phaseTask.type !== 'PHASE') {
+    throw new DomainError('The specified task is not a panel phase.');
+  }
+
+  const isManager = phaseTask.project.managerId === principal.userId;
+  const canManage =
+    isManager ||
+    can(principal, 'pm.progress.review', {
+      projectId: phaseTask.projectId,
+      departmentId: phaseTask.project.departmentId,
+    }) ||
+    can(principal, 'pm.task.cancel', {
+      projectId: phaseTask.projectId,
+      departmentId: phaseTask.project.departmentId,
+    }) ||
+    can(principal, 'pm.project.read.all');
+
+  const eligibleTasks = phaseTask.children.filter((t) => {
+    const owner = t.assignments.find((a) => a.role === 'OWNER');
+    if (!owner) return false;
+    if (canManage) return true;
+    return owner.userId === principal.userId;
+  });
+
+  if (eligibleTasks.length === 0) {
+    throw new DomainError('No remaining incomplete tasks found to hand over in this panel.');
+  }
+
+  const target = await prisma.user.findFirst({
+    where: {
+      id: input.toUserId,
+      companyId: principal.companyId,
+      status: 'ACTIVE',
+      roleAssignments: {
+        some: {
+          role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } },
+        },
+      },
+      NOT: {
+        roleAssignments: {
+          some: {
+            role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER'] } },
+          },
+        },
+      },
+    },
+    select: { id: true, fullName: true },
+  });
+  if (!target) {
+    throw new DomainError('Reassignment target must be an active engineering team member.');
+  }
+
+  const team = await reassignTeamFor(principal);
+  if (team && !team.has(target.id)) {
+    throw new DomainError(OUTSIDE_TEAM_MESSAGE);
+  }
+
+  const pendingHandovers = await prisma.taskHandover.findMany({
+    where: {
+      taskId: { in: eligibleTasks.map((t) => t.id) },
+      status: 'PENDING',
+    },
+    select: { taskId: true },
+  });
+  const pendingTaskIds = new Set(pendingHandovers.map((h) => h.taskId));
+  const tasksToHandover = eligibleTasks.filter((t) => !pendingTaskIds.has(t.id));
+
+  if (tasksToHandover.length === 0) {
+    throw new DomainError('All remaining tasks in this panel already have pending reassign requests.');
+  }
+
+  const firstOwner = tasksToHandover[0]!.assignments.find((a) => a.role === 'OWNER')!.userId;
+
+  return prisma.$transaction(async (tx) => {
+    const createdList = [];
+    for (const task of tasksToHandover) {
+      const owner = task.assignments.find((a) => a.role === 'OWNER')!;
+      const fromUserId = owner.userId;
+      if (fromUserId === input.toUserId) continue;
+
+      const remainingPercent = Math.max(0, 100 - task.percentComplete);
+      const allocated = owner.allocatedHours ?? task.estimatedHours;
+      const remainingHours = Math.round(allocated * (remainingPercent / 100) * 10) / 10;
+
+      const created = await tx.taskHandover.create({
+        data: {
+          taskId: task.id,
+          fromUserId,
+          toUserId: input.toUserId,
+          requestedById: principal.userId,
+          reason: input.reason.trim(),
+          remainingPercent,
+          remainingHours,
+          status: 'PENDING',
+        },
+      });
+      createdList.push(created);
+
+      await audit(
+        {
+          actorId: principal.userId,
+          module: 'pm',
+          action: 'task.reassign_requested',
+          entityType: 'Task',
+          entityId: task.id,
+          diff: {
+            panel: phaseTask.title,
+            fromUserId,
+            toUserId: input.toUserId,
+            requestedById: principal.userId,
+            remainingPercent,
+            remainingHours,
+            reason: input.reason,
+          },
+        },
+        tx,
+      );
+
+      await publish(
+        {
+          name: EVENTS.HANDOVER_REQUESTED,
+          module: 'pm',
+          entityType: 'TaskHandover',
+          entityId: created.id,
+          actorId: principal.userId,
+          payload: {
+            taskId: task.id,
+            projectId: phaseTask.projectId,
+            fromUserId,
+            toUserId: input.toUserId,
+            remainingPercent,
+          },
+        },
+        tx,
+      );
+    }
+
+    if (createdList.length === 0) {
+      throw new DomainError('No tasks could be reassigned (target may already own them).');
+    }
+
+    // Consolidated notification to receiver
+    await notify(
+      {
+        userIds: [input.toUserId],
+        title: `Panel handover: ${phaseTask.title} (${createdList.length} tasks)`,
+        body: `${formatName(principal.fullName)} requested to hand over ${createdList.length} tasks in "${phaseTask.title}" to you. Reason: ${input.reason.trim()}`,
+        link: '/pm/handovers',
+      },
+      tx,
+    );
+
+    // Consolidated notification to PM (if not requester)
+    if (phaseTask.project.managerId !== principal.userId) {
+      await notify(
+        {
+          userIds: [phaseTask.project.managerId],
+          title: `Panel handover requested: ${phaseTask.title}`,
+          body: `${formatName(principal.fullName)} requested to hand over ${createdList.length} tasks in "${phaseTask.title}" to ${formatName(target.fullName)}.`,
+          link: `/pm/projects/${phaseTask.projectId}`,
+        },
+        tx,
+      );
+    }
+
+    // Consolidated notification to original owner (if requester is manager)
+    if (firstOwner !== principal.userId) {
+      await notify(
+        {
+          userIds: [firstOwner],
+          title: `Panel handover requested: ${phaseTask.title}`,
+          body: `${formatName(principal.fullName)} requested to hand over ${createdList.length} tasks in "${phaseTask.title}" to ${formatName(target.fullName)}.`,
+          link: `/pm/projects/${phaseTask.projectId}`,
+        },
+        tx,
+      );
+    }
+
+    return { count: createdList.length, handovers: createdList };
+  });
+}
+
+export async function decidePanelHandover(
+  principal: Principal,
+  input: { phaseTaskId: string; decision: 'ACCEPTED' | 'DECLINED' | 'REJECTED'; note?: string },
+) {
+  const childTasks = await prisma.task.findMany({
+    where: { parentId: input.phaseTaskId },
+    select: { id: true },
+  });
+  const taskIds = childTasks.map((t) => t.id);
+
+  const pending = await prisma.taskHandover.findMany({
+    where: {
+      taskId: { in: taskIds },
+      toUserId: principal.userId,
+      status: 'PENDING',
+    },
+    select: { id: true },
+  });
+
+  if (pending.length === 0) {
+    throw new DomainError('No pending reassignments found for you on this panel.');
+  }
+
+  const results = [];
+  for (const h of pending) {
+    const res = await decideHandover(principal, h.id, input.decision, input.note);
+    results.push(res);
+  }
+  return { count: results.length, decision: input.decision };
+}
+

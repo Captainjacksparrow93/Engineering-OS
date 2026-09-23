@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import clsx from 'clsx';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import type { PermissionKey } from '@/core/rbac/permissions';
@@ -144,13 +145,19 @@ export function Sidebar({
         isCollapsed ? 'w-16' : 'w-64'
       )}
     >
-      {/* Top Header / Wordmark & Collapse Toggle */}
+      {/* Top Header / Logo & Collapse Toggle */}
       <div className={clsx('flex h-16 items-center border-b border-hairline shrink-0', isCollapsed ? 'justify-center px-2' : 'px-lg')}>
         {!isCollapsed ? (
           <div className="flex items-center justify-between w-full">
-            <Link href="/dashboard" className="flex items-baseline gap-xxs" title="Engineering OS · ACS Engitech Pvt Ltd">
-              <span className="text-display-sm text-primary">Engineering</span>
-              <span className="text-display-sm text-ink">OS</span>
+            <Link href="/dashboard" className="flex items-center" title="ACS Engitech Pvt Ltd">
+              <Image
+                src="/acs-logo.svg"
+                alt="ACS Engitech"
+                width={130}
+                height={40}
+                className="h-9 w-auto object-contain"
+                priority
+              />
             </Link>
             <button
               type="button"
@@ -163,15 +170,17 @@ export function Sidebar({
             </button>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            title="Expand sidebar (Ctrl+B)"
-            aria-label="Expand sidebar"
-            className="inline-flex items-center justify-center rounded-md border border-hairline p-1.5 text-muted hover:bg-surface-strong hover:text-ink transition-colors"
-          >
-            {Icons.Expand}
-          </button>
+          <div className="flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              title="Expand sidebar (Ctrl+B)"
+              aria-label="Expand sidebar"
+              className="inline-flex items-center justify-center rounded-md border border-hairline p-1.5 text-muted hover:bg-surface-strong hover:text-ink transition-colors"
+            >
+              {Icons.Expand}
+            </button>
+          </div>
         )}
       </div>
 
@@ -237,14 +246,6 @@ export function Sidebar({
           </div>
         ) : null}
       </nav>
-
-
-      {/* Bottom Footer */}
-      <div className="border-t border-hairline shrink-0 px-3 py-2.5 flex items-center h-[41px] bg-canvas text-caption text-muted-soft">
-        {!isCollapsed ? (
-          <span className="truncate font-medium text-ink">ACS Engitech Pvt Ltd</span>
-        ) : null}
-      </div>
     </aside>
   );
 }
