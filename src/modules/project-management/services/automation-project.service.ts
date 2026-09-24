@@ -203,23 +203,6 @@ export async function createAutomationProject(principal: Principal, input: Creat
     );
   }
 
-  // Panels run in parallel on the same planned dates, so an engineer on two panels owes
-  // double the hours in the same window and the target date becomes unachievable.
-  const panelsByAssignee = new Map<string, Set<string>>();
-  for (const task of input.tasks) {
-    if (!task.assigneeId) continue;
-    const panels = panelsByAssignee.get(task.assigneeId) ?? new Set<string>();
-    panels.add(`${task.templateCode} Panel ${task.unitIndex}`);
-    panelsByAssignee.set(task.assigneeId, panels);
-  }
-  for (const [, panels] of panelsByAssignee) {
-    if (panels.size > 1) {
-      throw new DomainError(
-        `One engineer cannot hold ${Array.from(panels).join(' and ')}: panels run in parallel on the same dates. Assign one engineer per panel.`,
-      );
-    }
-  }
-
   // Determine and validate client
   if (!input.clientId) {
     throw new DomainError('Client is required. Pick a client before creating the project.');

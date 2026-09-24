@@ -449,37 +449,6 @@ export function AutomationProjectWizard({
     }
   };
 
-  /**
-   * Panels are scheduled in parallel - every panel carries the same planned dates - so one
-   * engineer on two panels means double the work in the same window. The wizard blocks it
-   * rather than quietly promising a delivery date nobody can hit.
-   */
-  const doubleBookedEngineers = useMemo(() => {
-    const panelsByEngineer = new Map<string, string[]>();
-    for (const panel of panelsList) {
-      const engineerId = taskAssignments[panel.panelKey];
-      if (!engineerId) continue;
-      const titles = panelsByEngineer.get(engineerId) ?? [];
-      titles.push(panel.title);
-      panelsByEngineer.set(engineerId, titles);
-    }
-
-    return Array.from(panelsByEngineer.entries())
-      .filter(([, panelTitles]) => panelTitles.length > 1)
-      .map(([engineerId, panelTitles]) => ({
-        engineerId,
-        engineerName: formatName(
-          allEngineers.find((eng) => eng.id === engineerId)?.fullName ?? 'This engineer',
-        ),
-        panelTitles,
-      }));
-  }, [panelsList, taskAssignments, allEngineers]);
-
-  const doubleBookedIds = useMemo(
-    () => new Set(doubleBookedEngineers.map((entry) => entry.engineerId)),
-    [doubleBookedEngineers],
-  );
-
   const unassignedPanels = useMemo(
     () => panelsList.filter((panel) => !taskAssignments[panel.panelKey]).map((panel) => panel.title),
     [panelsList, taskAssignments],
@@ -507,14 +476,6 @@ export function AutomationProjectWizard({
 
     if (unassignedPanels.length > 0) {
       setError(`Assign an engineer to every panel. Still unassigned: ${unassignedPanels.join(', ')}.`);
-      return;
-    }
-
-    if (doubleBookedEngineers.length > 0) {
-      const [first] = doubleBookedEngineers;
-      setError(
-        `${first!.engineerName} is assigned to ${first!.panelTitles.join(' and ')}. Panels run in parallel on the same dates, so one engineer per panel is required - otherwise the delivery date is not achievable.`,
-      );
       return;
     }
 
@@ -1180,10 +1141,7 @@ export function AutomationProjectWizard({
                               [panel.panelKey]: e.target.value,
                             }))
                           }
-                          className={clsx(
-                            'select text-xs w-full font-medium',
-                            assignedId && doubleBookedIds.has(assignedId) && 'border-error',
-                          )}
+                          className="select text-xs w-full font-medium"
                         >
                           <option value="">[ Choose Engineer ]</option>
                           {candidateEngineers.map((eng) => (
@@ -1192,11 +1150,6 @@ export function AutomationProjectWizard({
                             </option>
                           ))}
                         </select>
-                        {assignedId && doubleBookedIds.has(assignedId) ? (
-                          <p className="text-[11px] text-error font-medium mt-1">
-                            Already on another panel - panels run on the same dates.
-                          </p>
-                        ) : null}
                       </div>
                       <button
                         type="button"

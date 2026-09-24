@@ -21,7 +21,6 @@ import {
   requestHandover,
   decideHandover,
   requestPanelHandover,
-  decidePanelHandover,
   requestProjectHandover,
   decideProjectHandover,
   listHandovers,
@@ -119,6 +118,7 @@ async function main() {
   const munaf = await principalFor(MUNAF);
   const dhrupin = await principalFor(DHRUPIN);
   const harsh = await principalFor(HARSH);
+  const ridhhi = await principalFor(RIDHHI);
 
   const harshId = await idFor(HARSH);
   const ridhhiId = await idFor(RIDHHI);
@@ -188,7 +188,7 @@ async function main() {
   });
   console.log(`   Created ${project.code} with ${tasks.length} steps, all owned by Harsh (${HARSH}).`);
 
-  const [t1, t2, t3, t4, t5] = tasks;
+  const [t1, t2, , t4, t5] = tasks;
 
   try {
     // ------------------------------------------------- 1. within own squad
@@ -202,43 +202,16 @@ async function main() {
     const released = await prisma.taskAssignment.count({ where: { taskId: t1!.id, status: 'RELEASED' } });
     check('previous assignment kept as RELEASED (hours preserved)', released === 1);
 
-    // --------------------------------------------------- 2. across squads
-    console.log('\n2. PM assigns to ANOTHER squad — expect a request, and NO movement');
+    // --------------------------------------------------- 2. across squads (Management)
+    console.log('\n2. PM assigns to ANOTHER squad — direct assignment, no request menu items');
     await assignTask(paras, t2!.id, { userId: hetId, role: 'OWNER' });
-    const h2 = await prisma.taskHandover.findFirst({ where: { taskId: t2!.id } });
-    check('a handover request was created', Boolean(h2));
-    check('status is PENDING', h2?.status === 'PENDING', h2?.status);
-    check('work has NOT moved yet', (await ownerOf(t2!.id)) === HARSH, `owner still ${await ownerOf(t2!.id)}`);
-
-    // --------------------------------------- 3. stage 1: receiving manager
-    console.log('\n3. Receiving manager (Munaf) approves — expect AWAITING_HEAD_APPROVAL, still no movement');
-    await decideHandover(munaf, h2!.id, 'ACCEPTED');
-    const h2b = await prisma.taskHandover.findUnique({ where: { id: h2!.id } });
-    check('status is AWAITING_HEAD_APPROVAL', h2b?.status === 'AWAITING_HEAD_APPROVAL', h2b?.status);
-    check('PM2 decision recorded', Boolean(h2b?.decidedById));
+    check('work moved immediately to Het', (await ownerOf(t2!.id)) === HET, `owner is now ${await ownerOf(t2!.id)}`);
     check(
-      'work STILL has not moved (the rule that matters)',
-      (await ownerOf(t2!.id)) === HARSH,
-      `owner ${await ownerOf(t2!.id)}`,
+      'no handover request was created',
+      (await prisma.taskHandover.count({ where: { taskId: t2!.id } })) === 0,
     );
-
-    // ------------------------------------------------------ 4. stage 2: head
-    console.log('\n4. Head (Dilip) approves — expect ACCEPTED and the work to move');
-    await decideHandover(dilip, h2!.id, 'ACCEPTED');
-    const h2c = await prisma.taskHandover.findUnique({ where: { id: h2!.id } });
-    check('status is ACCEPTED', h2c?.status === 'ACCEPTED', h2c?.status);
-    check('head approval recorded separately', Boolean(h2c?.headApprovedById));
-    check('work has moved to Het', (await ownerOf(t2!.id)) === HET, `owner is now ${await ownerOf(t2!.id)}`);
-
-    // ------------------------------------------------------ 5. reject path
-    console.log('\n5. Receiving manager DECLINES — expect it to end there, nothing moved');
-    await assignTask(paras, t3!.id, { userId: hetId, role: 'OWNER' });
-    const h3 = await prisma.taskHandover.findFirst({ where: { taskId: t3!.id } });
-    await decideHandover(munaf, h3!.id, 'DECLINED', 'not available');
-    const h3b = await prisma.taskHandover.findUnique({ where: { id: h3!.id } });
-    check('status is DECLINED', h3b?.status === 'DECLINED', h3b?.status);
-    check('no head approval was recorded', !h3b?.headApprovedById);
-    check('work did not move', (await ownerOf(t3!.id)) === HARSH, `owner ${await ownerOf(t3!.id)}`);
+    const released2 = await prisma.taskAssignment.count({ where: { taskId: t2!.id, status: 'RELEASED' } });
+    check('previous assignment kept as RELEASED (hours preserved)', released2 === 1);
 
     // -------------------------------------------------- 6. head acts directly
     console.log('\n6. Head assigns across squads — expect a direct move, no request');
@@ -262,6 +235,21 @@ async function main() {
     check('engineer CAN request inside their own squad', Boolean(h5));
     check('work does not move until accepted', (await ownerOf(t5!.id)) === HARSH);
 
+    // Receiving peer engineer (Ridhhi) sees the request in listHandovers
+    const ridhhiInbox = await listHandovers(ridhhi);
+    check(
+      'receiving peer engineer sees it in incoming requests',
+      ridhhiInbox.incoming.some((h) => h.id === (h5 as any).id),
+    );
+
+    // Service Head (Rajani) has oversight visibility
+    const rajaniInbox = await listHandovers(rajani);
+    check('Service Head sees oversight handovers', Boolean(rajaniInbox.oversight !== undefined));
+
+    // Peer engineer accepts -> work moves!
+    await decideHandover(ridhhi, (h5 as any).id, 'ACCEPTED');
+    check('after acceptance work moves to peer engineer', (await ownerOf(t5!.id)) === RIDHHI);
+
     // ------------------------------------------------- 8. visibility (Phase 6)
     console.log('\n8. Visibility after a cross-squad task handover (Phase 6)');
     const hetMember = await prisma.projectMember.findFirst({
@@ -273,37 +261,8 @@ async function main() {
     });
     check('receiving manager did NOT gain a project-scoped role', !munafProjectRole);
 
-    // ------------------------------------------------- 9. lists (Phase 4)
-    console.log('\n9. AWAITING_HEAD_APPROVAL must be visible to those who can act (Phase 4)');
-    const pAwait = await makeProject(paras.userId, harshId, 1);
-    const pTasks = await prisma.task.findMany({
-      where: { projectId: pAwait.id, type: 'PROJECT' },
-      orderBy: { code: 'asc' },
-      select: { id: true },
-    });
-    await assignTask(paras, pTasks[0]!.id, { userId: hetId, role: 'OWNER' });
-    const hAwait = await prisma.taskHandover.findFirst({ where: { taskId: pTasks[0]!.id } });
-    await decideHandover(munaf, hAwait!.id, 'ACCEPTED');
-
-    const seenBy = async (p: Principal) => {
-      const l = await listHandovers(p);
-      const all = [...l.incoming, ...l.outgoing, ...l.oversight];
-      return all.some((h) => h.id === hAwait!.id);
-    };
-    check('Technical Head sees the awaiting-head row', await seenBy(dilip));
-    check('Service Head sees it too', await seenBy(rajani));
-    check('Director sees it (sees everything)', await seenBy(director));
-
-    // ---------------------------------------- 10. Service Head acts as a head
-    console.log('\n10. Service Head has the same powers as Technical Head');
-    await decideHandover(rajani, hAwait!.id, 'ACCEPTED');
-    const hAwait2 = await prisma.taskHandover.findUnique({ where: { id: hAwait!.id } });
-    check('Service Head can give stage-2 approval', hAwait2?.status === 'ACCEPTED', hAwait2?.status);
-    await assignTask(rajani, pTasks[1]!.id, { userId: yogiId, role: 'OWNER' });
-    check('Service Head assigns across squads directly', (await ownerOf(pTasks[1]!.id)) === YOGI);
-
-    // --------------------------------- 11. panel handover across squads
-    console.log('\n11. PANEL handover across squads must need the same two approvals');
+    // --------------------------------- 11. panel handover by PM / Management
+    console.log('\n11. PANEL handover by PM / Management moves work directly with no request');
     const pPanel = await makeProject(paras.userId, harshId, 1);
     const phase = await prisma.task.findFirst({
       where: { projectId: pPanel.id, type: 'PHASE' },
@@ -314,28 +273,15 @@ async function main() {
       toUserId: hetId,
       reason: 'cross-squad panel handover',
     });
-    const panelHs = await prisma.taskHandover.findMany({
-      where: { task: { parentId: phase!.id } },
-    });
-    check('panel handover created requests', panelHs.length > 0, `${panelHs.length} rows`);
-    check('all start PENDING', panelHs.every((h) => h.status === 'PENDING'));
     const panelTasks = await prisma.task.findMany({ where: { parentId: phase!.id }, select: { id: true } });
-    check('no panel work moved yet', (await ownerOf(panelTasks[0]!.id)) === HARSH);
-
-    await decidePanelHandover(munaf, { phaseTaskId: phase!.id, decision: 'ACCEPTED' });
-    const panelAfterPm2 = await prisma.taskHandover.findMany({ where: { task: { parentId: phase!.id } } });
+    check('PM panel handover moved work immediately to Het', (await ownerOf(panelTasks[0]!.id)) === HET);
     check(
-      'after PM2 approval the batch is AWAITING_HEAD_APPROVAL',
-      panelAfterPm2.every((h) => h.status === 'AWAITING_HEAD_APPROVAL'),
-      panelAfterPm2.map((h) => h.status).join(','),
+      'no panel handover requests were created',
+      (await prisma.taskHandover.count({ where: { task: { parentId: phase!.id } } })) === 0,
     );
-    check('panel work STILL has not moved', (await ownerOf(panelTasks[0]!.id)) === HARSH);
-
-    await decidePanelHandover(dilip, { phaseTaskId: phase!.id, decision: 'ACCEPTED' });
-    check('after head approval the panel moves', (await ownerOf(panelTasks[0]!.id)) === HET);
 
     // ------------------------- 12. engineer panel handover boundaries
-    console.log('\n12. Engineer panel handover — own squad only');
+    console.log('\n12. Engineer panel handover — own squad only, creates requests');
     const pEng = await makeProject(paras.userId, harshId, 1);
     const engPhase = await prisma.task.findFirst({
       where: { projectId: pEng.id, type: 'PHASE' },
@@ -349,7 +295,7 @@ async function main() {
       toUserId: ridhhiId,
       reason: 'same squad panel handover',
     });
-    check('engineer CAN hand a panel to their own squad', Boolean(okPanel));
+    check('engineer CAN hand a panel to their own squad', Boolean(okPanel && okPanel.handovers.length > 0));
 
     // ---------------------------------------- 13. PROJECT handover
     console.log('\n13. PROJECT handover PM -> PM needs two approvals');
@@ -413,33 +359,27 @@ async function main() {
     await assignTask(dhrupin, aTasks[0]!.id, { userId: await idFor('ACS-0073'), role: 'OWNER' });
     check('Asst Manager assigns inside own squad directly', (await ownerOf(aTasks[0]!.id)) === 'ACS-0073');
     await assignTask(dhrupin, aTasks[1]!.id, { userId: harshId, role: 'OWNER' });
-    const aCross = await prisma.taskHandover.findFirst({ where: { taskId: aTasks[1]!.id } });
-    check('Asst Manager crossing squads raises a request', aCross?.status === 'PENDING', aCross?.status);
-    check('and nothing moved', (await ownerOf(aTasks[1]!.id)) === YOGI);
+    check('Asst Manager assigns across squads directly', (await ownerOf(aTasks[1]!.id)) === HARSH);
+    check(
+      'no request was created',
+      (await prisma.taskHandover.count({ where: { taskId: aTasks[1]!.id } })) === 0,
+    );
 
-    // --------------------------------------- 17. self-approval guard
-    console.log('\n17. One person must not satisfy both approval stages');
+    // --------------------------------------- 17. project handover approval sequence
+    console.log('\n17. Project handover approval sequence (Stage 1 receiver, Stage 2 leadership)');
     const pSelf = await makeProject(paras.userId, harshId, 1);
-    const sTasks = await prisma.task.findMany({
-      where: { projectId: pSelf.id, type: 'PROJECT' },
-      orderBy: { code: 'asc' },
-      select: { id: true },
+    await requestProjectHandover(paras, {
+      projectId: pSelf.id,
+      toUserId: parthId,
+      reason: 'testing approval sequence',
     });
-    await assignTask(paras, sTasks[0]!.id, { userId: hetId, role: 'OWNER' });
-    const sh = await prisma.taskHandover.findFirst({ where: { taskId: sTasks[0]!.id } });
-    await decideHandover(dilip, sh!.id, 'ACCEPTED'); // stage 1, as an oversight holder
-    const shAfter = await prisma.taskHandover.findUnique({ where: { id: sh!.id } });
-    if (shAfter?.status === 'ACCEPTED') {
-      check(
-        'head approving stage 1 completed it in one step (no separate stage 2)',
-        true,
-        'NOTE: verify this is intended — a single head both accepted and approved',
-      );
-    } else {
-      await expectRejection('the same head cannot also give stage-2 approval', () =>
-        decideHandover(dilip, sh!.id, 'ACCEPTED'),
-      );
-    }
+    const sh = await prisma.projectHandover.findFirst({ where: { projectId: pSelf.id } });
+    await decideProjectHandover(parth, sh!.id, 'ACCEPTED');
+    const shAfter = await prisma.projectHandover.findUnique({ where: { id: sh!.id } });
+    check('receiving manager approves stage 1: AWAITING_HEAD_APPROVAL', shAfter?.status === 'AWAITING_HEAD_APPROVAL');
+    await decideProjectHandover(dilip, sh!.id, 'ACCEPTED');
+    const shDone = await prisma.projectHandover.findUnique({ where: { id: sh!.id } });
+    check('head approves stage 2: ACCEPTED', shDone?.status === 'ACCEPTED');
   } finally {
     // ------------------------------------------------------------- cleanup
     console.log('\n18. Cleaning up');

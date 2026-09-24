@@ -7,11 +7,10 @@ import { audit, diffOf } from '@/core/audit/audit';
 import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
-import { assertProjectPermission, assertTaskPermission, assertTaskVisible, getOrgPeople, loadTaskContext, oversightRecipients, projectVisibilityWhere, reassignTeamFor } from './access';
+import { assertProjectPermission, assertTaskPermission, assertTaskVisible, loadTaskContext, oversightRecipients, projectVisibilityWhere } from './access';
 import { addDependency } from './dependency.service';
 import type { CreateTaskInput } from '../validation/schemas';
 import { blockingReasons, completionBlockers, downstreamTaskIds, rollUpProgress, type Graph } from '../domain/scheduling';
-import { teamRootOf } from '../domain/teams';
 import { formatName } from '@/core/utils/strings';
 
 /**
@@ -401,140 +400,7 @@ export async function assignTask(
   });
   if (!assignee) throw new DomainError('That employee is not active.');
 
-  const team = await reassignTeamFor(principal);
-  const isDirect = team === null || team.has(assignee.id);
-
-  if (!isDirect) {
-    // Cross-squad assignment:
-    // If caller is an engineer (no manager rights on project):
-    const canAssignCross =
-      can(principal, 'pm.task.assign', {
-        projectId: task.projectId,
-        departmentId: task.project.departmentId,
-      }) || task.project.managerId === principal.userId;
-
-    if (!canAssignCross) {
-      throw new DomainError('Engineers cannot hand over tasks outside their squad.');
-    }
-
-    // PM / Asst PM targeting another squad -> create a TaskHandover, status PENDING, do not move work
-    const existingPending = await prisma.taskHandover.findFirst({
-      where: { taskId, status: { in: ['PENDING', 'AWAITING_HEAD_APPROVAL'] } },
-    });
-    if (existingPending) {
-      throw new DomainError('A handover request is already awaiting a decision on this task.');
-    }
-
-    const existingOwner = task.assignments[0];
-    const fromUserId = existingOwner?.userId ?? principal.userId;
-
-    if (fromUserId === assignee.id) {
-      throw new DomainError('Task is already assigned to this engineer.');
-    }
-
-    const remainingPercent = Math.max(0, 100 - task.percentComplete);
-    const allocated = existingOwner?.allocatedHours ?? task.estimatedHours;
-    const remainingHours = input.allocatedHours ?? Math.max(1, Math.round(allocated * (remainingPercent / 100) * 10) / 10);
-
-    const people = await getOrgPeople(principal.companyId);
-    const toSquadLeadId = teamRootOf(assignee.id, people);
-
-    return prisma.$transaction(async (tx) => {
-      const created = await tx.taskHandover.create({
-        data: {
-          taskId,
-          fromUserId,
-          toUserId: assignee.id,
-          requestedById: principal.userId,
-          reason: input.note?.trim() || `Cross-squad assignment requested by ${formatName(principal.fullName)}`,
-          remainingPercent,
-          remainingHours,
-          status: 'PENDING',
-        },
-      });
-
-      await audit(
-        {
-          actorId: principal.userId,
-          module: 'pm',
-          action: 'task.reassign_requested',
-          entityType: 'Task',
-          entityId: taskId,
-          diff: {
-            fromUserId,
-            toUserId: assignee.id,
-            requestedById: principal.userId,
-            remainingPercent,
-            remainingHours,
-            crossSquad: true,
-          },
-        },
-        tx,
-      );
-
-      await publish(
-        {
-          name: EVENTS.HANDOVER_REQUESTED,
-          module: 'pm',
-          entityType: 'TaskHandover',
-          entityId: created.id,
-          actorId: principal.userId,
-          payload: {
-            taskId,
-            projectId: task.projectId,
-            fromUserId,
-            toUserId: assignee.id,
-            remainingPercent,
-          },
-        },
-        tx,
-      );
-
-      // Notify PM2 (receiving squad lead)
-      if (toSquadLeadId && toSquadLeadId !== principal.userId) {
-        await notify(
-          {
-            userIds: [toSquadLeadId],
-            title: `Cross-squad assignment request: ${task.title}`,
-            body: `${formatName(principal.fullName)} requested to assign "${task.title}" to ${formatName(assignee.fullName)} in your squad. Approval required.`,
-            link: '/pm/handovers',
-          },
-          tx,
-        );
-      }
-
-      // Notify leadership (Heads & Director)
-      const oversightIds = await oversightRecipients(principal.companyId, task.project.departmentId, principal.userId);
-      if (oversightIds.length > 0) {
-        await notify(
-          {
-            userIds: oversightIds,
-            title: `Cross-squad assignment requested: ${task.title}`,
-            body: `${formatName(principal.fullName)} requested to assign "${task.title}" across squads to ${formatName(assignee.fullName)}.`,
-            link: '/pm/approvals',
-          },
-          tx,
-        );
-      }
-
-      // Notify current owner if different from caller
-      if (fromUserId !== principal.userId) {
-        await notify(
-          {
-            userIds: [fromUserId],
-            title: `Task handover requested: ${task.title}`,
-            body: `${formatName(principal.fullName)} requested to hand over "${task.title}" to ${formatName(assignee.fullName)}.`,
-            link: `/pm/tasks/${taskId}`,
-          },
-          tx,
-        );
-      }
-
-      return created;
-    });
-  }
-
-  // Direct assignment (own squad, or caller holds pm.oversight)
+  // Management assignment: direct move, no request menu items, releases previous owner
   const remainingHours =
     input.allocatedHours ?? Math.max(1, task.estimatedHours * (1 - task.percentComplete / 100));
 
@@ -563,6 +429,17 @@ export async function assignTask(
       where: { projectId_userId: { projectId: task.projectId, userId: input.userId } },
       create: { projectId: task.projectId, userId: input.userId, role: 'ENGINEER' },
       update: {},
+    });
+
+    // Withdraw any pending handover requests on this task
+    await tx.taskHandover.updateMany({
+      where: { taskId, status: { in: ['PENDING', 'AWAITING_HEAD_APPROVAL'] } },
+      data: {
+        status: 'WITHDRAWN',
+        decidedById: principal.userId,
+        decidedAt: new Date(),
+        decisionNote: 'Reassigned directly by management',
+      },
     });
 
     await audit(

@@ -115,8 +115,94 @@ export async function requestHandover(
   const toSquadLeadId = teamRootOf(input.toUserId, people);
   const fromSquadLeadId = teamRootOf(fromUserId, people);
   const isCross = toSquadLeadId !== fromSquadLeadId;
+  const isManagerOrLead = !isExecutionStaff(principal) || canManage;
 
   return prisma.$transaction(async (tx) => {
+    if (isManagerOrLead) {
+      // Direct assignment by Director, Head, or PM: moves work immediately, no request menu items
+      await tx.taskAssignment.updateMany({
+        where: { taskId: input.taskId, status: 'ACTIVE', role: 'OWNER' },
+        data: { status: 'RELEASED', releasedAt: new Date() },
+      });
+
+      const newAssignment = await tx.taskAssignment.create({
+        data: {
+          taskId: input.taskId,
+          userId: input.toUserId,
+          role: 'OWNER',
+          status: 'ACTIVE',
+          allocatedHours: remainingHours,
+          assignedById: principal.userId,
+        },
+      });
+
+      // Ensure target is a member of the project
+      await tx.projectMember.upsert({
+        where: { projectId_userId: { projectId: task.projectId, userId: input.toUserId } },
+        create: { projectId: task.projectId, userId: input.toUserId, role: 'ENGINEER' },
+        update: {},
+      });
+
+      await audit(
+        {
+          actorId: principal.userId,
+          module: 'pm',
+          action: 'task.reassigned',
+          entityType: 'Task',
+          entityId: input.taskId,
+          diff: {
+            fromUserId,
+            toUserId: input.toUserId,
+            requestedById: principal.userId,
+            remainingPercent,
+            remainingHours,
+            reason: input.reason,
+            direct: true,
+          },
+        },
+        tx,
+      );
+
+      // Notification directly to the receiving engineer
+      await notify(
+        {
+          userIds: [input.toUserId],
+          title: `Task assigned: ${task.title}`,
+          body: `${formatName(principal.fullName)} handed over "${task.title}" to you. Reason: ${input.reason.trim()}`,
+          link: `/pm/tasks/${input.taskId}`,
+        },
+        tx,
+      );
+
+      // Notify previous owner
+      if (fromUserId !== principal.userId) {
+        await notify(
+          {
+            userIds: [fromUserId],
+            title: `Task reassigned: ${task.title}`,
+            body: `${formatName(principal.fullName)} reassigned "${task.title}" to ${formatName(target.fullName)}.`,
+            link: `/pm/tasks/${input.taskId}`,
+          },
+          tx,
+        );
+      }
+
+      // Notify PM if requester is not PM
+      if (task.project.managerId && task.project.managerId !== principal.userId && task.project.managerId !== fromUserId) {
+        await notify(
+          {
+            userIds: [task.project.managerId],
+            title: `Task reassigned: ${task.title}`,
+            body: `${formatName(principal.fullName)} reassigned "${task.title}" to ${formatName(target.fullName)}.`,
+            link: `/pm/tasks/${input.taskId}`,
+          },
+          tx,
+        );
+      }
+
+      return newAssignment;
+    }
+
     const created = await tx.taskHandover.create({
       data: {
         taskId: input.taskId,
@@ -1327,26 +1413,45 @@ export async function listHandovers(principal: Principal) {
   const people = await getOrgPeople(principal.companyId);
   const isHead = hasPermissionAnywhere(principal, 'pm.oversight');
   const isDirector = can(principal, 'pm.project.read.all');
+  const isStaff = isExecutionStaff(principal);
 
   // Squad members for whom principal is the squad lead (PM2)
   const mySquadMemberIds = people
     .filter((p) => teamRootOf(p.id, people) === principal.userId)
     .map((p) => p.id);
 
+  const mySquadRootId = teamRootOf(principal.userId, people);
+  const mySquadPeerIds = people
+    .filter((p) => teamRootOf(p.id, people) === mySquadRootId)
+    .map((p) => p.id);
+
   // Incoming task handovers:
-  // 1. Direct to principal with status PENDING (intra-squad engineer, or direct assignment to PM)
-  // 2. Cross-squad into principal's squad with status PENDING (principal is receiving squad lead PM2)
-  // 3. Status AWAITING_HEAD_APPROVAL for Heads and Director (stage 2 approval)
-  // 4. Status PENDING for Director (who can decide any pending handover)
-  const taskIncomingWhere: Prisma.TaskHandoverWhereInput[] = [
-    { toUserId: principal.userId, status: 'PENDING' },
-  ];
-  if (mySquadMemberIds.length > 0) {
+  // 1. Direct to principal with status PENDING:
+  //    - For engineers (execution staff): strictly peer-to-peer intra-squad requests that they can decide.
+  //    - For managers / squad leads: requests directly to them or into their squad.
+  // 2. Status AWAITING_HEAD_APPROVAL for Heads and Director (stage 2 approval)
+  // 3. Status PENDING for Director (who can decide any pending handover)
+  const taskIncomingWhere: Prisma.TaskHandoverWhereInput[] = [];
+
+  if (isStaff) {
     taskIncomingWhere.push({
-      toUserId: { in: mySquadMemberIds },
+      toUserId: principal.userId,
+      fromUserId: { in: mySquadPeerIds },
       status: 'PENDING',
     });
+  } else {
+    taskIncomingWhere.push({
+      toUserId: principal.userId,
+      status: 'PENDING',
+    });
+    if (mySquadMemberIds.length > 0) {
+      taskIncomingWhere.push({
+        toUserId: { in: mySquadMemberIds },
+        status: 'PENDING',
+      });
+    }
   }
+
   if (isHead || isDirector) {
     taskIncomingWhere.push({
       status: 'AWAITING_HEAD_APPROVAL',
@@ -1359,12 +1464,13 @@ export async function listHandovers(principal: Principal) {
   }
 
   // Incoming project handovers:
-  // 1. toUserId === principal.userId with status PENDING
+  // 1. toUserId === principal.userId with status PENDING (managers only)
   // 2. Status AWAITING_HEAD_APPROVAL for Heads and Director
   // 3. Status PENDING for Director
-  const projectIncomingWhere: Prisma.ProjectHandoverWhereInput[] = [
-    { toUserId: principal.userId, status: 'PENDING' },
-  ];
+  const projectIncomingWhere: Prisma.ProjectHandoverWhereInput[] = [];
+  if (!isStaff) {
+    projectIncomingWhere.push({ toUserId: principal.userId, status: 'PENDING' });
+  }
   if (isHead || isDirector) {
     projectIncomingWhere.push({
       status: 'AWAITING_HEAD_APPROVAL',
@@ -1515,8 +1621,12 @@ export async function requestPanelHandover(
   }
 
   const isManager = phaseTask.project.managerId === principal.userId;
+  const isDirector = can(principal, 'pm.project.read.all');
+  const isHead = hasPermissionAnywhere(principal, 'pm.oversight');
   const canManage =
     isManager ||
+    isDirector ||
+    isHead ||
     can(principal, 'pm.progress.review', {
       projectId: phaseTask.projectId,
       departmentId: phaseTask.project.departmentId,
@@ -1524,8 +1634,9 @@ export async function requestPanelHandover(
     can(principal, 'pm.task.cancel', {
       projectId: phaseTask.projectId,
       departmentId: phaseTask.project.departmentId,
-    }) ||
-    can(principal, 'pm.project.read.all');
+    });
+
+  const isManagerOrLead = !isExecutionStaff(principal) || canManage;
 
   const eligibleTasks = phaseTask.children.filter((t) => {
     const owner = t.assignments.find((a) => a.role === 'OWNER');
@@ -1572,11 +1683,157 @@ export async function requestPanelHandover(
     throw new DomainError('Engineers cannot hand over tasks across squads. Ask your project manager.');
   }
 
-  if (!isCross) {
+  if (!isCross && isExecutionStaff(principal)) {
     const team = await reassignTeamFor(principal);
     if (team && !team.has(target.id)) {
       throw new DomainError(OUTSIDE_TEAM_MESSAGE);
     }
+  }
+
+  if (isManagerOrLead) {
+    return prisma.$transaction(async (tx) => {
+      const movedTasks = [];
+      const now = new Date();
+
+      for (const task of eligibleTasks) {
+        const owner = task.assignments.find((a) => a.role === 'OWNER');
+        if (!owner) continue;
+        const fromUserId = owner.userId;
+        if (fromUserId === input.toUserId) continue;
+
+        const remainingPercent = Math.max(0, 100 - task.percentComplete);
+        const allocated = owner.allocatedHours ?? task.estimatedHours;
+        const remainingHours = Math.round(allocated * (remainingPercent / 100) * 10) / 10;
+
+        await tx.taskAssignment.updateMany({
+          where: { taskId: task.id, status: 'ACTIVE', role: 'OWNER' },
+          data: { status: 'RELEASED', releasedAt: now },
+        });
+
+        await tx.taskAssignment.create({
+          data: {
+            taskId: task.id,
+            userId: input.toUserId,
+            role: 'OWNER',
+            status: 'ACTIVE',
+            allocatedHours: remainingHours,
+            assignedById: principal.userId,
+          },
+        });
+
+        await tx.taskHandover.updateMany({
+          where: { taskId: task.id, status: { in: ['PENDING', 'AWAITING_HEAD_APPROVAL'] } },
+          data: {
+            status: 'WITHDRAWN',
+            decidedById: principal.userId,
+            decidedAt: now,
+            decisionNote: 'Reassigned directly by management',
+          },
+        });
+
+        await audit(
+          {
+            actorId: principal.userId,
+            module: 'pm',
+            action: 'task.reassigned',
+            entityType: 'Task',
+            entityId: task.id,
+            diff: {
+              panel: phaseTask.title,
+              fromUserId,
+              toUserId: input.toUserId,
+              requestedById: principal.userId,
+              remainingPercent,
+              remainingHours,
+              reason: input.reason,
+              direct: true,
+            },
+          },
+          tx,
+        );
+
+        await publish(
+          {
+            name: EVENTS.TASK_ASSIGNED,
+            module: 'pm',
+            entityType: 'Task',
+            entityId: task.id,
+            actorId: principal.userId,
+            payload: {
+              taskId: task.id,
+              projectId: phaseTask.projectId,
+              userId: input.toUserId,
+              fromUserId,
+              role: 'OWNER',
+            },
+          },
+          tx,
+        );
+
+        movedTasks.push({ taskId: task.id, fromUserId });
+      }
+
+      if (movedTasks.length === 0) {
+        throw new DomainError('No tasks could be reassigned (target may already own them).');
+      }
+
+      // Ensure target is a member of the project
+      await tx.projectMember.upsert({
+        where: { projectId_userId: { projectId: phaseTask.projectId, userId: input.toUserId } },
+        create: { projectId: phaseTask.projectId, userId: input.toUserId, role: 'ENGINEER' },
+        update: {},
+      });
+
+      // Notification directly to the receiving engineer with link to project
+      await notify(
+        {
+          userIds: [input.toUserId],
+          title: `Panel assigned: ${phaseTask.title} (${movedTasks.length} tasks)`,
+          body: `${formatName(principal.fullName)} handed over ${movedTasks.length} tasks in "${phaseTask.title}" to you. Reason: ${input.reason.trim()}`,
+          link: `/pm/projects/${phaseTask.projectId}`,
+        },
+        tx,
+      );
+
+      // Notify previous owners
+      const previousOwnerIds = Array.from(
+        new Set(
+          movedTasks
+            .map((m) => m.fromUserId)
+            .filter((uid): uid is string => Boolean(uid) && uid !== principal.userId && uid !== input.toUserId),
+        ),
+      );
+      if (previousOwnerIds.length > 0) {
+        await notify(
+          {
+            userIds: previousOwnerIds,
+            title: `Panel reassigned: ${phaseTask.title}`,
+            body: `${formatName(principal.fullName)} reassigned tasks in "${phaseTask.title}" to ${formatName(target.fullName)}.`,
+            link: `/pm/projects/${phaseTask.projectId}`,
+          },
+          tx,
+        );
+      }
+
+      // Notify PM if caller is not PM
+      if (
+        phaseTask.project.managerId &&
+        phaseTask.project.managerId !== principal.userId &&
+        phaseTask.project.managerId !== input.toUserId
+      ) {
+        await notify(
+          {
+            userIds: [phaseTask.project.managerId],
+            title: `Panel reassigned: ${phaseTask.title}`,
+            body: `${formatName(principal.fullName)} reassigned ${movedTasks.length} tasks in "${phaseTask.title}" to ${formatName(target.fullName)}.`,
+            link: `/pm/projects/${phaseTask.projectId}`,
+          },
+          tx,
+        );
+      }
+
+      return { count: movedTasks.length, handovers: [] };
+    });
   }
 
   const pendingHandovers = await prisma.taskHandover.findMany({
