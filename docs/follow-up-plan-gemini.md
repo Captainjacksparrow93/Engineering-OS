@@ -102,7 +102,14 @@ still works as before.
 
 ---
 
-## ▶ CURRENT WORK — `docs/handover-rework-plan.md`
+## ▶ CURRENT WORK — `docs/ui-verification-plan.md`
+
+UI verification of the handover rework, plus hunting the nested-form bug class. **Read its
+"ALREADY DONE" section first.** The service layer is already proven by
+`prisma/scripts/verify-handover-rework.ts` (51 assertions); what is unverified is the
+interface.
+
+### ✅ DONE — `docs/handover-rework-plan.md`
 
 The two-approval cross-squad handover rework. **Read its "Before you start" section first** —
 the database is now empty, so you must create test data before verifying anything, and the
