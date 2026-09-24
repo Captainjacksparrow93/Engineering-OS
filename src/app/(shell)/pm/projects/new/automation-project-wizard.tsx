@@ -881,13 +881,26 @@ export function AutomationProjectWizard({
                 &times;
               </button>
             </header>
-            <form onSubmit={handleCreateClient} className="card-body space-y-4 pt-4">
+            {/*
+              NOT a <form>. This dialog renders inside the wizard's own <form>, and nested
+              forms are invalid HTML: the browser discards the inner one, so its onSubmit
+              never fires and the click bubbles to the wizard form instead, which does a
+              native GET. That silently did nothing - no request, no error, no client.
+              Keep this a <div> and submit from the button's onClick.
+            */}
+            <div className="card-body space-y-4 pt-4">
               <div>
                 <label className="label text-xs font-semibold">Client Name *</label>
                 <input
                   type="text"
                   value={newClientName}
                   onChange={(e) => setNewClientName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void handleCreateClient(e);
+                    }
+                  }}
                   placeholder="e.g. Reliance Industries Ltd"
                   className="input text-sm w-full"
                   required
@@ -899,6 +912,12 @@ export function AutomationProjectWizard({
                   type="text"
                   value={newClientRef}
                   onChange={(e) => setNewClientRef(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void handleCreateClient(e);
+                    }
+                  }}
                   placeholder="e.g. ACS-0042"
                   pattern="ACS-\d{4}"
                   className="input text-sm w-full font-mono uppercase"
@@ -922,14 +941,15 @@ export function AutomationProjectWizard({
                   Cancel
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleCreateClient}
                   disabled={isCreatingClient}
                   className="btn btn-primary text-sm"
                 >
                   {isCreatingClient ? 'Saving...' : 'Save Client'}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       ) : null}

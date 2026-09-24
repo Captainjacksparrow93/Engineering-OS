@@ -180,7 +180,6 @@ async function main() {
   console.log('\n0. Building a throwaway project (created by Dilip, owned by Paras, assigned to Harsh)');
 
   const project = await makeProject(paras.userId, harshId, 1);
-  const client = { id: madeClients[0]! };
 
   const tasks = await prisma.task.findMany({
     where: { projectId: project.id, type: 'PROJECT' },
