@@ -34,7 +34,7 @@ const DESIGNATION_UPDATES = [
 
 async function main() {
   console.log('====================================================');
-  console.log('  PM TEAM REPORTING LINES & DESIGNATION UPDATES     ');
+  console.log('  PM TEAM & ROSTER UPDATE RUNNER (§3b, §3c, §3e, §3f)');
   console.log('====================================================\n');
 
   // Load all users involved
@@ -46,6 +46,10 @@ async function main() {
   for (const item of DESIGNATION_UPDATES) {
     codes.add(item.employeeCode);
   }
+  codes.add('ACS-0081'); // Krupesh Solanki
+  codes.add('ACS-0057'); // Amey Kulkarni
+  codes.add('ACS-0070'); // Dhrupin Vaghasiya
+  codes.add('ACS-0075'); // Munaf Multani
 
   const users = await prisma.user.findMany({
     where: { employeeCode: { in: Array.from(codes) } },
@@ -54,6 +58,7 @@ async function main() {
       employeeCode: true,
       fullName: true,
       designation: true,
+      departmentId: true,
       managerId: true,
     },
   });
@@ -61,6 +66,7 @@ async function main() {
   const byCode = new Map(users.map((u) => [u.employeeCode, u]));
   const byId = new Map(users.map((u) => [u.id, u]));
 
+  // ------------------------------------------------------------------- 1. Reporting Lines (§3b)
   console.log('1. Checking and updating reporting lines (matching by employeeCode):');
   let managerUpdatesCount = 0;
 
@@ -99,8 +105,9 @@ async function main() {
     }
   }
 
-  console.log(`\nReporting lines checked: ${REPORTING_LINE_UPDATES.length}, updated: ${managerUpdatesCount}.\n`);
+  console.log(`   => Reporting lines checked: ${REPORTING_LINE_UPDATES.length}, updated: ${managerUpdatesCount}.\n`);
 
+  // ------------------------------------------------------------------- 2. Designations (§3c)
   console.log('2. Checking and updating designations:');
   let designationUpdatesCount = 0;
 
@@ -125,28 +132,177 @@ async function main() {
     }
   }
 
-  console.log(`\nDesignations checked: ${DESIGNATION_UPDATES.length}, updated: ${designationUpdatesCount}.\n`);
+  console.log(`   => Designations checked: ${DESIGNATION_UPDATES.length}, updated: ${designationUpdatesCount}.\n`);
 
-  // Summary verification
-  console.log('3. Verification summary for Squad Leads & reporting hierarchy:');
-  const dilip = byCode.get('ACS-0061');
-  if (dilip) {
-    const squadLeads = await prisma.user.findMany({
-      where: { managerId: dilip.id },
-      select: { employeeCode: true, fullName: true, designation: true },
+  // ------------------------------------------------------------------- 3. Krupesh Solanki moves to QC (§3f)
+  console.log('3. Krupesh Solanki (ACS-0081) department & manager transfer (§3f):');
+  const krupesh = byCode.get('ACS-0081');
+  const amey = byCode.get('ACS-0057');
+
+  if (!krupesh) {
+    throw new Error('FATAL: User ACS-0081 (Krupesh Solanki) not found in database.');
+  }
+  if (!amey) {
+    throw new Error('FATAL: Manager ACS-0057 (Amey Kulkarni) not found in database.');
+  }
+
+  const qcDept = await prisma.department.findFirst({
+    where: { code: 'QC' },
+  });
+  if (!qcDept) {
+    throw new Error("FATAL: Department with code 'QC' (Quality Control & Testing) not found in database!");
+  }
+
+  if (krupesh.departmentId === qcDept.id && krupesh.managerId === amey.id) {
+    console.log(`   - [OK] ${krupesh.fullName} (ACS-0081) is already in department '${qcDept.name}' (QC) reporting to ${amey.fullName} (ACS-0057).`);
+  } else {
+    const prevDept = krupesh.departmentId
+      ? await prisma.department.findUnique({ where: { id: krupesh.departmentId } })
+      : null;
+    const prevManager = krupesh.managerId ? byId.get(krupesh.managerId) : null;
+
+    await prisma.user.update({
+      where: { id: krupesh.id },
+      data: {
+        departmentId: qcDept.id,
+        managerId: amey.id,
+      },
     });
-    console.log(`   Reports under Dilip Asediya (${dilip.fullName}):`);
-    for (const lead of squadLeads) {
-      console.log(`     * ${lead.fullName} (${lead.employeeCode}) - ${lead.designation}`);
+
+    console.log(
+      `   - [UPDATED] ${krupesh.fullName} (ACS-0081):\n` +
+      `       Department: ${prevDept?.name ?? 'None'} (${prevDept?.code ?? 'N/A'}) -> ${qcDept.name} (QC)\n` +
+      `       Manager:    ${prevManager ? `${prevManager.fullName} (${prevManager.employeeCode})` : 'None'} -> ${amey.fullName} (ACS-0057)`
+    );
+  }
+  console.log('');
+
+  // ------------------------------------------------------------------- 4. Role Grants for Asst Managers (§3e)
+  console.log('4. Role adjustments for Assistant Managers (§3e):');
+  const asstManagerRole = await prisma.role.findFirst({
+    where: { key: 'ASST_MANAGER' },
+  });
+  if (!asstManagerRole) {
+    throw new Error("FATAL: Role 'ASST_MANAGER' not found in database! Ensure seed or permission migration has run.");
+  }
+
+  const seniorEngineerRole = await prisma.role.findFirst({
+    where: { key: 'SENIOR_ENGINEER' },
+  });
+  if (!seniorEngineerRole) {
+    throw new Error("FATAL: Role 'SENIOR_ENGINEER' not found in database!");
+  }
+
+  const asstManagers = ['ACS-0070', 'ACS-0075']; // Dhrupin Vaghasiya, Munaf Multani
+  for (const code of asstManagers) {
+    const user = byCode.get(code);
+    if (!user) {
+      console.warn(`   [WARN] User with code ${code} not found! Skipping.`);
+      continue;
+    }
+
+    // 4a. Ensure ASST_MANAGER (GLOBAL)
+    const existingAsstManager = await prisma.roleAssignment.findFirst({
+      where: {
+        userId: user.id,
+        roleId: asstManagerRole.id,
+        scopeType: 'GLOBAL',
+      },
+    });
+
+    if (existingAsstManager) {
+      console.log(`   - [OK] ${user.fullName} (${user.employeeCode}) already has role ASST_MANAGER (GLOBAL).`);
+    } else {
+      await prisma.roleAssignment.create({
+        data: {
+          userId: user.id,
+          roleId: asstManagerRole.id,
+          scopeType: 'GLOBAL',
+          scopeId: null,
+        },
+      });
+      console.log(`   - [GRANTED] ASST_MANAGER (GLOBAL) granted to ${user.fullName} (${user.employeeCode}).`);
+    }
+
+    // 4b. Remove SENIOR_ENGINEER role so they are not treated as assignable engineers
+    const deletedSeniorEng = await prisma.roleAssignment.deleteMany({
+      where: {
+        userId: user.id,
+        roleId: seniorEngineerRole.id,
+      },
+    });
+
+    if (deletedSeniorEng.count > 0) {
+      console.log(`   - [REMOVED] Removed ${deletedSeniorEng.count} SENIOR_ENGINEER role assignment(s) from ${user.fullName} (${user.employeeCode}).`);
+    } else {
+      console.log(`   - [OK] ${user.fullName} (${user.employeeCode}) does not hold SENIOR_ENGINEER.`);
+    }
+  }
+  console.log('');
+
+  // ------------------------------------------------------------------- 5. Verification Summary
+  console.log('5. Verification summary:');
+
+  // Check eligible project owners (PROJECT_MANAGER or ASST_MANAGER)
+  const projectOwners = await prisma.user.findMany({
+    where: {
+      roleAssignments: {
+        some: {
+          role: { key: { in: ['PROJECT_MANAGER', 'ASST_MANAGER'] } },
+        },
+      },
+    },
+    select: {
+      employeeCode: true,
+      fullName: true,
+      designation: true,
+      roleAssignments: { select: { role: { select: { key: true } } } },
+    },
+    orderBy: { employeeCode: 'asc' },
+  });
+
+  console.log(`   Eligible Project Owners in Wizard (found ${projectOwners.length}, expected 4: Parth, Paras, Munaf, Dhrupin):`);
+  for (const owner of projectOwners) {
+    const roles = owner.roleAssignments.map((r) => r.role.key).join(', ');
+    console.log(`     * ${owner.fullName} (${owner.employeeCode}) - ${owner.designation} [${roles}]`);
+  }
+
+  // Check squads under the 4 leads
+  const leadsToCheck = ['ACS-0063', 'ACS-0075', 'ACS-0070', 'ACS-0074'];
+  console.log('\n   Squad breakdowns:');
+  for (const leadCode of leadsToCheck) {
+    const lead = byCode.get(leadCode);
+    if (!lead) continue;
+    const reports = await prisma.user.findMany({
+      where: { managerId: lead.id },
+      select: { employeeCode: true, fullName: true, designation: true },
+      orderBy: { employeeCode: 'asc' },
+    });
+    console.log(`     Lead: ${lead.fullName} (${lead.employeeCode}) - ${reports.length} report(s):`);
+    for (const r of reports) {
+      console.log(`       - ${r.fullName} (${r.employeeCode}) [${r.designation}]`);
     }
   }
 
-  console.log('\n==> PM team update completed successfully.');
+  // Check Krupesh Solanki
+  const updatedKrupesh = await prisma.user.findUnique({
+    where: { employeeCode: 'ACS-0081' },
+    select: {
+      fullName: true,
+      employeeCode: true,
+      department: { select: { name: true, code: true } },
+      manager: { select: { fullName: true, employeeCode: true } },
+    },
+  });
+  console.log('\n   Krupesh Solanki placement check:');
+  console.log(`     ${updatedKrupesh?.fullName} (${updatedKrupesh?.employeeCode}) is in department '${updatedKrupesh?.department?.name}' (${updatedKrupesh?.department?.code}) under manager ${updatedKrupesh?.manager?.fullName} (${updatedKrupesh?.manager?.employeeCode})`);
+
+  console.log('\n==> PM team, roles and roster updates completed successfully.');
 }
 
 main()
   .catch((e) => {
-    console.error('[ERROR] Failed to update PM team:', e);
+    console.error('\n[ERROR] Update failed:', e);
     process.exit(1);
   })
   .finally(async () => {

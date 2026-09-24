@@ -1024,7 +1024,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0061',
       skills: ['project coordination', 'vendor follow up', 'scheduling'],
-      roles: [{ key: 'ASST_MANAGER', scopeType: 'GLOBAL' }, { key: 'PM_BASE', scopeType: 'GLOBAL' }],
+      roles: [{ key: 'ASST_MANAGER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0071',
@@ -1079,7 +1079,7 @@ async function main() {
       dept: 'TECH',
       manager: 'ACS-0061',
       skills: ['site management', 'resource planning'],
-      roles: [{ key: 'ASST_MANAGER', scopeType: 'GLOBAL' }, { key: 'PM_BASE', scopeType: 'GLOBAL' }],
+      roles: [{ key: 'ASST_MANAGER', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0076',
@@ -1142,8 +1142,8 @@ async function main() {
       email: 'krupesh.solanki@acsengitech.com',
       designation: 'Sr. Engineer',
       grade: 'SENIOR_ENGINEER',
-      dept: 'TECH',
-      manager: 'ACS-0074',
+      dept: 'QC',
+      manager: 'ACS-0057',
       skills: ['testing support', 'client coordination'],
       roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
