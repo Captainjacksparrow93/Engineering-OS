@@ -98,11 +98,17 @@ const Icons = {
       <path d="m9 18 6-6-6-6" />
     </svg>
   ),
+  Commissioning: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </svg>
+  ),
 };
 
 const WORKSPACE_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', requires: 'pm.report.read', icon: Icons.Dashboard },
   { label: 'My work', href: '/pm/my-work', requires: 'pm.handover.request', icon: Icons.MyWork },
+  { label: 'Commissioning', href: '/pm/commissioning/my', requires: 'pm.commissioning.log', icon: Icons.Commissioning },
   { label: 'Approvals', href: '/pm/approvals', requires: 'pm.progress.review', icon: Icons.Audit },
   { label: 'Requests', href: '/pm/handovers', requires: 'pm.handover.request', icon: Icons.Handovers },
   { label: 'Urgent task', href: '/pm/adhoc', requires: 'pm.task.adhoc.create', icon: Icons.AdHoc },
@@ -110,6 +116,7 @@ const WORKSPACE_NAV: NavItem[] = [
 
 const MANAGEMENT_NAV: NavItem[] = [
   { label: 'Projects', href: '/pm/projects', requires: 'pm.project.read', icon: Icons.Projects },
+  { label: 'Site Commissioning', href: '/pm/commissioning', requires: 'pm.commissioning.manage', icon: Icons.Commissioning },
   { label: 'Team load', href: '/pm/resources', requires: 'pm.resource.read', icon: Icons.Resources },
 ];
 

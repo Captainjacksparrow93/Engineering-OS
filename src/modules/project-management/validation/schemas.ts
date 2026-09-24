@@ -26,7 +26,7 @@ export const createProjectSchema = z.object({
   panelType: z.string().trim().max(120).optional(),
   panelCount: z.coerce.number().int().min(0).max(10_000).default(0),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).default('MEDIUM'),
-  status: z.enum(['DRAFT', 'PLANNING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED']).default('PLANNING'),
+  status: z.enum(['DRAFT', 'PLANNING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'COMMISSIONING', 'CLOSED', 'CANCELLED']).default('PLANNING'),
   startDate: optionalDate,
   targetEndDate: optionalDate,
   managerId: z.string().min(1, 'Pick a project manager'),

@@ -14,6 +14,15 @@ Hand this to Gemini (or any agent) as the next work order. The September update 
 | 5 | **Task 2** — project On Hold | The real feature. Decisions already made; needs a migration. |
 | 6 | **Task 7** — RBAC remediation | **BLOCKED** on user approval. Land alone, after everything else is stable. |
 
+**Jump the queue for this one:** `docs/site-commissioning-plan.md` **Part B2** — the director
+cannot see or act on pending handovers anywhere in the app, confirmed live on production.
+Oversight queries are scoped to projects you personally manage, and the director manages
+none. Small fix, no schema change, and work is currently stuck because of it.
+
+**Then:** the rest of `docs/site-commissioning-plan.md` — the client's dashboard tiles and
+the new Site Commissioning module. That depends on Task 2 (the Hold tile reads 0 without
+it), so finish this queue first.
+
 Tasks 1, 3, 4 and 6 are **done** — see the ✅ markers. Do not redo them.
 
 ## Rules
@@ -284,6 +293,21 @@ script").
 
 Expect regressions in visibility when this lands — `pm/projects`, the dashboards and
 `getWorkloads` all resolve scope through the RBAC engine. Plan a full manual pass after.
+
+### DO NOT touch the DIRECTOR grants — confirmed requirement
+
+**The director must be able to see AND approve everything in the company.** Verified working
+today, and it works *because* `DIRECTOR` is seeded at `GLOBAL` scope (`prisma/seed.ts:242`)
+and `scopeMatches` returns `true` unconditionally for `GLOBAL` (`src/core/rbac/engine.ts`).
+That covers listing tasks in review (`listPendingApprovals` + `projectVisibilityWhere`),
+approving them (`assertTaskPermission` → `assertProjectPermission`) and deciding handovers.
+
+This remediation is about **`PROJECT_MANAGER` and `ASST_MANAGER` only**. Narrowing scope
+across the board would silently remove the director's company-wide approval rights, which
+the user has explicitly asked for. Same applies to `SUPER_ADMIN`.
+
+After any RBAC change, re-verify as a director: a task in review on a project he does not
+manage must still be approvable.
 
 ---
 

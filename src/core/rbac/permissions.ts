@@ -43,6 +43,10 @@ export const PERMISSIONS = {
   'pm.handover.request': 'Hand remaining work to a peer',
   'pm.handover.decide': 'Accept or reject a handover addressed to you',
 
+  'pm.commissioning.manage': 'Assign commissioning engineers and close commissioning',
+  'pm.commissioning.log': 'Record daily commissioning logs',
+  'pm.commissioning.approve': 'Approve or reject commissioning daily logs',
+
   'pm.oversight': 'Kept informed about all project activity in scope',
   'pm.resource.read': 'See who is available and how loaded they are',
   'pm.report.read': 'Open portfolio dashboards and reports',
@@ -100,6 +104,8 @@ export const SYSTEM_ROLES: Record<
       'pm.progress.log',
       'pm.progress.review',
       'pm.template.manage',
+      'pm.commissioning.manage',
+      'pm.commissioning.approve',
       'pm.oversight',
       'pm.handover.request',
       'pm.handover.decide',
@@ -123,6 +129,8 @@ export const SYSTEM_ROLES: Record<
       'pm.task.adhoc.create',
       'pm.progress.review',
       'pm.template.manage',
+      'pm.commissioning.manage',
+      'pm.commissioning.approve',
       'pm.oversight',
       'pm.handover.request',
       'pm.handover.decide',
@@ -190,6 +198,7 @@ export const SYSTEM_ROLES: Record<
     permissions: [
       'pm.handover.request',
       'pm.handover.decide',
+      'pm.commissioning.log',
     ],
   },
   JUNIOR_ENGINEER: {
@@ -198,6 +207,7 @@ export const SYSTEM_ROLES: Record<
     permissions: [
       'pm.handover.request',
       'pm.handover.decide',
+      'pm.commissioning.log',
     ],
   },
   VIEWER: {

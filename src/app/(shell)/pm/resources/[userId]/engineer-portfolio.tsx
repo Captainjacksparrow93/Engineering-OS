@@ -88,6 +88,27 @@ export function EngineerPortfolio({ data }: { data: EngineerPortfolioData }) {
         </div>
       </div>
 
+      {/* Site Attendance & Lifetime Metrics (Sheet 2) */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="card border-hairline bg-surface p-4">
+          <p className="text-caption font-semibold uppercase tracking-wider text-muted">Site visits</p>
+          <p className="mt-2 text-2xl font-bold font-mono text-ink">{headline.siteVisits}</p>
+          <p className="mt-0.5 text-caption text-muted">Total commissioning logs</p>
+        </div>
+
+        <div className="card border-hairline bg-surface p-4">
+          <p className="text-caption font-semibold uppercase tracking-wider text-muted">Days on site</p>
+          <p className="mt-2 text-2xl font-bold font-mono text-ink">{headline.daysOnSite}</p>
+          <p className="mt-0.5 text-caption text-muted">Distinct customer site days</p>
+        </div>
+
+        <div className="card border-hairline bg-surface p-4">
+          <p className="text-caption font-semibold uppercase tracking-wider text-muted">Lifetime handovers</p>
+          <p className="mt-2 text-2xl font-bold font-mono text-ink">{headline.lifetimeHandovers}</p>
+          <p className="mt-0.5 text-caption text-muted">Incoming & outgoing transfers</p>
+        </div>
+      </div>
+
       {/* Panels Owned Section */}
       <div className="card border-hairline bg-surface p-5">
         <header className="flex items-center justify-between border-b border-hairline pb-3 mb-4">

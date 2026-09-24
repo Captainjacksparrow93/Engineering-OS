@@ -21,6 +21,16 @@ export interface DirectorDashboardData {
   kind: 'director';
   period: 'week' | 'month';
   typeCounts: TypeCounts;
+  counts: {
+    runningProjects: number;
+    completedProjects: number;
+    notStartedProjects: number;
+    waitingApprovalTasks: number;
+    overdueProjects: number;
+    onHoldProjects: number;
+    commissioningProjects: number;
+    commissioningEngineers: number;
+  };
   headline: {
     onTime: { current: number; total: number; lateCount: number };
     deliveriesNext30Days: { count: number; nextDate: Date | string | null };
@@ -172,8 +182,16 @@ export async function getDashboard(
   });
   const taskIds = projects.flatMap((p) => p.tasks.map((t) => t.id));
 
-  // 2. Approvals, handovers, problem history, send-backs, workloads
-  const [pendingApprovals, taskHandovers, projectHandovers, problemLogs, sentBackCount, workloads] = await Promise.all([
+  // 2. Approvals, handovers, problem history, send-backs, workloads, commissioning
+  const [
+    pendingApprovals,
+    taskHandovers,
+    projectHandovers,
+    problemLogs,
+    sentBackCount,
+    workloads,
+    commissioningAssignments,
+  ] = await Promise.all([
     prisma.task.findMany({
       where: { project: visibility, status: 'IN_REVIEW' },
       select: {
@@ -232,6 +250,11 @@ export async function getDashboard(
       },
     }),
     getWorkloads(principal, { from: today, to: addDays(today, 7) }).catch(() => [] as Workload[]),
+    prisma.commissioningAssignment.findMany({
+      where: { releasedAt: null, project: { companyId: principal.companyId } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }),
   ]);
 
   const problems = summariseProblems(problemLogs, periodStart);
@@ -260,7 +283,7 @@ export async function getDashboard(
 
     // Overdue = the engineer's work is late. Steps waiting for approval are listed under
     // approvals instead, and paused / finished projects raise no overdue alarms.
-    const projectActive = p.status !== 'ON_HOLD' && p.status !== 'COMPLETED';
+    const projectActive = p.status !== 'ON_HOLD' && p.status !== 'COMPLETED' && p.status !== 'CLOSED';
     const overdueTasks = leafTasks
       .filter((t) => projectActive && t.plannedEnd && startOfDay(t.plannedEnd) < today && t.status !== 'COMPLETED' && t.status !== 'IN_REVIEW')
       .map((t) => ({ id: t.id, title: t.title, plannedEnd: t.plannedEnd! }));
@@ -287,7 +310,7 @@ export async function getDashboard(
   });
 
   // Live = not finished. On-hold projects stay listed but out of on-time counts.
-  const listedProjects = processedProjects.filter((p) => p.status !== 'COMPLETED');
+  const listedProjects = processedProjects.filter((p) => p.status !== 'COMPLETED' && p.status !== 'CLOSED');
   const liveProjects = listedProjects.filter((p) => p.status !== 'ON_HOLD');
 
   // Engineers only (no PMs / heads) so "free" and "overloaded" mean the same as in auto-assign.
@@ -406,11 +429,29 @@ export async function getDashboard(
     const avgApprovalTimeHours = approvalHours.length
       ? Math.round((approvalHours.reduce((a, b) => a + b, 0) / approvalHours.length) * 10) / 10
       : 0;
+    const runningProjects = projects.filter((p) => p.status === 'IN_PROGRESS').length;
+    const completedProjects = projects.filter((p) => p.status === 'COMPLETED' || p.status === 'CLOSED').length;
+    const notStartedProjects = projects.filter((p) => p.status === 'PLANNING' || p.status === 'DRAFT').length;
+    const waitingApprovalTasks = pendingApprovals.length + problems.open.length;
+    const overdueProjects = processedProjects.filter((p) => p.health === 'LATE').length;
+    const onHoldProjects = projects.filter((p) => p.status === 'ON_HOLD').length;
+    const commissioningProjectsCount = projects.filter((p) => p.status === 'COMMISSIONING').length;
+    const commissioningEngineersCount = commissioningAssignments.length;
 
     return {
       kind: 'director',
       period,
       typeCounts: countByAutomationType(projects),
+      counts: {
+        runningProjects,
+        completedProjects,
+        notStartedProjects,
+        waitingApprovalTasks,
+        overdueProjects,
+        onHoldProjects,
+        commissioningProjects: commissioningProjectsCount,
+        commissioningEngineers: commissioningEngineersCount,
+      },
       headline: {
         onTime: { current: onTimeProjects.length, total: liveProjects.length, lateCount: lateProjects.length },
         deliveriesNext30Days: { count: deliveries30.length, nextDate: deliveries30[0]?.targetEndDate ?? null },
@@ -579,6 +620,9 @@ export interface EngineerPortfolioData {
     overdueTasks: number;
     panelsOwned: number;
     handoversWaiting: number;
+    siteVisits: number;
+    daysOnSite: number;
+    lifetimeHandovers: number;
   };
   projects: Array<{
     id: string;
@@ -658,7 +702,15 @@ export async function getEngineerPortfolio(
   const today = todayInIndia();
   const windowEnd = addDays(today, windowDays);
 
-  const [workloads, assignments, incomingHandovers, outgoingHandovers] = await Promise.all([
+  const [
+    workloads,
+    assignments,
+    incomingHandovers,
+    outgoingHandovers,
+    siteVisits,
+    distinctSiteDays,
+    lifetimeHandovers,
+  ] = await Promise.all([
     getWorkloads(principal, { from: today, to: windowEnd }).catch(() => [] as Workload[]),
     prisma.taskAssignment.findMany({
       where: {
@@ -727,6 +779,19 @@ export async function getEngineerPortfolio(
         createdAt: true,
         task: { select: { id: true, title: true, project: { select: { name: true } } } },
         toUser: { select: { fullName: true } },
+      },
+    }),
+    prisma.commissioningLog.count({
+      where: { userId },
+    }),
+    prisma.commissioningLog.findMany({
+      where: { userId },
+      select: { loggedFor: true },
+      distinct: ['loggedFor'],
+    }),
+    prisma.taskHandover.count({
+      where: {
+        OR: [{ fromUserId: userId }, { toUserId: userId }],
       },
     }),
   ]);
@@ -850,6 +915,9 @@ export async function getEngineerPortfolio(
       overdueTasks: overdueCount,
       panelsOwned: panelsData.length,
       handoversWaiting: incomingHandovers.length,
+      siteVisits,
+      daysOnSite: distinctSiteDays.length,
+      lifetimeHandovers,
     },
     projects: projectsData,
     panels: panelsData,

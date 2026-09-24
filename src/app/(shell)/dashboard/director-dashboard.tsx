@@ -5,7 +5,7 @@ import Link from 'next/link';
 import clsx from 'clsx';
 import { formatName } from '@/core/utils/strings';
 import { formatDate } from '@/core/utils/dates';
-import { Avatar, ProgressBar } from '@/components/ui';
+import { Avatar, ProgressBar, Stat } from '@/components/ui';
 import { ProjectTimeline } from '@/components/project-timeline';
 import { TypeCards } from './type-cards';
 import { getProjectTimelineAction } from '@/app/actions/pm';
@@ -19,6 +19,7 @@ export function HealthBadge({ health }: { health: string }) {
   if (health === 'AT_RISK') return <span className="badge border border-hairline-strong bg-surface text-ink">At risk</span>;
   if (health === 'ON_HOLD') return <span className="badge bg-surface-strong text-muted">On hold</span>;
   if (health === 'COMPLETED') return <span className="badge bg-surface-strong text-ink">Completed</span>;
+  if (health === 'COMMISSIONING') return <span className="badge bg-stage-read text-ink">Commissioning</span>;
   return <span className="badge badge-success">On track</span>;
 }
 
@@ -91,62 +92,106 @@ export function DirectorDashboard({
         </div>
       </div>
 
-      {/* 3 Headline KPI Tiles */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {/* 1. On-time Projects */}
-        <Link
-          href="/pm/projects"
-          className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
-        >
-          <p className="text-caption font-semibold uppercase tracking-wider text-muted">On-time projects</p>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-mono text-ink">
-              {data.headline.onTime.current}
-            </span>
-            <span className="text-sm text-muted font-mono">of {data.headline.onTime.total}</span>
-          </div>
-          <p className={clsx('mt-1 text-caption font-medium', data.headline.onTime.lateCount > 0 ? 'text-error' : 'text-muted')}>
-            {data.headline.onTime.lateCount > 0 ? `${data.headline.onTime.lateCount} late` : 'All projects on schedule'}
-          </p>
-        </Link>
+      {/* Count Tiles: Row 1 & Row 2 & Commissioning (Sheet 1 + Part A) */}
+      <div className="space-y-4">
+        {/* Row 1: Running · Completed · Not started */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Link
+            href="/pm/projects?status=IN_PROGRESS"
+            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+          >
+            <Stat
+              label="Running projects"
+              value={data.counts.runningProjects}
+              hint="In progress execution"
+            />
+          </Link>
 
-        {/* 2. Deliveries Next 30 Days */}
-        <Link
-          href="/pm/projects"
-          className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
-        >
-          <p className="text-caption font-semibold uppercase tracking-wider text-muted">Deliveries next 30 days</p>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-mono text-ink">
-              {data.headline.deliveriesNext30Days.count}
-            </span>
-            <span className="text-sm text-muted">projects</span>
-          </div>
-          <p className="mt-1 text-caption text-muted">
-            {data.headline.deliveriesNext30Days.nextDate
-              ? `Next: ${formatDate(data.headline.deliveriesNext30Days.nextDate)}`
-              : 'No upcoming deadlines'}
-          </p>
-        </Link>
+          <Link
+            href="/pm/projects?status=COMPLETED"
+            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+          >
+            <Stat
+              label="Completed"
+              value={data.counts.completedProjects}
+              hint="Finished switchgear projects"
+            />
+          </Link>
 
-        {/* 3. Waiting on Decisions */}
-        <Link
-          href="/pm/approvals"
-          className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
-        >
-          <p className="text-caption font-semibold uppercase tracking-wider text-muted">Waiting on decisions</p>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-mono text-ink">
-              {data.headline.waitingDecisions.count}
-            </span>
-            <span className="text-sm text-muted">items</span>
-          </div>
-          <p className="mt-1 text-caption text-muted">
-            {data.headline.waitingDecisions.count > 0
-              ? `Oldest waiting ${data.headline.waitingDecisions.oldestDays} days`
-              : 'Inbox is clear'}
-          </p>
-        </Link>
+          <Link
+            href="/pm/projects?status=PLANNING"
+            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+          >
+            <Stat
+              label="Not started"
+              value={data.counts.notStartedProjects}
+              hint="Planning and draft stages"
+            />
+          </Link>
+        </div>
+
+        {/* Row 2: Waiting for approval · Overdue · Hold */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Link
+            href="/pm/approvals"
+            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+          >
+            <Stat
+              label="Waiting for approval"
+              value={data.counts.waitingApprovalTasks}
+              tone={data.counts.waitingApprovalTasks > 0 ? 'warning' : 'default'}
+              hint="Steps in review or flagged"
+            />
+          </Link>
+
+          <Link
+            href="/pm/projects"
+            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+          >
+            <Stat
+              label="Overdue"
+              value={data.counts.overdueProjects}
+              tone={data.counts.overdueProjects > 0 ? 'danger' : 'default'}
+              hint="Projects behind schedule"
+            />
+          </Link>
+
+          <Link
+            href="/pm/projects?status=ON_HOLD"
+            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+          >
+            <Stat
+              label="On hold"
+              value={data.counts.onHoldProjects}
+              hint="Frozen execution"
+            />
+          </Link>
+        </div>
+
+        {/* Commissioning Row: Projects · Engineers */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Link
+            href="/pm/commissioning"
+            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+          >
+            <Stat
+              label="Projects in commissioning"
+              value={data.counts.commissioningProjects}
+              hint="Deployed on customer site"
+            />
+          </Link>
+
+          <Link
+            href="/pm/commissioning"
+            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+          >
+            <Stat
+              label="Engineers on commissioning"
+              value={data.counts.commissioningEngineers}
+              hint="Distinct active site engineers"
+            />
+          </Link>
+        </div>
       </div>
 
       <TypeCards counts={data.typeCounts} />

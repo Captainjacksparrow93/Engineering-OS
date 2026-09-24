@@ -60,6 +60,8 @@ const STATUS_LABELS: Record<string, string> = {
   ACCEPTED: 'Accepted',
   DECLINED: 'Declined',
   WITHDRAWN: 'Withdrawn',
+  COMMISSIONING: 'Commissioning',
+  CLOSED: 'Closed',
 };
 
 /**
@@ -76,6 +78,7 @@ const STAGE_STYLES: Record<string, string> = {
   IN_PROGRESS: 'bg-stage-edit',
   IN_REVIEW: 'bg-stage-read',
   COMPLETED: 'bg-success text-on-primary',
+  COMMISSIONING: 'bg-stage-read text-ink',
 };
 
 const STATE_STYLES: Record<string, string> = {
@@ -84,6 +87,7 @@ const STATE_STYLES: Record<string, string> = {
   CANCELLED: 'badge-neutral text-muted line-through',
   ON_HOLD: 'badge-outline',
   DRAFT: 'badge-outline',
+  CLOSED: 'badge-neutral text-muted',
 
   // Assignment and handover bookkeeping - system state, not work stage.
   ACTIVE: 'badge-ink',

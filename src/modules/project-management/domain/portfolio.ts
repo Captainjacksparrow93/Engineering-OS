@@ -82,18 +82,19 @@ export interface HealthInput {
   asOfDate?: Date;
 }
 
-export type HealthStatus = 'ON_TRACK' | 'AT_RISK' | 'LATE' | 'ON_HOLD' | 'COMPLETED';
+export type HealthStatus = 'ON_TRACK' | 'AT_RISK' | 'LATE' | 'ON_HOLD' | 'COMPLETED' | 'COMMISSIONING';
 
 /**
  * Computes deterministic project health.
- * - COMPLETED / ON_HOLD are lifecycle-fixed.
+ * - COMPLETED / CLOSED / ON_HOLD / COMMISSIONING are lifecycle-fixed.
  * - LATE: forecast finish > target date, or target date passed with open tasks.
  * - AT_RISK: progress % < (time elapsed % - 15), or open roadblock, or stale approvals.
  * - ON_TRACK: otherwise.
  */
 export function projectHealth(input: HealthInput): HealthStatus {
-  if (input.status === 'COMPLETED') return 'COMPLETED';
+  if (input.status === 'COMPLETED' || input.status === 'CLOSED') return 'COMPLETED';
   if (input.status === 'ON_HOLD') return 'ON_HOLD';
+  if (input.status === 'COMMISSIONING') return 'COMMISSIONING';
 
   const today = input.asOfDate ? startOfDay(input.asOfDate) : startOfDay(new Date());
   const start = startOfDay(new Date(input.startDate));

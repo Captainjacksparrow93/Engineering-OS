@@ -43,7 +43,12 @@ export default async function ProjectsPage({
         }
       />
 
-      <ProjectsClient projects={projects} canCreate={canCreate} emptyHint={emptyHint} />
+      <ProjectsClient
+        projects={projects}
+        canCreate={canCreate}
+        emptyHint={emptyHint}
+        initialStatus={params.status}
+      />
     </div>
   );
 }

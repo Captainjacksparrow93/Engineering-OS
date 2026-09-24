@@ -558,6 +558,101 @@ export async function getProjectTimelineAction(projectId: string) {
   }
 }
 
+// -----------------------------------------------------------------------------
+// Site Commissioning Actions
+// -----------------------------------------------------------------------------
+
+export async function assignEngineerToCommissioningAction(projectId: string, userId: string) {
+  const principal = await requirePrincipal();
+  try {
+    const { assignEngineerToCommissioning } = await import('@/modules/project-management/services/commissioning.service');
+    const result = await assignEngineerToCommissioning(principal, projectId, userId);
+    revalidatePath('/pm/commissioning');
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/dashboard');
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to assign commissioning engineer.' };
+  }
+}
+
+export async function releaseEngineerFromCommissioningAction(projectId: string, userId: string) {
+  const principal = await requirePrincipal();
+  try {
+    const { releaseEngineerFromCommissioning } = await import('@/modules/project-management/services/commissioning.service');
+    await releaseEngineerFromCommissioning(principal, projectId, userId);
+    revalidatePath('/pm/commissioning');
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to release engineer.' };
+  }
+}
+
+export async function closeCommissioningAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    const { closeCommissioning } = await import('@/modules/project-management/services/commissioning.service');
+    await closeCommissioning(principal, projectId);
+    revalidatePath('/pm/commissioning');
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to close commissioning.' };
+  }
+}
+
+export async function createCommissioningLogAction(input: {
+  projectId: string;
+  loggedFor: string;
+  workDone: string;
+  blocker?: string | null;
+}) {
+  const principal = await requirePrincipal();
+  try {
+    const { createCommissioningLog } = await import('@/modules/project-management/services/commissioning.service');
+    const log = await createCommissioningLog(principal, input);
+    revalidatePath('/pm/commissioning/my');
+    revalidatePath('/pm/approvals');
+    revalidatePath('/dashboard');
+    return { success: true, data: log };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to create site log.' };
+  }
+}
+
+export async function approveCommissioningLogAction(logId: string) {
+  const principal = await requirePrincipal();
+  try {
+    const { approveCommissioningLog } = await import('@/modules/project-management/services/commissioning.service');
+    await approveCommissioningLog(principal, logId);
+    revalidatePath('/pm/approvals');
+    revalidatePath('/pm/commissioning/my');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to approve commissioning log.' };
+  }
+}
+
+export async function rejectCommissioningLogAction(logId: string, decisionNote?: string) {
+  const principal = await requirePrincipal();
+  try {
+    const { rejectCommissioningLog } = await import('@/modules/project-management/services/commissioning.service');
+    await rejectCommissioningLog(principal, logId, decisionNote);
+    revalidatePath('/pm/approvals');
+    revalidatePath('/pm/commissioning/my');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to reject commissioning log.' };
+  }
+}
+
+
 
 
 

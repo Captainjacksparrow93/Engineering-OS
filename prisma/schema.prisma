@@ -127,6 +127,8 @@ model User {
   projectHandoversTo      ProjectHandover[] @relation("ProjectHandoverTo")
   projectHandoversDecided ProjectHandover[] @relation("ProjectHandoverDecidedBy")
   comments          TaskComment[]
+  commissioningAssignments CommissioningAssignment[]
+  commissioningLogs        CommissioningLog[]
 
   @@index([companyId])
   @@index([departmentId])
@@ -395,6 +397,8 @@ enum ProjectStatus {
   IN_PROGRESS
   ON_HOLD
   COMPLETED
+  COMMISSIONING
+  CLOSED
   CANCELLED
 }
 
@@ -444,6 +448,8 @@ model Project {
   tasks      Task[]
   milestones Milestone[]
   handovers  ProjectHandover[]
+  commissioningAssignments CommissioningAssignment[]
+  commissioningLogs        CommissioningLog[]
 
   @@index([companyId, status])
   @@index([managerId])
@@ -788,5 +794,47 @@ model ChecklistTemplateItem {
 
   @@index([templateId, stepNumber])
   @@map("pm_checklist_template_items")
+}
+
+// =====================================================================================
+// PM :: Site Commissioning
+// =====================================================================================
+
+model CommissioningAssignment {
+  id           String    @id @default(cuid())
+  projectId    String
+  userId       String
+  assignedById String
+  assignedAt   DateTime  @default(now())
+  releasedAt   DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("pm_commissioning_assignments")
+}
+
+model CommissioningLog {
+  id           String    @id @default(cuid())
+  projectId    String
+  userId       String
+  loggedFor    DateTime  @db.Date     // the day on site - drives "days on site"
+  workDone     String
+  blocker      String?
+  approvedById String?
+  approvedAt   DateTime?
+  rejectedAt   DateTime?
+  decisionNote String?
+  createdAt    DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId, loggedFor])   // one log per engineer per project per day
+  @@index([projectId, loggedFor])
+  @@index([userId, loggedFor])
+  @@map("pm_commissioning_logs")
 }
 

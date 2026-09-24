@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { countByAutomationType, daysLate, forecastFinish, projectHealth, projectProgress } from './portfolio';
 import { summariseProblems } from '../services/dashboard.service';
 import { todayInIndia } from '@/core/utils/dates';
@@ -40,9 +40,11 @@ describe('projectHealth', () => {
   const baseStart = new Date('2026-09-01');
   const baseTarget = new Date('2026-09-30');
 
-  it('marks ON_HOLD and COMPLETED directly', () => {
+  it('marks ON_HOLD, COMPLETED, CLOSED and COMMISSIONING directly', () => {
     expect(projectHealth({ status: 'COMPLETED', startDate: baseStart, targetEndDate: baseTarget, progressPercent: 100 })).toBe('COMPLETED');
+    expect(projectHealth({ status: 'CLOSED', startDate: baseStart, targetEndDate: baseTarget, progressPercent: 100 })).toBe('COMPLETED');
     expect(projectHealth({ status: 'ON_HOLD', startDate: baseStart, targetEndDate: baseTarget, progressPercent: 50 })).toBe('ON_HOLD');
+    expect(projectHealth({ status: 'COMMISSIONING', startDate: baseStart, targetEndDate: baseTarget, progressPercent: 100 })).toBe('COMMISSIONING');
   });
 
   it('identifies LATE projects when forecast finish exceeds target date or past deadline', () => {

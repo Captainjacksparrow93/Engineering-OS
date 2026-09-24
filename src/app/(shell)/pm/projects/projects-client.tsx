@@ -29,13 +29,15 @@ export function ProjectsClient({
   projects,
   canCreate,
   emptyHint,
+  initialStatus,
 }: {
   projects: ProjectListItem[];
   canCreate: boolean;
   emptyHint: string;
+  initialStatus?: string;
 }) {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatus || 'ALL');
 
   const filtered = useMemo(() => {
     return projects.filter((p) => {
@@ -61,9 +63,11 @@ export function ProjectsClient({
   const filterChips = [
     { key: 'ALL', label: `All (${projects.length})` },
     { key: 'IN_PROGRESS', label: `In progress (${projects.filter((p) => p.status === 'IN_PROGRESS').length})` },
+    { key: 'COMMISSIONING', label: `Commissioning (${projects.filter((p) => p.status === 'COMMISSIONING').length})` },
     { key: 'PLANNING', label: `Planning (${projects.filter((p) => p.status === 'PLANNING').length})` },
     { key: 'ON_HOLD', label: `On hold (${projects.filter((p) => p.status === 'ON_HOLD').length})` },
     { key: 'COMPLETED', label: `Completed (${projects.filter((p) => p.status === 'COMPLETED').length})` },
+    { key: 'CLOSED', label: `Closed (${projects.filter((p) => p.status === 'CLOSED').length})` },
   ];
 
   return (
