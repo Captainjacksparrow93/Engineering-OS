@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { assignTaskAction } from '@/app/actions/pm';
 import { formatName } from '@/core/utils/strings';
+import { useToast } from '@/components/toast';
 
 interface Colleague {
   id: string;
@@ -24,6 +25,7 @@ export function AssigneeCell({
   canAssign: boolean;
   colleagues?: Colleague[];
 }) {
+  const toast = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState(assignees[0]?.id ?? '');
   const [isPending, startTransition] = useTransition();
@@ -67,7 +69,12 @@ export function AssigneeCell({
       formData.set('userId', selectedUserId);
       formData.set('role', 'OWNER');
 
-      await assignTaskAction({}, formData);
+      const res = await assignTaskAction({}, formData);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success('Engineer assigned.');
       setIsEditing(false);
     });
   };

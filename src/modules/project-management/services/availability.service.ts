@@ -242,7 +242,7 @@ export async function handoverCandidates(principal: Principal, taskId: string) {
       NOT: {
         roleAssignments: {
           some: {
-            role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER'] } },
+            role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER'] } },
           },
         },
       },
@@ -390,7 +390,7 @@ export async function peersForHandover(principal: Principal, taskId: string) {
       NOT: {
         roleAssignments: {
           some: {
-            role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER'] } },
+            role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER'] } },
           },
         },
       },

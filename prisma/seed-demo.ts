@@ -1,6 +1,7 @@
 /**
  * Demo projects that exercise every dashboard, timeline and workflow state.
  *
+ * NOTE: Not run automatically; run by hand only when demo data is wanted:
  *   npm run db:seed:demo
  *
  * Never deletes or rebuilds anything: if any DEMO-* project already exists, the script

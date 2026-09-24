@@ -15,6 +15,105 @@ Hand this to Gemini (or any agent) as the next work order. The September update 
 | 6 | **Task 8** — cancel / delete a project ✅ DONE | Director-only. Self-contained, no schema change. |
 | 7 | **Task 7** — RBAC remediation | **BLOCKED** on user approval. Land alone, after everything else is stable. |
 
+## 🔥 Task 9 — Reassigning a step silently does nothing (LIVE)
+
+> **SUPERSEDED by `docs/handover-rework-plan.md`.** Fix 2 below (direct reassign for
+> managers) is Phase 2 of that plan and must not be built separately — the rules changed:
+> managers act directly only **inside their own squad**, and crossing squads now raises a
+> two-approval request instead of being rejected.
+>
+> **Fix 1 below still stands and is Phase 0 of that plan** — do it first and on its own if
+> you like. Without it, every failure in the rework is invisible.
+
+**Reported:** a Director picks a different engineer from the inline dropdown on a WBS step,
+presses ✓, the editor closes and **nothing changes**. No message, no error in the server
+logs.
+
+### Two separate defects
+
+**1. The error is discarded by the UI.** `src/components/assignee-cell.tsx`:
+
+```ts
+await assignTaskAction({}, formData);   // ← return value ignored
+setIsEditing(false);
+```
+
+`assignTaskAction` returns `ActionState` — `{ error }` or `{ success }`. Errors are caught by
+`run()` and returned **as data**, never thrown, so nothing is logged and nothing is shown.
+Every rejection looks like a no-op.
+
+**2. The assignment is genuinely refused.** `assignTask` in `task.service.ts`:
+
+```ts
+if (role === 'OWNER' && task.assignments.length > 0) {
+  throw new DomainError('This task already has an owner. To reassign, submit a reassign request.');
+}
+```
+
+The inline editor always sends `role: 'OWNER'`, so any step that already has an owner is
+rejected. The dropdown was built for *first* assignment; reassignment was meant to go
+through request-and-accept.
+
+### Fix 1 — always surface the result (do this regardless)
+
+Capture the return value and toast it:
+
+```ts
+const res = await assignTaskAction({}, formData);
+if (res.error) { toast.error(res.error); return; }   // keep the editor open
+toast.success('Engineer assigned.');
+setIsEditing(false);
+```
+
+On failure **keep the editor open** so the user can pick someone else. `toast` is already
+used across the app — follow `project-danger-actions.tsx`.
+
+**Then check for the same pattern elsewhere.** Any `await someAction(...)` whose result is
+ignored has this bug. It is the second time a swallowed error has cost us a debugging
+session, after `entrypoint.sh`.
+
+### Fix 2 — direct reassign for managers — CONFIRMED by the user
+
+**Anyone holding `pm.task.assign` on the project (Director, Technical Head, Project Manager,
+Asst Manager) may swap the owner outright.** Engineers keep using request-and-accept between
+peers.
+
+In `assignTask`, when `role === 'OWNER'` and an active owner already exists:
+
+- if the caller holds `pm.task.assign` for that project → **release and replace**: set the
+  existing assignment to `status: 'RELEASED'` with `releasedAt`, create the new `ACTIVE`
+  owner, all in one transaction. Never delete the old row — it carries the hours already
+  burned.
+- otherwise → keep today's `DomainError` pointing at the reassign request flow.
+
+Audit it (`task.reassigned`, with from/to user ids) and notify both the outgoing and
+incoming engineer, reusing `notify` as the handover flow does.
+
+**Do not touch the `TaskHandover` flow.** This is a separate, manager-level path; the
+peer-to-peer request/accept behaviour stays exactly as it is.
+
+### Verify
+
+As Director: change the engineer on a step that already has an owner → it changes, both
+people are notified, the old assignment shows `RELEASED`, and the audit trail records it.
+As an engineer: the same attempt is refused with the message about raising a reassign
+request, **and that message is now visible on screen**. As Director on an *unassigned* step:
+still works as before.
+
+---
+
+## ▶ CURRENT WORK — `docs/reset-and-pm-team-plan.md`
+
+Wipe all 16 projects, stop the seeds recreating them, and update the Project & Service team
+to the 24 Sep org chart. **Read the "For Antigravity" section at the top of that document
+first** — you write the code and the scripts, a human runs them against production.
+
+**After that:** `docs/handover-rework-plan.md` — the two-approval cross-squad handover rework.
+Do it **after** the team update, because the handover rules depend on the squad boundaries
+that update corrects.
+
+---
+
 ## 🔥 DO THIS FIRST — live breakage on production
 
 `docs/site-commissioning-plan.md` → **HOTFIX** section at the top.

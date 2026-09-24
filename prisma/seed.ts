@@ -22,13 +22,6 @@ const colourFor = (seed: string) => {
   return COLOURS[hash % COLOURS.length]!;
 };
 
-const day = (offsetDays: number) => {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  d.setUTCDate(d.getUTCDate() + offsetDays);
-  return d;
-};
-
 async function main() {
   console.log('Seeding Engineering OS with full organization chart...');
 
@@ -927,7 +920,7 @@ async function main() {
       designation: 'Head of Technical',
       grade: 'HEAD',
       dept: 'TECH',
-      manager: 'ACS-0002',
+      manager: 'ACS-0004',
       skills: ['technical leadership', 'project governance', 'engineering standards', 'WBS scheduling'],
       roles: [
         { key: 'TECHNICAL_HEAD', scopeType: 'DEPARTMENT', scope: 'TECH' },
@@ -941,9 +934,9 @@ async function main() {
       designation: 'Head of Service',
       grade: 'HEAD',
       dept: 'TECH',
-      manager: 'ACS-0061',
+      manager: 'ACS-0004',
       skills: ['site commissioning', 'client service', 'AMC support'],
-      roles: [{ key: 'TECHNICAL_HEAD', scopeType: 'DEPARTMENT', scope: 'TECH' }],
+      roles: [{ key: 'SERVICE_HEAD', scopeType: 'DEPARTMENT', scope: 'TECH' }],
     },
     {
       code: 'ACS-0063',
@@ -996,7 +989,7 @@ async function main() {
       designation: 'Jr. Engineer',
       grade: 'JUNIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0063',
+      manager: 'ACS-0075',
       skills: ['PLC troubleshooting', 'drives commissioning'],
       roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
@@ -1007,7 +1000,7 @@ async function main() {
       designation: 'Sr. Engineer',
       grade: 'SENIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0063',
+      manager: 'ACS-0075',
       skills: ['protection schemes', 'switchboard engineering'],
       roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
@@ -1018,7 +1011,7 @@ async function main() {
       designation: 'Sr. Engineer',
       grade: 'SENIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0063',
+      manager: 'ACS-0075',
       skills: ['synchronizing panels', 'DG automation'],
       roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
@@ -1029,7 +1022,7 @@ async function main() {
       designation: 'Asst. Manager',
       grade: 'SENIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0063',
+      manager: 'ACS-0061',
       skills: ['project coordination', 'vendor follow up', 'scheduling'],
       roles: [{ key: 'ASST_MANAGER', scopeType: 'GLOBAL' }, { key: 'PM_BASE', scopeType: 'GLOBAL' }],
     },
@@ -1051,7 +1044,7 @@ async function main() {
       designation: 'Jr. Engineer',
       grade: 'JUNIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0071',
+      manager: 'ACS-0074',
       skills: ['testing assist', 'drawing review'],
       roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
@@ -1062,7 +1055,7 @@ async function main() {
       designation: 'Trainee Engineer',
       grade: 'TRAINEE',
       dept: 'TECH',
-      manager: 'ACS-0071',
+      manager: 'ACS-0070',
       skills: ['panel documentation', 'trainee'],
       roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
@@ -1084,7 +1077,7 @@ async function main() {
       designation: 'Asst. Manager',
       grade: 'SENIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0074',
+      manager: 'ACS-0061',
       skills: ['site management', 'resource planning'],
       roles: [{ key: 'ASST_MANAGER', scopeType: 'GLOBAL' }, { key: 'PM_BASE', scopeType: 'GLOBAL' }],
     },
@@ -1128,7 +1121,7 @@ async function main() {
       designation: 'Sr. Engineer',
       grade: 'SENIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0074',
+      manager: 'ACS-0075',
       skills: ['protection coordination', 'breaker selection'],
       roles: [{ key: 'SENIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
@@ -1136,10 +1129,10 @@ async function main() {
       code: 'ACS-0080',
       name: 'Harmitsinh Udavat',
       email: 'harmitsinh.udavat@acsengitech.com',
-      designation: 'Jr. Engineer',
+      designation: 'Service Engineer',
       grade: 'JUNIOR_ENGINEER',
       dept: 'TECH',
-      manager: 'ACS-0078',
+      manager: 'ACS-0063',
       skills: ['drawing assistance', 'site punch list'],
       roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
@@ -1161,7 +1154,7 @@ async function main() {
       designation: 'Trainee Engineer',
       grade: 'TRAINEE',
       dept: 'TECH',
-      manager: 'ACS-0081',
+      manager: 'ACS-0075',
       skills: ['trainee', 'testing support'],
       roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
@@ -1172,7 +1165,7 @@ async function main() {
       designation: 'Trainee Engineer',
       grade: 'TRAINEE',
       dept: 'TECH',
-      manager: 'ACS-0081',
+      manager: 'ACS-0070',
       skills: ['trainee', 'documentation'],
       roles: [{ key: 'JUNIOR_ENGINEER', scopeType: 'GLOBAL' }],
     },
@@ -1385,14 +1378,12 @@ async function main() {
   // aborts the rest of the seed (see entrypoint.sh).
   const clientSeeds = ['Tata Chemicals Ltd', 'Sunrise Cement Industries', 'Godrej Foods Pvt Ltd'];
 
-  const clientId = new Map<string, string>();
   for (const name of clientSeeds) {
     const existing = await prisma.client.findUnique({
       where: { companyId_name: { companyId: company.id, name } },
       select: { id: true },
     });
     if (existing) {
-      clientId.set(name, existing.id);
       continue;
     }
 
@@ -1406,589 +1397,16 @@ async function main() {
       if (match) maxSeq = Math.max(maxSeq, Number.parseInt(match[1]!, 10));
     }
 
-    const created = await prisma.client.create({
+    await prisma.client.create({
       data: {
         companyId: company.id,
         name,
         refNumber: `ACS-${String(maxSeq + 1).padStart(4, '0')}`,
       },
     });
-    clientId.set(name, created.id);
-  }
-
-  // ------------------------------------------------------------------- projects
-  const projectSeeds = [
-    {
-      code: 'PRJ-2026-001',
-      name: 'Tata Chemicals - PLC Automation',
-      clientName: 'Tata Chemicals Ltd',
-      workOrderNo: '10041',
-      endUserName: 'Tata Chemicals Ltd (Mithapur Plant)',
-      applicationName: 'Chlor-Alkali PLC Automation',
-      panelType: 'PLC Programming & Simulation',
-      panelCount: 14,
-      priority: 'HIGH' as const,
-      status: 'IN_PROGRESS' as const,
-      startDate: day(-20),
-      targetEndDate: day(40),
-      manager: 'ACS-0063', // Parth Dasharathbhai Nagar
-      sponsor: 'ACS-0002', // Satishkumar Mohanbhai Nagar
-      department: 'TECH',
-    },
-    {
-      code: 'PRJ-2026-002',
-      name: 'Sunrise Cement - SCADA Automation',
-      clientName: 'Sunrise Cement Industries',
-      workOrderNo: '10042',
-      endUserName: 'Sunrise Cement (Line 2)',
-      applicationName: 'Kiln & Raw Mill SCADA',
-      panelType: 'SCADA Programming & Simulation',
-      panelCount: 6,
-      priority: 'MEDIUM' as const,
-      status: 'IN_PROGRESS' as const,
-      startDate: day(-12),
-      targetEndDate: day(45),
-      manager: 'ACS-0074', // Paras Rajendrakumar Prajapati
-      sponsor: 'ACS-0003', // Bhavesh Ishwarbhai Prajapati
-      department: 'TECH',
-    },
-    {
-      code: 'PRJ-2026-003',
-      name: 'Godrej Foods - HMI Automation',
-      clientName: 'Godrej Foods Pvt Ltd',
-      workOrderNo: '10043',
-      endUserName: 'Godrej Consumer Products',
-      applicationName: 'Packaging Line HMI Integration',
-      panelType: 'HMI Programming & Simulation',
-      panelCount: 9,
-      priority: 'CRITICAL' as const,
-      status: 'IN_PROGRESS' as const,
-      startDate: day(-6),
-      targetEndDate: day(50),
-      manager: 'ACS-0063', // Parth Dasharathbhai Nagar
-      sponsor: 'ACS-0004', // Shaktikumar Vasava
-      department: 'TECH',
-    },
-  ];
-
-  // Create-only: existing projects (and everything in them) are never deleted or reset.
-  const projectId = new Map<string, string>();
-  for (const seed of projectSeeds) {
-    if (await prisma.project.findUnique({ where: { code: seed.code }, select: { id: true } })) continue;
-    const project = await prisma.project.upsert({
-      where: { code: seed.code },
-      create: {
-        companyId: company.id,
-        code: seed.code,
-        name: seed.name,
-        clientName: seed.clientName,
-        clientId: clientId.get(seed.clientName) ?? null,
-        workOrderNo: seed.workOrderNo,
-        endUserName: seed.endUserName,
-        applicationName: seed.applicationName,
-        description: `Design, manufacture, test and dispatch of ${seed.panelType}.`,
-        panelType: seed.panelType,
-        panelCount: seed.panelCount,
-        automationTypes: [seed.panelType.split(' ')[0]!],
-        priority: seed.priority,
-        status: seed.status,
-        startDate: seed.startDate,
-        targetEndDate: seed.targetEndDate,
-        managerId: userId.get(seed.manager)!,
-        sponsorId: userId.get(seed.sponsor)!,
-        departmentId: departmentId.get(seed.department),
-      },
-      update: {},
-    });
-    projectId.set(seed.code, project.id);
-
-    await prisma.projectMember.upsert({
-      where: { projectId_userId: { projectId: project.id, userId: userId.get(seed.manager)! } },
-      create: { projectId: project.id, userId: userId.get(seed.manager)!, role: 'MANAGER' },
-      update: {},
-    });
-
-    const pmRole = roleId.get('PROJECT_MANAGER');
-    if (pmRole) {
-      const existing = await prisma.roleAssignment.findFirst({
-        where: { userId: userId.get(seed.manager)!, roleId: pmRole, scopeType: 'PROJECT', scopeId: project.id },
-      });
-      if (!existing) {
-        await prisma.roleAssignment.create({
-          data: { userId: userId.get(seed.manager)!, roleId: pmRole, scopeType: 'PROJECT', scopeId: project.id },
-        });
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------- tasks
-  interface TaskSeed {
-    key: string;
-    project: string;
-    title: string;
-    hours: number;
-    start: number;
-    end: number;
-    skills?: string[];
-    assignee?: string;
-    percent?: number;
-    status?: 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'COMPLETED' | 'BLOCKED';
-    dependsOn?: Array<{ on: string; type?: 'FINISH_TO_START' | 'START_TO_START' | 'FINISH_TO_FINISH'; lag?: number }>;
-  }
-
-  const taskSeeds: TaskSeed[] = [
-    // =========================================================================
-    // PRJ-2026-001: Tata Chemicals — PLC Automation (13 standard checklist steps)
-    // PM: Parth Dasharathbhai Nagar (ACS-0063)
-    // =========================================================================
-    {
-      key: 'PRJ-001-T01', project: 'PRJ-2026-001',
-      title: 'Review Control Philosophy / Functional Requirements',
-      hours: 16, start: -20, end: -16, skills: ['PLC automation', 'control philosophy'],
-      assignee: 'ACS-0064', percent: 100, status: 'COMPLETED',
-    },
-    {
-      key: 'PRJ-001-T02', project: 'PRJ-2026-001',
-      title: 'Verify I/O List and Tag List as per Approved Documents',
-      hours: 16, start: -16, end: -12, skills: ['I/O list', 'tag list'],
-      assignee: 'ACS-0065', percent: 100, status: 'COMPLETED',
-      dependsOn: [{ on: 'PRJ-001-T01' }],
-    },
-    {
-      key: 'PRJ-001-T03', project: 'PRJ-2026-001',
-      title: 'Verify PLC Hardware Configuration as per Electrical Dwg',
-      hours: 8, start: -12, end: -9, skills: ['hardware configuration'],
-      assignee: 'ACS-0066', percent: 100, status: 'COMPLETED',
-      dependsOn: [{ on: 'PRJ-001-T02' }],
-    },
-    {
-      key: 'PRJ-001-T04', project: 'PRJ-2026-001',
-      title: 'Verify PLC CPU, Comm Modules & Network Configuration',
-      hours: 8, start: -9, end: -6, skills: ['CPU config', 'Profinet'],
-      assignee: 'ACS-0068', percent: 100, status: 'COMPLETED',
-      dependsOn: [{ on: 'PRJ-001-T03' }],
-    },
-    {
-      key: 'PRJ-001-T05', project: 'PRJ-2026-001',
-      title: 'DI Mapping',
-      hours: 16, start: -6, end: -3, skills: ['DI mapping', 'logic programming'],
-      assignee: 'ACS-0067', percent: 100, status: 'COMPLETED',
-      dependsOn: [{ on: 'PRJ-001-T04' }],
-    },
-    {
-      key: 'PRJ-001-T06', project: 'PRJ-2026-001',
-      title: 'DQ Mapping',
-      hours: 16, start: -3, end: 3, skills: ['DQ mapping', 'logic programming'],
-      assignee: 'ACS-0069', percent: 60, status: 'IN_PROGRESS',
-      dependsOn: [{ on: 'PRJ-001-T05' }],
-    },
-    {
-      key: 'PRJ-001-T07', project: 'PRJ-2026-001',
-      title: 'Analog Input Scaling, Engineering Units & Range Settings',
-      hours: 16, start: 3, end: 8, skills: ['analog scaling', 'sensor scaling'],
-      assignee: 'ACS-0071', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-001-T06' }],
-    },
-    {
-      key: 'PRJ-001-T08', project: 'PRJ-2026-001',
-      title: 'Analog Output / PID Control Logic',
-      hours: 24, start: 8, end: 14, skills: ['PID control', 'loop tuning'],
-      assignee: 'ACS-0072', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-001-T07' }],
-    },
-    {
-      key: 'PRJ-001-T09', project: 'PRJ-2026-001',
-      title: 'Motor Control Logic, Faceplate, Alarms & Animation',
-      hours: 24, start: 14, end: 20, skills: ['motor control', 'alarms logic'],
-      assignee: 'ACS-0064', percent: 0, status: 'TODO',
-    },
-    {
-      key: 'PRJ-001-T10', project: 'PRJ-2026-001',
-      title: 'Valve Control Logic, Faceplate, Alarms & Animation',
-      hours: 16, start: 20, end: 25, skills: ['valve control', 'interlocks'],
-      assignee: 'ACS-0068', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-001-T09' }],
-    },
-    {
-      key: 'PRJ-001-T11', project: 'PRJ-2026-001',
-      title: 'Auto Sequence Complete',
-      hours: 32, start: 25, end: 31, skills: ['auto sequence', 'interlocking logic'],
-      assignee: 'ACS-0069', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-001-T10' }],
-    },
-    {
-      key: 'PRJ-001-T12', project: 'PRJ-2026-001',
-      title: 'Simulation Trial of Manual Function',
-      hours: 16, start: 31, end: 35, skills: ['simulation', 'manual testing'],
-      assignee: 'ACS-0067', percent: 0, status: 'TODO',
-    },
-    {
-      key: 'PRJ-001-T13', project: 'PRJ-2026-001',
-      title: 'Simulation with Auto sequence trial and SCADA/HMI',
-      hours: 24, start: 35, end: 40, skills: ['full simulation', 'FAT signoff'],
-      assignee: 'ACS-0064', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-001-T12' }],
-    },
-
-    // =========================================================================
-    // PRJ-2026-002: Sunrise Cement — SCADA Automation (13 standard checklist steps)
-    // PM: Paras Rajendrakumar Prajapati (ACS-0074)
-    // =========================================================================
-    {
-      key: 'PRJ-002-T01', project: 'PRJ-2026-002',
-      title: 'Review P&ID and requirement',
-      hours: 16, start: -12, end: -9, skills: ['SCADA', 'P&ID review'],
-      assignee: 'ACS-0076', percent: 100, status: 'COMPLETED',
-    },
-    {
-      key: 'PRJ-002-T02', project: 'PRJ-2026-002',
-      title: 'Diagnostic Screen of DI',
-      hours: 8, start: -9, end: -6, skills: ['SCADA graphics', 'diagnostic screens'],
-      assignee: 'ACS-0077', percent: 100, status: 'COMPLETED',
-      dependsOn: [{ on: 'PRJ-002-T01' }],
-    },
-    {
-      key: 'PRJ-002-T03', project: 'PRJ-2026-002',
-      title: 'Diagnostic Screen of DQ',
-      hours: 8, start: -6, end: -3, skills: ['SCADA graphics', 'diagnostic screens'],
-      assignee: 'ACS-0078', percent: 100, status: 'COMPLETED',
-      dependsOn: [{ on: 'PRJ-002-T02' }],
-    },
-    {
-      key: 'PRJ-002-T04', project: 'PRJ-2026-002',
-      title: 'Diagnostic Screen of AI',
-      hours: 8, start: -3, end: 3, skills: ['analog diagnostics', 'SCADA screens'],
-      assignee: 'ACS-0079', percent: 50, status: 'IN_PROGRESS',
-      dependsOn: [{ on: 'PRJ-002-T03' }],
-    },
-    {
-      key: 'PRJ-002-T05', project: 'PRJ-2026-002',
-      title: 'Diagnostic Screen of AQ',
-      hours: 8, start: 3, end: 8, skills: ['SCADA screens'],
-      assignee: 'ACS-0080', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-002-T04' }],
-    },
-    {
-      key: 'PRJ-002-T06', project: 'PRJ-2026-002',
-      title: 'Scaling Screen of Analog parameter',
-      hours: 16, start: 8, end: 13, skills: ['parameter scaling', 'SCADA'],
-      assignee: 'ACS-0081', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-002-T05' }],
-    },
-    {
-      key: 'PRJ-002-T07', project: 'PRJ-2026-002',
-      title: 'Faceplate Development',
-      hours: 24, start: 13, end: 19, skills: ['faceplates', 'custom popups'],
-      assignee: 'ACS-0076', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-002-T06' }],
-    },
-    {
-      key: 'PRJ-002-T08', project: 'PRJ-2026-002',
-      title: 'Alarm + History development',
-      hours: 16, start: 19, end: 24, skills: ['alarm logging', 'historian'],
-      assignee: 'ACS-0077', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-002-T07' }],
-    },
-    {
-      key: 'PRJ-002-T09', project: 'PRJ-2026-002',
-      title: 'Trend development',
-      hours: 16, start: 24, end: 29, skills: ['real-time trends', 'historical trends'],
-      assignee: 'ACS-0078', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-002-T08' }],
-    },
-    {
-      key: 'PRJ-002-T10', project: 'PRJ-2026-002',
-      title: 'P&ID Developed without tag',
-      hours: 24, start: 29, end: 34, skills: ['mimic graphics', 'P&ID drawing'],
-      assignee: 'ACS-0080', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-002-T09' }],
-    },
-    {
-      key: 'PRJ-002-T11', project: 'PRJ-2026-002',
-      title: 'P&ID developed with Tag Complete',
-      hours: 24, start: 34, end: 39, skills: ['tag animation', 'PLC tag linking'],
-      assignee: 'ACS-0079', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-002-T10' }],
-    },
-    {
-      key: 'PRJ-002-T12', project: 'PRJ-2026-002',
-      title: 'Communication Architect',
-      hours: 16, start: 39, end: 42, skills: ['OPC UA', 'industrial networks'],
-      assignee: 'ACS-0081', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-002-T11' }],
-    },
-    {
-      key: 'PRJ-002-T13', project: 'PRJ-2026-002',
-      title: 'Simulation Trial',
-      hours: 24, start: 42, end: 45, skills: ['SCADA simulation', 'FAT signoff'],
-      assignee: 'ACS-0076', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-002-T12' }],
-    },
-
-    // =========================================================================
-    // PRJ-2026-003: Godrej Foods — HMI Automation (13 standard checklist steps)
-    // PM: Parth Dasharathbhai Nagar (ACS-0063)
-    // =========================================================================
-    {
-      key: 'PRJ-003-T01', project: 'PRJ-2026-003',
-      title: 'Review P&ID and HMI screen requirements',
-      hours: 16, start: -6, end: -2, skills: ['HMI screens', 'P&ID review'],
-      assignee: 'ACS-0070', percent: 100, status: 'COMPLETED',
-    },
-    {
-      key: 'PRJ-003-T02', project: 'PRJ-2026-003',
-      title: 'Diagnostic Screen of DI',
-      hours: 8, start: -2, end: 3, skills: ['HMI graphics', 'diagnostics'],
-      assignee: 'ACS-0065', percent: 40, status: 'IN_PROGRESS',
-      dependsOn: [{ on: 'PRJ-003-T01' }],
-    },
-    {
-      key: 'PRJ-003-T03', project: 'PRJ-2026-003',
-      title: 'Diagnostic Screen of DQ',
-      hours: 8, start: 3, end: 7, skills: ['HMI graphics', 'diagnostics'],
-      assignee: 'ACS-0066', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-003-T02' }],
-    },
-    {
-      key: 'PRJ-003-T04', project: 'PRJ-2026-003',
-      title: 'Diagnostic Screen of AI',
-      hours: 8, start: 7, end: 12, skills: ['analog diagnostics', 'HMI'],
-      assignee: 'ACS-0067', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-003-T03' }],
-    },
-    {
-      key: 'PRJ-003-T05', project: 'PRJ-2026-003',
-      title: 'Diagnostic Screen of AQ',
-      hours: 8, start: 12, end: 16, skills: ['HMI diagnostics'],
-      assignee: 'ACS-0072', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-003-T04' }],
-    },
-    {
-      key: 'PRJ-003-T06', project: 'PRJ-2026-003',
-      title: 'Scaling Screen of Analog parameter',
-      hours: 16, start: 16, end: 21, skills: ['analog scaling', 'HMI touch'],
-      assignee: 'ACS-0073', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-003-T05' }],
-    },
-    {
-      key: 'PRJ-003-T07', project: 'PRJ-2026-003',
-      title: 'Faceplate Development',
-      hours: 24, start: 21, end: 26, skills: ['faceplate templates', 'popups'],
-      assignee: 'ACS-0068', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-003-T06' }],
-    },
-    {
-      key: 'PRJ-003-T08', project: 'PRJ-2026-003',
-      title: 'Alarm + History development',
-      hours: 16, start: 26, end: 31, skills: ['alarm banners', 'history tables'],
-      assignee: 'ACS-0069', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-003-T07' }],
-    },
-    {
-      key: 'PRJ-003-T09', project: 'PRJ-2026-003',
-      title: 'Trend development',
-      hours: 16, start: 31, end: 36, skills: ['HMI trend displays'],
-      assignee: 'ACS-0071', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-003-T08' }],
-    },
-    {
-      key: 'PRJ-003-T10', project: 'PRJ-2026-003',
-      title: 'Screen Navigation & Layouts',
-      hours: 16, start: 36, end: 41, skills: ['navigation hierarchy', 'header/footer'],
-      assignee: 'ACS-0070', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-003-T09' }],
-    },
-    {
-      key: 'PRJ-003-T11', project: 'PRJ-2026-003',
-      title: 'HMI Tag Linking with PLC DBs',
-      hours: 24, start: 41, end: 45, skills: ['tag linking', 'PLC DB integration'],
-      assignee: 'ACS-0064', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-003-T10' }],
-    },
-    {
-      key: 'PRJ-003-T12', project: 'PRJ-2026-003',
-      title: 'Communication Configuration & Drivers',
-      hours: 8, start: 45, end: 48, skills: ['Ethernet IP', 'driver setup'],
-      assignee: 'ACS-0068', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-003-T11' }],
-    },
-    {
-      key: 'PRJ-003-T13', project: 'PRJ-2026-003',
-      title: 'Simulation Trial',
-      hours: 16, start: 48, end: 50, skills: ['HMI runtime simulation', 'FAT signoff'],
-      assignee: 'ACS-0064', percent: 0, status: 'TODO',
-      dependsOn: [{ on: 'PRJ-003-T12' }],
-    },
-  ];
-
-  // Tasks, assignments, dependencies and logs only for projects created in this run.
-  const newTaskSeeds = taskSeeds.filter((t) => projectId.has(t.project));
-  const taskId = new Map<string, string>();
-  for (const seed of newTaskSeeds) {
-    const pid = projectId.get(seed.project)!;
-    const isCompleted = seed.status === 'COMPLETED';
-    const isInProgress = seed.status === 'IN_PROGRESS';
-    const taskAssigneeId = seed.assignee ? userId.get(seed.assignee) : undefined;
-
-    const task = await prisma.task.upsert({
-      where: { projectId_code: { projectId: pid, code: seed.key } },
-      create: {
-        projectId: pid,
-        code: seed.key,
-        title: seed.title,
-        type: 'PROJECT',
-        estimatedHours: seed.hours,
-        plannedStart: day(seed.start),
-        plannedEnd: day(seed.end),
-        actualStart: isCompleted || isInProgress ? day(seed.start) : null,
-        actualEnd: isCompleted ? day(seed.end) : null,
-        submittedAt: isCompleted ? day(seed.end) : null,
-        completedAt: isCompleted ? day(seed.end) : null,
-        completedById: isCompleted ? (taskAssigneeId ?? userId.get('ACS-0063')!) : null,
-        priority: 'MEDIUM',
-        status: seed.status ?? 'TODO',
-        percentComplete: seed.percent ?? 0,
-        requiredSkills: seed.skills ?? [],
-        createdById: userId.get('ACS-0061') || userId.get('ACS-0001')!,
-      },
-      update: {
-        title: seed.title,
-        estimatedHours: seed.hours,
-        plannedStart: day(seed.start),
-        plannedEnd: day(seed.end),
-        actualStart: isCompleted || isInProgress ? day(seed.start) : null,
-        actualEnd: isCompleted ? day(seed.end) : null,
-        submittedAt: isCompleted ? day(seed.end) : null,
-        completedAt: isCompleted ? day(seed.end) : null,
-        completedById: isCompleted ? (taskAssigneeId ?? userId.get('ACS-0063')!) : null,
-        percentComplete: seed.percent ?? 0,
-        status: seed.status ?? 'TODO',
-      },
-    });
-    taskId.set(seed.key, task.id);
-  }
-
-  // Set task assignments
-  for (const seed of newTaskSeeds) {
-    if (!seed.assignee) continue;
-    const uid = userId.get(seed.assignee)!;
-    const tid = taskId.get(seed.key)!;
-    const pid = projectId.get(seed.project)!;
-
-    await prisma.projectMember.upsert({
-      where: { projectId_userId: { projectId: pid, userId: uid } },
-      create: { projectId: pid, userId: uid, role: 'ENGINEER' },
-      update: {},
-    });
-
-    const existingAssignment = await prisma.taskAssignment.findFirst({
-      where: { taskId: tid, userId: uid },
-    });
-    if (!existingAssignment) {
-      await prisma.taskAssignment.create({
-        data: { taskId: tid, userId: uid, allocatedHours: seed.hours, status: 'ACTIVE' },
-      });
-    } else {
-      await prisma.taskAssignment.update({
-        where: { id: existingAssignment.id },
-        data: { allocatedHours: seed.hours },
-      });
-    }
-  }
-
-  // Set dependencies
-  for (const seed of newTaskSeeds) {
-    if (!seed.dependsOn) continue;
-    const tid = taskId.get(seed.key)!;
-    for (const dep of seed.dependsOn) {
-      const predId = taskId.get(dep.on)!;
-      await prisma.taskDependency.upsert({
-        where: { predecessorId_successorId: { predecessorId: predId, successorId: tid } },
-        create: { predecessorId: predId, successorId: tid, type: dep.type ?? 'FINISH_TO_START', lagDays: dep.lag ?? 0 },
-        update: {},
-      });
-    }
-  }
-
-  // Progress logs
-  const completedSeeds = newTaskSeeds.filter((t) => (t.percent ?? 0) > 0);
-  for (const t of completedSeeds) {
-    const tid = taskId.get(t.key)!;
-    const uid = userId.get(t.assignee!)!;
-    const already = await prisma.taskProgressLog.findFirst({ where: { taskId: tid } });
-    if (!already) {
-      await prisma.taskProgressLog.create({
-        data: {
-          taskId: tid,
-          userId: uid,
-          percentComplete: t.percent!,
-          hoursSpent: Math.round(t.hours * ((t.percent ?? 100) / 100)),
-          note: t.percent === 100 ? 'Work completed and verified against panel specifications.' : 'In progress, scheduled deliverables on track.',
-          loggedFor: day(-2),
-        },
-      });
-    }
-  }
-
-  // Handover seed
-  const handoverTask = taskId.get('PRJ-001-T06');
-  if (handoverTask) {
-    const from = userId.get('ACS-0069')!; // Dixit Prajapati
-    const to = userId.get('ACS-0067')!;   // Het Patel
-    const already = await prisma.taskHandover.findFirst({ where: { taskId: handoverTask, status: 'PENDING' } });
-    if (!already) {
-      await prisma.taskHandover.create({
-        data: {
-          taskId: handoverTask,
-          fromUserId: from,
-          toUserId: to,
-          reason: 'Site visit for Tata Chemicals plant survey - handing over DQ mapping completion.',
-          remainingPercent: 40,
-          remainingHours: 6.4,
-        },
-      });
-    }
-  }
-
-  // Leaves
-  const leaveSeeds = [
-    { user: 'ACS-0065', from: 3, to: 5, reason: 'Family function' },
-    { user: 'ACS-0078', from: 2, to: 4, reason: 'Certification exam' },
-  ];
-  for (const seed of leaveSeeds) {
-    const uid = userId.get(seed.user);
-    if (!uid) continue;
-    const already = await prisma.leave.findFirst({ where: { userId: uid, reason: seed.reason } });
-    if (already) continue;
-    await prisma.leave.create({
-      data: { userId: uid, startDate: day(seed.from), endDate: day(seed.to), reason: seed.reason, status: 'APPROVED' },
-    });
-  }
-
-  // Fill automationTypes for projects created before the field existed. Only touches
-  // projects whose list is still empty, so it is safe on every start.
-  const templateFirstSteps = await prisma.checklistTemplate.findMany({
-    select: { code: true, items: { where: { stepNumber: 1 }, select: { title: true } } },
-  });
-  const untyped = await prisma.project.findMany({
-    where: { automationTypes: { isEmpty: true } },
-    select: { id: true, tasks: { select: { title: true, type: true } } },
-  });
-  for (const project of untyped) {
-    const types = templateFirstSteps
-      .filter((tpl) =>
-        project.tasks.some(
-          (t) => (t.type === 'PHASE' && t.title.startsWith(tpl.code)) || t.title === tpl.items[0]?.title,
-        ),
-      )
-      .map((tpl) => tpl.code);
-    if (types.length > 0) {
-      await prisma.project.update({ where: { id: project.id }, data: { automationTypes: types } });
-    }
   }
 
   console.log(`Successfully seeded ${people.length} people across ${departmentTree.length} departments!`);
-  console.log(`3 live automation projects seeded with 13 standard checklist tasks each, dependencies, assignments and handovers.`);
   console.log(`Primary Super Admin: admin@acsengitech.com / <SEED_PASSWORD>`);
 }
 
