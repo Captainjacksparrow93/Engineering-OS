@@ -102,15 +102,27 @@ still works as before.
 
 ---
 
-## ▶ CURRENT WORK — `docs/reset-and-pm-team-plan.md`
+## ▶ CURRENT WORK — `docs/handover-rework-plan.md`
 
-Wipe all 16 projects, stop the seeds recreating them, and update the Project & Service team
-to the 24 Sep org chart. **Read the "For Antigravity" section at the top of that document
-first** — you write the code and the scripts, a human runs them against production.
+The two-approval cross-squad handover rework. **Read its "Before you start" section first** —
+the database is now empty, so you must create test data before verifying anything, and the
+squad fixtures are listed there.
 
-**After that:** `docs/handover-rework-plan.md` — the two-approval cross-squad handover rework.
-Do it **after** the team update, because the handover rules depend on the squad boundaries
-that update corrects.
+Work through the phases in order. Phase 0 is tiny and makes the rest debuggable. Phase 1
+needs a migration — read `docs/deployment-runbook.md` before writing it.
+
+Commit, **do not push**.
+
+### ✅ DONE — `docs/reset-and-pm-team-plan.md`
+
+All of it, live on production: project seeds disabled, all 16 projects wiped (with their
+tasks, assignments, logs and 444 dead notifications), all clients deleted and client seeding
+removed, `SERVICE_HEAD` created and granted to Rajani with `pm.oversight`, 13 reporting lines
+corrected, `ASST_MANAGER` granted to Munaf and Dhrupin (and `SENIOR_ENGINEER` removed from
+them), Krupesh Solanki moved to QC.
+
+Outstanding from it: **Akash Vasava** is created by a human via `/admin/users`, not by a
+script.
 
 ---
 

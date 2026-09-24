@@ -15,6 +15,41 @@ Directors never ask.**
 
 ---
 
+## Before you start — the ground has changed under this plan
+
+All of the following landed on production **after** this plan was written. It is now the
+state you are building against.
+
+**The database is empty.** Zero projects, zero tasks, zero clients. **You cannot verify
+anything without first creating test data** — make a project through the wizard (add a
+client, pick a squad lead, PLC × 2, assign engineers) before testing any phase. Do not
+mistake "no error" for "it works" when there is nothing to act on.
+
+**Squads are now correct and are the fixtures for every test:**
+
+| Lead | Role | Squad |
+|---|---|---|
+| Parth Nagar (`ACS-0063`) | `PROJECT_MANAGER` | Shivam, Sahil, Abbasali, Harmitsinh — 4 |
+| Paras Prajapati (`ACS-0074`) | `PROJECT_MANAGER` | Harsh, Ridhhi, Anurag, Chirag (+ Akash when created) |
+| Munaf Multani (`ACS-0075`) | `ASST_MANAGER` | Het, Agastya, Dixit, Hitesh, Ashish — 5 |
+| Dhrupin Vaghasiya (`ACS-0070`) | `ASST_MANAGER` | Yogi, Jigar, Tejas — 3 |
+
+All four report to **Dilip Asediya** (`TECHNICAL_HEAD`), who is the only `pm.oversight`
+holder in the reporting line — that is what makes each of them a squad root.
+
+**`SERVICE_HEAD` exists** (Rajani Nagar, `ACS-0062`) and **holds `pm.oversight`**, so she is
+a head for every rule here: acts directly, and is a valid stage-2 approver. She manages
+nobody, which is why granting her oversight did not disturb the squads.
+
+**Munaf and Dhrupin no longer hold `SENIOR_ENGINEER`.** They are squad leads, not assignable
+engineers, so they will not appear in the `colleagues` list. In Phase 5 they appear as
+**group headings only** — never as a selectable member of anyone's group.
+
+**Akash Vasava is not created yet** (a human adds him via the People screen). Paras's squad
+is 4 until then; do not treat that as a bug.
+
+---
+
 ## Phase 0 — make failures visible (do this first, it is tiny)
 
 `src/components/assignee-cell.tsx` discards the result of `assignTaskAction`, so every
