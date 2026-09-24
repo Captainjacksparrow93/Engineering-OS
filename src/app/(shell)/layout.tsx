@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getPrincipal } from '@/core/auth/session';
 import { unreadCount } from '@/core/notifications/notify';
-import { prisma } from '@/core/db/prisma';
 import { countPendingApprovals } from '@/modules/project-management/services/task.service';
+import { listHandovers } from '@/modules/project-management/services/handover.service';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
 import { ShellContainer } from '@/components/shell/shell-container';
@@ -19,18 +19,13 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   const principal = await getPrincipal();
   if (!principal) redirect('/login');
 
-  const [notifications, taskHandovers, projectHandovers, pendingApprovals] = await Promise.all([
+  const [notifications, handoversList, pendingApprovals] = await Promise.all([
     unreadCount(principal.userId),
-    prisma.taskHandover.count({
-      where: { toUserId: principal.userId, status: 'PENDING' },
-    }),
-    prisma.projectHandover.count({
-      where: { toUserId: principal.userId, status: 'PENDING' },
-    }),
+    listHandovers(principal).catch(() => ({ incoming: [], incomingProjects: [] })),
     countPendingApprovals(principal),
   ]);
 
-  const pendingHandovers = taskHandovers + projectHandovers;
+  const pendingHandovers = handoversList.incoming.length + handoversList.incomingProjects.length;
 
   return (
     <ShellContainer

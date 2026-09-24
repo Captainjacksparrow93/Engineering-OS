@@ -5,7 +5,9 @@ import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
 import { getTaskDetail } from '@/modules/project-management/services/task.service';
 import { handoverCandidates, peersForHandover } from '@/modules/project-management/services/availability.service';
-import { reassignTeamFor } from '@/modules/project-management/services/access';
+import { getOrgPeople } from '@/modules/project-management/services/access';
+import { hasPermissionAnywhere, can } from '@/core/rbac/engine';
+import { groupEngineersBySquad } from '@/modules/project-management/domain/teams';
 import { formatDate, formatDateRange, daysUntil } from '@/core/utils/dates';
 import { Alert, Avatar, Card, PageHeader, PriorityBadge, ProgressBar, StatusBadge } from '@/components/ui';
 import { ProgressForm } from './progress-form';
@@ -30,8 +32,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
 
   const { task, blockers, downstreamCount, permissions } = detail;
 
-  const team = permissions.canAssign ? await reassignTeamFor(principal) : null;
-  const [candidates, peers, assignableUsers, projectTasks] = await Promise.all([
+  const [candidates, peers, assignableUsers, projectTasks, people] = await Promise.all([
     permissions.canHandover ? handoverCandidates(principal, task.id) : Promise.resolve([]),
     permissions.canHandover ? peersForHandover(principal, task.id) : Promise.resolve([]),
     permissions.canAssign
@@ -39,8 +40,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           where: {
             companyId: principal.companyId,
             status: 'ACTIVE',
-            roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } } } },
-            ...(team ? { id: { in: [...team] } } : {}),
+            roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER', 'PM_BASE'] } } } },
           },
           select: { id: true, fullName: true, designation: true },
           orderBy: { fullName: 'asc' },
@@ -53,11 +53,18 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           orderBy: { plannedStart: 'asc' },
         })
       : Promise.resolve([]),
+    permissions.canAssign ? getOrgPeople(principal.companyId) : Promise.resolve([]),
   ]);
+
+  const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight') || can(principal, 'pm.project.read.all');
+  const leadNameMap = new Map(people.map((p) => [p.id, p.fullName]));
+  const squadGroups = permissions.canAssign
+    ? groupEngineersBySquad(assignableUsers, people, principal.userId, hasOversight, leadNameMap)
+    : undefined;
 
   const activeAssignments = task.assignments.filter((a) => a.status === 'ACTIVE');
   const pastAssignments = task.assignments.filter((a) => a.status !== 'ACTIVE');
-  const pendingHandover = task.handovers.find((h) => h.status === 'PENDING');
+  const pendingHandover = task.handovers.find((h) => h.status === 'PENDING' || h.status === 'AWAITING_HEAD_APPROVAL');
   const due = daysUntil(task.plannedEnd);
 
   // Status pill is derived from the same blockers list the banner uses
@@ -121,7 +128,10 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       {pendingHandover ? (
         <div className="mb-4">
           <Alert tone="warning">
-            Reassign request pending: <strong>{formatName(pendingHandover.fromUser.fullName)}</strong> →{' '}
+            {pendingHandover.status === 'AWAITING_HEAD_APPROVAL'
+              ? 'Reassign request awaiting head approval: '
+              : 'Reassign request pending: '}
+            <strong>{formatName(pendingHandover.fromUser.fullName)}</strong> →{' '}
             <strong>{formatName(pendingHandover.toUser.fullName)}</strong> ({pendingHandover.remainingPercent}% remaining).{' '}
             <Link href="/pm/handovers" className="underline font-semibold">
               View in Requests
@@ -237,6 +247,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             task={{ id: task.id, status: task.status, projectId: task.project.id }}
             permissions={permissions}
             assignableUsers={assignableUsers}
+            squadGroups={squadGroups}
           />
 
           {permissions.canReviewOrManage ? (

@@ -1,5 +1,6 @@
 import { prisma } from '@/core/db/prisma';
-import { can } from '@/core/rbac/engine';
+import type { Prisma } from '@prisma/client';
+import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
 import { DomainError, ForbiddenError, NotFoundError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
@@ -7,7 +8,9 @@ import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
 import { formatName } from '@/core/utils/strings';
-import { assertTaskPermission, OUTSIDE_TEAM_MESSAGE, oversightRecipients, projectVisibilityWhere, reassignTeamFor } from './access';
+import { assertTaskPermission, getOrgPeople, OUTSIDE_TEAM_MESSAGE, oversightRecipients, projectVisibilityWhere, reassignTeamFor } from './access';
+import { teamRootOf } from '../domain/teams';
+import { isExecutionStaff } from '../domain/availability';
 
 /**
  * Reassign Request (Unified Request -> Accept flow for everyone).
@@ -87,7 +90,9 @@ export async function requestHandover(
   }
   const team = await reassignTeamFor(principal);
   if (team && !team.has(target.id)) {
-    throw new DomainError(OUTSIDE_TEAM_MESSAGE);
+    if (!canManage) {
+      throw new DomainError('Engineers cannot hand over tasks outside their squad.');
+    }
   }
 
   const alreadyHolds = task.assignments.some((a) => a.userId === input.toUserId);
@@ -96,7 +101,7 @@ export async function requestHandover(
   }
 
   const pending = await prisma.taskHandover.findFirst({
-    where: { taskId: input.taskId, status: 'PENDING' },
+    where: { taskId: input.taskId, status: { in: ['PENDING', 'AWAITING_HEAD_APPROVAL'] } },
   });
   if (pending) {
     throw new DomainError('A reassign request is already awaiting a decision on this task.');
@@ -105,6 +110,11 @@ export async function requestHandover(
   const remainingPercent = Math.max(0, 100 - task.percentComplete);
   const allocated = ownerAssignment.allocatedHours ?? task.estimatedHours;
   const remainingHours = Math.round(allocated * (remainingPercent / 100) * 10) / 10;
+
+  const people = await getOrgPeople(principal.companyId);
+  const toSquadLeadId = teamRootOf(input.toUserId, people);
+  const fromSquadLeadId = teamRootOf(fromUserId, people);
+  const isCross = toSquadLeadId !== fromSquadLeadId;
 
   return prisma.$transaction(async (tx) => {
     const created = await tx.taskHandover.create({
@@ -134,6 +144,7 @@ export async function requestHandover(
           remainingPercent,
           remainingHours,
           reason: input.reason,
+          crossSquad: isCross,
         },
       },
       tx,
@@ -157,18 +168,45 @@ export async function requestHandover(
       tx,
     );
 
-    // 1. Notify receiver (action required)
-    await notify(
-      {
-        userIds: [input.toUserId],
-        title: `Reassign request: ${task.title}`,
-        body: `${formatName(principal.fullName)} requested to reassign "${task.title}" to you (${remainingPercent}% remaining). Action required: Accept or Decline.`,
-        link: '/pm/handovers',
-      },
-      tx,
-    );
+    if (isCross) {
+      // Cross-squad: PM2 (receiving squad lead) approval is required
+      if (toSquadLeadId && toSquadLeadId !== principal.userId) {
+        await notify(
+          {
+            userIds: [toSquadLeadId],
+            title: `Cross-squad handover request: ${task.title}`,
+            body: `${formatName(principal.fullName)} requested to reassign "${task.title}" to ${formatName(target.fullName)} in your squad. Approval required.`,
+            link: '/pm/handovers',
+          },
+          tx,
+        );
+      }
+      const oversightIds = await oversightRecipients(principal.companyId, task.project.departmentId, principal.userId);
+      if (oversightIds.length > 0) {
+        await notify(
+          {
+            userIds: oversightIds,
+            title: `Cross-squad handover requested: ${task.title}`,
+            body: `${formatName(principal.fullName)} requested to reassign "${task.title}" across squads to ${formatName(target.fullName)}.`,
+            link: '/pm/approvals',
+          },
+          tx,
+        );
+      }
+    } else {
+      // Intra-squad: notify receiver (action required)
+      await notify(
+        {
+          userIds: [input.toUserId],
+          title: `Reassign request: ${task.title}`,
+          body: `${formatName(principal.fullName)} requested to reassign "${task.title}" to you (${remainingPercent}% remaining). Action required: Accept or Decline.`,
+          link: '/pm/handovers',
+        },
+        tx,
+      );
+    }
 
-    // 2. Notify current owner (if requester is someone else)
+    // Notify current owner (if requester is someone else)
     if (fromUserId !== principal.userId) {
       await notify(
         {
@@ -181,7 +219,7 @@ export async function requestHandover(
       );
     }
 
-    // 3. Notify PM if requester is not PM
+    // Notify PM if requester is not PM
     if (task.project.managerId && task.project.managerId !== principal.userId && task.project.managerId !== fromUserId) {
       await notify(
         {
@@ -214,107 +252,404 @@ export async function decideHandover(
     where: { id: handoverId },
     include: {
       task: { include: { project: { select: { id: true, code: true, name: true, managerId: true, departmentId: true } } } },
-      fromUser: { select: { id: true, fullName: true } },
-      toUser: { select: { id: true, fullName: true } },
-      requestedBy: { select: { id: true, fullName: true } },
+      fromUser: { select: { id: true, fullName: true, avatarColor: true } },
+      toUser: { select: { id: true, fullName: true, avatarColor: true } },
+      requestedBy: { select: { id: true, fullName: true, avatarColor: true } },
     },
   });
   if (!handover) throw new NotFoundError('Reassign request not found.');
-  if (handover.status !== 'PENDING') throw new DomainError('This reassign request has already been decided.');
-
-  const isReceiver = handover.toUserId === principal.userId;
-  const isDirector = can(principal, 'pm.project.read.all');
-  const isProjectManager = handover.task.project.managerId === principal.userId;
-  if (!isReceiver && !isDirector && !isProjectManager) {
-    throw new ForbiddenError('Only the assigned recipient, project manager, or a director can accept or decline this reassign request.');
+  if (handover.status !== 'PENDING' && handover.status !== 'AWAITING_HEAD_APPROVAL') {
+    throw new DomainError('This reassign request has already been decided.');
   }
 
-  const now = new Date();
+  const people = await getOrgPeople(principal.companyId);
+  const fromSquadRoot = teamRootOf(handover.fromUserId, people);
+  const reqSquadRoot = handover.requestedById ? teamRootOf(handover.requestedById, people) : fromSquadRoot;
+  const toSquadRoot = teamRootOf(handover.toUserId, people);
+  const isCrossSquad = fromSquadRoot !== toSquadRoot || reqSquadRoot !== toSquadRoot;
 
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.taskHandover.updateMany({
-      where: { id: handoverId, status: 'PENDING' },
-      data: {
-        status: normalizedDecision,
-        decidedById: principal.userId,
-        decidedAt: now,
-        decisionNote: note ?? null,
-      },
-    });
-    if (updated.count === 0) {
-      throw new DomainError('This reassign request has already been decided.');
+  const isDirector = can(principal, 'pm.project.read.all');
+  const isHead = hasPermissionAnywhere(principal, 'pm.oversight');
+  const isReceiver = handover.toUserId === principal.userId;
+  const isPM2 = principal.userId === toSquadRoot;
+  const isProjectManager = handover.task.project.managerId === principal.userId;
+
+  const now = new Date();
+  const oversightIds = await oversightRecipients(principal.companyId, handover.task.project.departmentId, principal.userId);
+
+  // -------------------------------------------------------------------------
+  // SAME-SQUAD HANDOVER (Intra-squad peer request-and-accept)
+  // -------------------------------------------------------------------------
+  if (!isCrossSquad) {
+    if (!isReceiver && !isDirector && !isProjectManager) {
+      throw new ForbiddenError('Only the assigned recipient, project manager, or a director can accept or decline this reassign request.');
     }
 
-    const oversightIds = await oversightRecipients(principal.companyId, handover.task.project.departmentId, principal.userId);
-
-    if (normalizedDecision === 'ACCEPTED') {
-      // Release every active OWNER assignment on the task
-      await tx.taskAssignment.updateMany({
-        where: { taskId: handover.taskId, role: 'OWNER', status: 'ACTIVE' },
-        data: { status: 'HANDED_OVER', releasedAt: now },
-      });
-
-      // Create new ACTIVE OWNER assignment for receiver
-      await tx.taskAssignment.create({
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.taskHandover.updateMany({
+        where: { id: handoverId, status: 'PENDING' },
         data: {
-          taskId: handover.taskId,
-          userId: handover.toUserId,
-          role: 'OWNER',
-          allocatedHours: handover.remainingHours,
-          assignedById: handover.requestedById ?? principal.userId,
+          status: normalizedDecision,
+          decidedById: principal.userId,
+          decidedAt: now,
+          decisionNote: note ?? null,
         },
       });
+      if (updated.count === 0) {
+        throw new DomainError('This reassign request has already been decided.');
+      }
 
-      // Add receiver as project member
-      await tx.projectMember.upsert({
-        where: { projectId_userId: { projectId: handover.task.projectId, userId: handover.toUserId } },
-        create: { projectId: handover.task.projectId, userId: handover.toUserId, role: 'ENGINEER' },
-        update: {},
-      });
+      if (normalizedDecision === 'ACCEPTED') {
+        await tx.taskAssignment.updateMany({
+          where: { taskId: handover.taskId, role: 'OWNER', status: 'ACTIVE' },
+          data: { status: 'HANDED_OVER', releasedAt: now },
+        });
 
-      await publish(
-        {
-          name: EVENTS.HANDOVER_ACCEPTED,
-          module: 'pm',
-          entityType: 'TaskHandover',
-          entityId: handoverId,
-          actorId: principal.userId,
-          payload: {
+        await tx.taskAssignment.create({
+          data: {
             taskId: handover.taskId,
-            projectId: handover.task.projectId,
-            fromUserId: handover.fromUserId,
-            toUserId: handover.toUserId,
-            remainingHours: handover.remainingHours,
+            userId: handover.toUserId,
+            role: 'OWNER',
+            allocatedHours: handover.remainingHours,
+            assignedById: handover.requestedById ?? principal.userId,
           },
+        });
+
+        await tx.projectMember.upsert({
+          where: { projectId_userId: { projectId: handover.task.projectId, userId: handover.toUserId } },
+          create: { projectId: handover.task.projectId, userId: handover.toUserId, role: 'ENGINEER' },
+          update: {},
+        });
+
+        await publish(
+          {
+            name: EVENTS.HANDOVER_ACCEPTED,
+            module: 'pm',
+            entityType: 'TaskHandover',
+            entityId: handoverId,
+            actorId: principal.userId,
+            payload: {
+              taskId: handover.taskId,
+              projectId: handover.task.projectId,
+              fromUserId: handover.fromUserId,
+              toUserId: handover.toUserId,
+              remainingHours: handover.remainingHours,
+            },
+          },
+          tx,
+        );
+
+        const notifyUserIds = Array.from(
+          new Set(
+            [
+              handover.requestedById,
+              handover.fromUserId,
+              handover.task.project.managerId,
+              ...oversightIds,
+            ].filter((uid): uid is string => Boolean(uid) && uid !== principal.userId),
+          ),
+        );
+
+        if (notifyUserIds.length > 0) {
+          await notify(
+            {
+              userIds: notifyUserIds,
+              title: `Reassign accepted: ${handover.task.title}`,
+              body: `${formatName(handover.toUser.fullName)} accepted and took over "${handover.task.title}".`,
+              link: `/pm/tasks/${handover.taskId}`,
+            },
+            tx,
+          );
+        }
+      } else {
+        await publish(
+          {
+            name: EVENTS.HANDOVER_REJECTED,
+            module: 'pm',
+            entityType: 'TaskHandover',
+            entityId: handoverId,
+            actorId: principal.userId,
+            payload: { taskId: handover.taskId, fromUserId: handover.fromUserId, toUserId: handover.toUserId },
+          },
+          tx,
+        );
+
+        const notifyUserIds = Array.from(
+          new Set(
+            [handover.requestedById, handover.fromUserId, handover.task.project.managerId].filter(
+              (uid): uid is string => Boolean(uid) && uid !== principal.userId,
+            ),
+          ),
+        );
+
+        if (notifyUserIds.length > 0) {
+          await notify(
+            {
+              userIds: notifyUserIds,
+              title: `Reassign declined: ${handover.task.title}`,
+              body: `${formatName(handover.toUser.fullName)} declined reassignment of "${handover.task.title}". ${note ? `Reason: ${note}` : ''} The task stays with ${formatName(handover.fromUser.fullName)}.`,
+              link: `/pm/tasks/${handover.taskId}`,
+            },
+            tx,
+          );
+        }
+      }
+
+      await audit(
+        {
+          actorId: principal.userId,
+          module: 'pm',
+          action: `task.reassign_${normalizedDecision.toLowerCase()}`,
+          entityType: 'Task',
+          entityId: handover.taskId,
+          diff: { handoverId, decision: normalizedDecision, note: note ?? null },
         },
         tx,
       );
 
-      // Notify requester, previous owner, PM, and leadership
-      const notifyUserIds = Array.from(
-        new Set(
-          [
-            handover.requestedById,
-            handover.fromUserId,
-            handover.task.project.managerId,
-            ...oversightIds,
-          ].filter((uid): uid is string => Boolean(uid) && uid !== principal.userId),
-        ),
+      return updated;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // CROSS-SQUAD HANDOVER (Two-stage approval)
+  // -------------------------------------------------------------------------
+  if (handover.status === 'PENDING') {
+    // STAGE 1: Receiving squad lead (PM2), Head, or Director
+    if (!isPM2 && !isHead && !isDirector) {
+      throw new ForbiddenError('Only the receiving squad lead or leadership can decide this stage.');
+    }
+
+    if (normalizedDecision === 'DECLINED') {
+      return prisma.$transaction(async (tx) => {
+        const updated = await tx.taskHandover.updateMany({
+          where: { id: handoverId, status: 'PENDING' },
+          data: {
+            status: 'DECLINED',
+            decidedById: principal.userId,
+            decidedAt: now,
+            decisionNote: note ?? null,
+          },
+        });
+        if (updated.count === 0) throw new DomainError('This handover request has already been decided.');
+
+        await publish(
+          {
+            name: EVENTS.HANDOVER_REJECTED,
+            module: 'pm',
+            entityType: 'TaskHandover',
+            entityId: handoverId,
+            actorId: principal.userId,
+            payload: { taskId: handover.taskId, fromUserId: handover.fromUserId, toUserId: handover.toUserId },
+          },
+          tx,
+        );
+
+        const notifyUserIds = Array.from(
+          new Set(
+            [handover.requestedById, handover.fromUserId, handover.task.project.managerId].filter(
+              (uid): uid is string => Boolean(uid) && uid !== principal.userId,
+            ),
+          ),
+        );
+        if (notifyUserIds.length > 0) {
+          await notify(
+            {
+              userIds: notifyUserIds,
+              title: `Cross-squad handover declined: ${handover.task.title}`,
+              body: `${formatName(principal.fullName)} declined the cross-squad handover. ${note ? `Reason: ${note}` : ''} The task stays with ${formatName(handover.fromUser.fullName)}.`,
+              link: `/pm/tasks/${handover.taskId}`,
+            },
+            tx,
+          );
+        }
+
+        await audit(
+          {
+            actorId: principal.userId,
+            module: 'pm',
+            action: 'task.reassign_declined',
+            entityType: 'Task',
+            entityId: handover.taskId,
+            diff: { handoverId, stage: 1, decision: 'DECLINED', note: note ?? null },
+          },
+          tx,
+        );
+
+        return updated;
+      });
+    }
+
+    // Stage 1 ACCEPTED
+    // A Director may approve either stage outright
+    if (isDirector) {
+      return prisma.$transaction(async (tx) => {
+        const updated = await tx.taskHandover.updateMany({
+          where: { id: handoverId, status: 'PENDING' },
+          data: {
+            status: 'ACCEPTED',
+            decidedById: principal.userId,
+            decidedAt: now,
+            decisionNote: note ?? null,
+            headApprovedById: principal.userId,
+            headApprovedAt: now,
+            headDecisionNote: note ?? 'Director approved outright',
+          },
+        });
+        if (updated.count === 0) throw new DomainError('This handover request has already been decided.');
+
+        // Work moves!
+        await tx.taskAssignment.updateMany({
+          where: { taskId: handover.taskId, role: 'OWNER', status: 'ACTIVE' },
+          data: { status: 'HANDED_OVER', releasedAt: now },
+        });
+
+        await tx.taskAssignment.create({
+          data: {
+            taskId: handover.taskId,
+            userId: handover.toUserId,
+            role: 'OWNER',
+            allocatedHours: handover.remainingHours,
+            assignedById: handover.requestedById ?? principal.userId,
+          },
+        });
+
+        // Add receiving engineer as project member on that project only
+        await tx.projectMember.upsert({
+          where: { projectId_userId: { projectId: handover.task.projectId, userId: handover.toUserId } },
+          create: { projectId: handover.task.projectId, userId: handover.toUserId, role: 'ENGINEER' },
+          update: {},
+        });
+
+        await publish(
+          {
+            name: EVENTS.HANDOVER_ACCEPTED,
+            module: 'pm',
+            entityType: 'TaskHandover',
+            entityId: handoverId,
+            actorId: principal.userId,
+            payload: {
+              taskId: handover.taskId,
+              projectId: handover.task.projectId,
+              fromUserId: handover.fromUserId,
+              toUserId: handover.toUserId,
+              remainingHours: handover.remainingHours,
+            },
+          },
+          tx,
+        );
+
+        const notifyUserIds = Array.from(
+          new Set(
+            [
+              handover.requestedById,
+              handover.fromUserId,
+              handover.toUserId,
+              toSquadRoot,
+              handover.task.project.managerId,
+              ...oversightIds,
+            ].filter((uid): uid is string => Boolean(uid) && uid !== principal.userId),
+          ),
+        );
+
+        if (notifyUserIds.length > 0) {
+          await notify(
+            {
+              userIds: notifyUserIds,
+              title: `Cross-squad handover approved: ${handover.task.title}`,
+              body: `${formatName(principal.fullName)} approved cross-squad handover of "${handover.task.title}" to ${formatName(handover.toUser.fullName)}.`,
+              link: `/pm/tasks/${handover.taskId}`,
+            },
+            tx,
+          );
+        }
+
+        await audit(
+          {
+            actorId: principal.userId,
+            module: 'pm',
+            action: 'task.reassign_accepted',
+            entityType: 'Task',
+            entityId: handover.taskId,
+            diff: { handoverId, decision: 'ACCEPTED', outright: true, note: note ?? null },
+          },
+          tx,
+        );
+
+        return updated;
+      });
+    }
+
+    // PM2 (or non-Director head) approves Stage 1 -> moves to AWAITING_HEAD_APPROVAL
+    // Work does NOT move!
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.taskHandover.updateMany({
+        where: { id: handoverId, status: 'PENDING' },
+        data: {
+          status: 'AWAITING_HEAD_APPROVAL',
+          decidedById: principal.userId,
+          decidedAt: now,
+          decisionNote: note ?? null,
+        },
+      });
+      if (updated.count === 0) throw new DomainError('This handover request has already been decided.');
+
+      // Notify Heads & Director that head approval is required
+      const leadershipIds = Array.from(
+        new Set([...oversightIds].filter((uid) => uid !== principal.userId)),
       );
 
-      if (notifyUserIds.length > 0) {
+      if (leadershipIds.length > 0) {
         await notify(
           {
-            userIds: notifyUserIds,
-            title: `Reassign accepted: ${handover.task.title}`,
-            body: `${formatName(handover.toUser.fullName)} accepted and took over "${handover.task.title}".`,
-            link: `/pm/tasks/${handover.taskId}`,
+            userIds: leadershipIds,
+            title: `Head approval required: ${handover.task.title}`,
+            body: `${formatName(principal.fullName)} approved cross-squad handover of "${handover.task.title}" to ${formatName(handover.toUser.fullName)}. Head sign-off required.`,
+            link: '/pm/approvals',
           },
           tx,
         );
       }
-    } else {
-      // DECLINED
+
+      await audit(
+        {
+          actorId: principal.userId,
+          module: 'pm',
+          action: 'task.reassign_stage1_approved',
+          entityType: 'Task',
+          entityId: handover.taskId,
+          diff: { handoverId, stage: 1, decision: 'ACCEPTED', note: note ?? null },
+        },
+        tx,
+      );
+
+      return updated;
+    });
+  }
+
+  // STAGE 2: Status is AWAITING_HEAD_APPROVAL
+  if (!isHead && !isDirector) {
+    throw new ForbiddenError('Only Technical Head, Service Head, or Director can give final approval.');
+  }
+
+  // Self-approval guard: stage 2 approver must not be the same user who approved stage 1 (unless Director)
+  if (handover.decidedById === principal.userId && !isDirector) {
+    throw new DomainError('Stage 2 approval must be given by a different person than Stage 1.');
+  }
+
+  if (normalizedDecision === 'DECLINED') {
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.taskHandover.updateMany({
+        where: { id: handoverId, status: 'AWAITING_HEAD_APPROVAL' },
+        data: {
+          status: 'DECLINED',
+          headApprovedById: principal.userId,
+          headApprovedAt: now,
+          headDecisionNote: note ?? null,
+        },
+      });
+      if (updated.count === 0) throw new DomainError('This handover request has already been decided.');
+
       await publish(
         {
           name: EVENTS.HANDOVER_REJECTED,
@@ -329,7 +664,7 @@ export async function decideHandover(
 
       const notifyUserIds = Array.from(
         new Set(
-          [handover.requestedById, handover.fromUserId, handover.task.project.managerId].filter(
+          [handover.requestedById, handover.fromUserId, toSquadRoot, handover.task.project.managerId].filter(
             (uid): uid is string => Boolean(uid) && uid !== principal.userId,
           ),
         ),
@@ -339,23 +674,119 @@ export async function decideHandover(
         await notify(
           {
             userIds: notifyUserIds,
-            title: `Reassign declined: ${handover.task.title}`,
-            body: `${formatName(handover.toUser.fullName)} declined reassignment of "${handover.task.title}". ${note ? `Reason: ${note}` : ''} The task stays with ${formatName(handover.fromUser.fullName)}.`,
+            title: `Cross-squad handover declined by leadership: ${handover.task.title}`,
+            body: `${formatName(principal.fullName)} declined the cross-squad handover. ${note ? `Reason: ${note}` : ''} The task stays with ${formatName(handover.fromUser.fullName)}.`,
             link: `/pm/tasks/${handover.taskId}`,
           },
           tx,
         );
       }
+
+      await audit(
+        {
+          actorId: principal.userId,
+          module: 'pm',
+          action: 'task.reassign_head_declined',
+          entityType: 'Task',
+          entityId: handover.taskId,
+          diff: { handoverId, stage: 2, decision: 'DECLINED', note: note ?? null },
+        },
+        tx,
+      );
+
+      return updated;
+    });
+  }
+
+  // Stage 2 ACCEPTED: Work moves here, and only here!
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.taskHandover.updateMany({
+      where: { id: handoverId, status: 'AWAITING_HEAD_APPROVAL' },
+      data: {
+        status: 'ACCEPTED',
+        headApprovedById: principal.userId,
+        headApprovedAt: now,
+        headDecisionNote: note ?? null,
+      },
+    });
+    if (updated.count === 0) throw new DomainError('This handover request has already been decided.');
+
+    // Release old active owner
+    await tx.taskAssignment.updateMany({
+      where: { taskId: handover.taskId, role: 'OWNER', status: 'ACTIVE' },
+      data: { status: 'HANDED_OVER', releasedAt: now },
+    });
+
+    // Create new active owner
+    await tx.taskAssignment.create({
+      data: {
+        taskId: handover.taskId,
+        userId: handover.toUserId,
+        role: 'OWNER',
+        allocatedHours: handover.remainingHours,
+        assignedById: handover.requestedById ?? principal.userId,
+      },
+    });
+
+    // Add receiving engineer as project member on that project only
+    await tx.projectMember.upsert({
+      where: { projectId_userId: { projectId: handover.task.projectId, userId: handover.toUserId } },
+      create: { projectId: handover.task.projectId, userId: handover.toUserId, role: 'ENGINEER' },
+      update: {},
+    });
+
+    await publish(
+      {
+        name: EVENTS.HANDOVER_ACCEPTED,
+        module: 'pm',
+        entityType: 'TaskHandover',
+        entityId: handoverId,
+        actorId: principal.userId,
+        payload: {
+          taskId: handover.taskId,
+          projectId: handover.task.projectId,
+          fromUserId: handover.fromUserId,
+          toUserId: handover.toUserId,
+          remainingHours: handover.remainingHours,
+        },
+      },
+      tx,
+    );
+
+    // Notify PM1, PM2, and both engineers
+    const notifyUserIds = Array.from(
+      new Set(
+        [
+          handover.requestedById,
+          handover.fromUserId,
+          handover.toUserId,
+          toSquadRoot,
+          handover.task.project.managerId,
+          ...oversightIds,
+        ].filter((uid): uid is string => Boolean(uid) && uid !== principal.userId),
+      ),
+    );
+
+    if (notifyUserIds.length > 0) {
+      await notify(
+        {
+          userIds: notifyUserIds,
+          title: `Cross-squad handover approved: ${handover.task.title}`,
+          body: `${formatName(principal.fullName)} gave final approval for "${handover.task.title}" to be handed over to ${formatName(handover.toUser.fullName)}.`,
+          link: `/pm/tasks/${handover.taskId}`,
+        },
+        tx,
+      );
     }
 
     await audit(
       {
         actorId: principal.userId,
         module: 'pm',
-        action: `task.reassign_${normalizedDecision.toLowerCase()}`,
+        action: 'task.reassign_accepted',
         entityType: 'Task',
         entityId: handover.taskId,
-        diff: { handoverId, decision: normalizedDecision, note: note ?? null },
+        diff: { handoverId, stage: 2, decision: 'ACCEPTED', note: note ?? null },
       },
       tx,
     );
@@ -368,7 +799,9 @@ export async function decideHandover(
 export async function cancelHandover(principal: Principal, handoverId: string) {
   const handover = await prisma.taskHandover.findUnique({ where: { id: handoverId } });
   if (!handover) throw new NotFoundError('Reassign request not found.');
-  if (handover.status !== 'PENDING') throw new DomainError('Only a pending request can be withdrawn.');
+  if (handover.status !== 'PENDING' && handover.status !== 'AWAITING_HEAD_APPROVAL') {
+    throw new DomainError('Only a pending request can be withdrawn.');
+  }
 
   const isRequester = handover.requestedById === principal.userId || handover.fromUserId === principal.userId;
   const isDirector = can(principal, 'pm.project.read.all');
@@ -409,10 +842,14 @@ export async function requestProjectHandover(
   });
   if (!project) throw new NotFoundError('Project not found.');
 
+  // Role Gate: Engineers cannot hand over projects
   const isManager = project.managerId === principal.userId;
   const isDirector = can(principal, 'pm.project.read.all');
-  if (!isManager && !isDirector) {
-    throw new ForbiddenError('You can only hand over a project you currently manage.');
+  const isHead = hasPermissionAnywhere(principal, 'pm.oversight');
+  const canManage = can(principal, 'pm.project.update', { projectId: project.id, departmentId: project.departmentId });
+
+  if ((!isManager && !isDirector && !isHead && !canManage) || isExecutionStaff(principal)) {
+    throw new ForbiddenError('Engineers cannot hand over projects.');
   }
 
   if (input.toUserId === principal.userId) {
@@ -423,17 +860,31 @@ export async function requestProjectHandover(
   }
 
   const target = await prisma.user.findFirst({
-    where: { id: input.toUserId, companyId: principal.companyId, status: 'ACTIVE' },
+    where: {
+      id: input.toUserId,
+      companyId: principal.companyId,
+      status: 'ACTIVE',
+      roleAssignments: {
+        some: {
+          role: { key: { in: ['PROJECT_MANAGER', 'ASST_MANAGER', 'PM_BASE', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'DIRECTOR'] } },
+        },
+      },
+    },
     select: { id: true, fullName: true },
   });
-  if (!target) throw new DomainError('Selected colleague is not an active employee.');
+  if (!target) throw new DomainError('Selected colleague is not eligible to manage projects.');
 
   const pending = await prisma.projectHandover.findFirst({
-    where: { projectId: input.projectId, status: 'PENDING' },
+    where: { projectId: input.projectId, status: { in: ['PENDING', 'AWAITING_HEAD_APPROVAL'] } },
   });
   if (pending) {
     throw new DomainError('A handover request for this project is already awaiting a decision.');
   }
+
+  const people = await getOrgPeople(principal.companyId);
+  const fromSquadRoot = teamRootOf(project.managerId, people);
+  const toSquadRoot = teamRootOf(input.toUserId, people);
+  const isCross = fromSquadRoot !== toSquadRoot;
 
   return prisma.$transaction(async (tx) => {
     const created = await tx.projectHandover.create({
@@ -453,7 +904,7 @@ export async function requestProjectHandover(
         action: 'project.handover.requested',
         entityType: 'Project',
         entityId: input.projectId,
-        diff: { fromUserId: project.managerId, toUserId: input.toUserId, reason: input.reason },
+        diff: { fromUserId: project.managerId, toUserId: input.toUserId, reason: input.reason, crossSquad: isCross },
       },
       tx,
     );
@@ -467,6 +918,21 @@ export async function requestProjectHandover(
       },
       tx,
     );
+
+    if (isCross) {
+      const oversightIds = await oversightRecipients(principal.companyId, project.departmentId, principal.userId);
+      if (oversightIds.length > 0) {
+        await notify(
+          {
+            userIds: oversightIds,
+            title: `Cross-squad project handover requested: ${project.name}`,
+            body: `${formatName(principal.fullName)} requested to transfer "${project.name}" to ${formatName(target.fullName)}.`,
+            link: '/pm/approvals',
+          },
+          tx,
+        );
+      }
+    }
 
     return created;
   });
@@ -489,111 +955,336 @@ export async function decideProjectHandover(
     },
   });
   if (!handover) throw new NotFoundError('Project handover request not found.');
-  if (handover.status !== 'PENDING') throw new DomainError('This handover request has already been decided.');
-
-  // Only the assigned new manager or a director can accept or decline
-  const isReceiver = handover.toUserId === principal.userId;
-  const isDirector = can(principal, 'pm.project.read.all');
-  if (!isReceiver && !isDirector) {
-    throw new ForbiddenError('Only the assigned new manager or a director can accept or decline this project handover.');
+  if (handover.status !== 'PENDING' && handover.status !== 'AWAITING_HEAD_APPROVAL') {
+    throw new DomainError('This handover request has already been decided.');
   }
 
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.projectHandover.updateMany({
-      where: { id: handoverId, status: 'PENDING' },
-      data: {
-        status: normalizedDecision,
-        decidedById: principal.userId,
-        decidedAt: new Date(),
-        decisionNote: note ?? null,
-      },
+  const people = await getOrgPeople(principal.companyId);
+  const fromSquadRoot = teamRootOf(handover.fromUserId, people);
+  const toSquadRoot = teamRootOf(handover.toUserId, people);
+  const isCrossSquad = fromSquadRoot !== toSquadRoot;
+
+  const isReceiver = handover.toUserId === principal.userId;
+  const isDirector = can(principal, 'pm.project.read.all');
+  const isHead = hasPermissionAnywhere(principal, 'pm.oversight');
+  const now = new Date();
+  const oversightIds = await oversightRecipients(principal.companyId, handover.project.departmentId, principal.userId);
+
+  // Helper to execute actual project transfer in transaction
+  async function transferProjectInTx(tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) {
+    // 1. Update project managerId
+    await tx.project.update({
+      where: { id: handover!.projectId },
+      data: { managerId: handover!.toUserId },
     });
-    if (updated.count === 0) {
-      throw new DomainError('This project handover has already been decided.');
+
+    // 2. Upsert project member
+    await tx.projectMember.upsert({
+      where: { projectId_userId: { projectId: handover!.projectId, userId: handover!.toUserId } },
+      create: { projectId: handover!.projectId, userId: handover!.toUserId, role: 'MANAGER', allocationPercent: 100 },
+      update: { role: 'MANAGER' },
+    });
+
+    // 3. Grant RBAC Role to new manager
+    const managerRole = await tx.role.findUnique({ where: { key: 'PROJECT_MANAGER' } });
+    if (managerRole) {
+      await tx.roleAssignment.upsert({
+        where: {
+          userId_roleId_scopeType_scopeId: {
+            userId: handover!.toUserId,
+            roleId: managerRole.id,
+            scopeType: 'PROJECT',
+            scopeId: handover!.projectId,
+          },
+        },
+        create: {
+          userId: handover!.toUserId,
+          roleId: managerRole.id,
+          scopeType: 'PROJECT',
+          scopeId: handover!.projectId,
+          grantedBy: principal.userId,
+        },
+        update: {},
+      });
+
+      // 4. Revoke old manager's RBAC role
+      await tx.roleAssignment.deleteMany({
+        where: {
+          userId: handover!.fromUserId,
+          roleId: managerRole.id,
+          scopeType: 'PROJECT',
+          scopeId: handover!.projectId,
+        },
+      });
     }
 
-    if (normalizedDecision === 'ACCEPTED') {
-      // 1. Update project managerId
-      await tx.project.update({
-        where: { id: handover.projectId },
-        data: { managerId: handover.toUserId },
+    // 5. Update old manager member role
+    await tx.projectMember.updateMany({
+      where: { projectId: handover!.projectId, userId: handover!.fromUserId, role: 'MANAGER' },
+      data: { role: 'OBSERVER' },
+    });
+
+    await notify(
+      {
+        userIds: [handover!.fromUserId],
+        title: `Project handover accepted: ${handover!.project.name}`,
+        body: `${formatName(handover!.toUser.fullName)} has accepted the handover and is now the Project Manager.`,
+        link: `/pm/projects/${handover!.projectId}`,
+      },
+      tx,
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // SAME-SQUAD PROJECT HANDOVER
+  // -------------------------------------------------------------------------
+  if (!isCrossSquad) {
+    if (!isReceiver && !isDirector) {
+      throw new ForbiddenError('Only the assigned new manager or a director can accept or decline this project handover.');
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.projectHandover.updateMany({
+        where: { id: handoverId, status: 'PENDING' },
+        data: {
+          status: normalizedDecision,
+          decidedById: principal.userId,
+          decidedAt: now,
+          decisionNote: note ?? null,
+        },
       });
+      if (updated.count === 0) throw new DomainError('This project handover has already been decided.');
 
-      // 2. Upsert project member
-      await tx.projectMember.upsert({
-        where: { projectId_userId: { projectId: handover.projectId, userId: handover.toUserId } },
-        create: { projectId: handover.projectId, userId: handover.toUserId, role: 'MANAGER', allocationPercent: 100 },
-        update: { role: 'MANAGER' },
-      });
-
-      // 3. Grant RBAC Role to new manager
-      const managerRole = await tx.role.findUnique({ where: { key: 'PROJECT_MANAGER' } });
-      if (managerRole) {
-        await tx.roleAssignment.upsert({
-          where: {
-            userId_roleId_scopeType_scopeId: {
-              userId: handover.toUserId,
-              roleId: managerRole.id,
-              scopeType: 'PROJECT',
-              scopeId: handover.projectId,
-            },
+      if (normalizedDecision === 'ACCEPTED') {
+        await transferProjectInTx(tx);
+      } else {
+        await notify(
+          {
+            userIds: [handover.fromUserId],
+            title: `Project handover declined: ${handover.project.name}`,
+            body: `${formatName(handover.toUser.fullName)} declined the handover. ${note ? `Reason: ${note}` : ''}`,
+            link: `/pm/projects/${handover.projectId}`,
           },
-          create: {
-            userId: handover.toUserId,
-            roleId: managerRole.id,
-            scopeType: 'PROJECT',
-            scopeId: handover.projectId,
-            grantedBy: principal.userId,
-          },
-          update: {},
-        });
-
-        // 4. Revoke old manager's RBAC role
-        await tx.roleAssignment.deleteMany({
-          where: {
-            userId: handover.fromUserId,
-            roleId: managerRole.id,
-            scopeType: 'PROJECT',
-            scopeId: handover.projectId,
-          },
-        });
+          tx,
+        );
       }
 
-      // 5. Update old manager member role
-      await tx.projectMember.updateMany({
-        where: { projectId: handover.projectId, userId: handover.fromUserId, role: 'MANAGER' },
-        data: { role: 'OBSERVER' },
-      });
+      await audit(
+        {
+          actorId: principal.userId,
+          module: 'pm',
+          action: `project.handover.${normalizedDecision.toLowerCase()}`,
+          entityType: 'Project',
+          entityId: handover.projectId,
+          diff: { handoverId, decision: normalizedDecision, note: note ?? null },
+        },
+        tx,
+      );
 
-      await notify(
-        {
-          userIds: [handover.fromUserId],
-          title: `Project handover accepted: ${handover.project.name}`,
-          body: `${formatName(handover.toUser.fullName)} has accepted the handover and is now the Project Manager.`,
-          link: `/pm/projects/${handover.projectId}`,
-        },
-        tx,
-      );
-    } else {
-      await notify(
-        {
-          userIds: [handover.fromUserId],
-          title: `Project handover declined: ${handover.project.name}`,
-          body: `${formatName(handover.toUser.fullName)} declined the handover. ${note ? `Reason: ${note}` : ''}`,
-          link: `/pm/projects/${handover.projectId}`,
-        },
-        tx,
-      );
+      return updated;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // CROSS-SQUAD PROJECT HANDOVER (Two-stage approval)
+  // -------------------------------------------------------------------------
+  if (handover.status === 'PENDING') {
+    // Stage 1: Receiving PM (PM2) or Director
+    if (!isReceiver && !isDirector) {
+      throw new ForbiddenError('Only the assigned new manager or a director can accept or decline this project handover.');
     }
+
+    if (normalizedDecision === 'DECLINED') {
+      return prisma.$transaction(async (tx) => {
+        const updated = await tx.projectHandover.updateMany({
+          where: { id: handoverId, status: 'PENDING' },
+          data: {
+            status: 'DECLINED',
+            decidedById: principal.userId,
+            decidedAt: now,
+            decisionNote: note ?? null,
+          },
+        });
+        if (updated.count === 0) throw new DomainError('This project handover has already been decided.');
+
+        await notify(
+          {
+            userIds: [handover.fromUserId],
+            title: `Project handover declined: ${handover.project.name}`,
+            body: `${formatName(handover.toUser.fullName)} declined the project handover. ${note ? `Reason: ${note}` : ''}`,
+            link: `/pm/projects/${handover.projectId}`,
+          },
+          tx,
+        );
+
+        await audit(
+          {
+            actorId: principal.userId,
+            module: 'pm',
+            action: 'project.handover.declined',
+            entityType: 'Project',
+            entityId: handover.projectId,
+            diff: { handoverId, stage: 1, decision: 'DECLINED', note: note ?? null },
+          },
+          tx,
+        );
+
+        return updated;
+      });
+    }
+
+    // Stage 1 ACCEPTED
+    // If Director approves, can accept outright
+    if (isDirector) {
+      return prisma.$transaction(async (tx) => {
+        const updated = await tx.projectHandover.updateMany({
+          where: { id: handoverId, status: 'PENDING' },
+          data: {
+            status: 'ACCEPTED',
+            decidedById: principal.userId,
+            decidedAt: now,
+            decisionNote: note ?? null,
+            headApprovedById: principal.userId,
+            headApprovedAt: now,
+            headDecisionNote: note ?? 'Director approved outright',
+          },
+        });
+        if (updated.count === 0) throw new DomainError('This project handover has already been decided.');
+
+        await transferProjectInTx(tx);
+
+        await audit(
+          {
+            actorId: principal.userId,
+            module: 'pm',
+            action: 'project.handover.accepted',
+            entityType: 'Project',
+            entityId: handover.projectId,
+            diff: { handoverId, decision: 'ACCEPTED', outright: true, note: note ?? null },
+          },
+          tx,
+        );
+
+        return updated;
+      });
+    }
+
+    // PM2 accepts Stage 1 -> moves to AWAITING_HEAD_APPROVAL. Project does NOT move yet!
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.projectHandover.updateMany({
+        where: { id: handoverId, status: 'PENDING' },
+        data: {
+          status: 'AWAITING_HEAD_APPROVAL',
+          decidedById: principal.userId,
+          decidedAt: now,
+          decisionNote: note ?? null,
+        },
+      });
+      if (updated.count === 0) throw new DomainError('This project handover has already been decided.');
+
+      const leadershipIds = Array.from(new Set([...oversightIds].filter((uid) => uid !== principal.userId)));
+      if (leadershipIds.length > 0) {
+        await notify(
+          {
+            userIds: leadershipIds,
+            title: `Head approval required: Project handover (${handover.project.name})`,
+            body: `${formatName(principal.fullName)} accepted project handover for "${handover.project.name}". Head sign-off required.`,
+            link: '/pm/approvals',
+          },
+          tx,
+        );
+      }
+
+      await audit(
+        {
+          actorId: principal.userId,
+          module: 'pm',
+          action: 'project.handover.stage1_approved',
+          entityType: 'Project',
+          entityId: handover.projectId,
+          diff: { handoverId, stage: 1, decision: 'ACCEPTED', note: note ?? null },
+        },
+        tx,
+      );
+
+      return updated;
+    });
+  }
+
+  // STAGE 2: Status is AWAITING_HEAD_APPROVAL
+  if (!isHead && !isDirector) {
+    throw new ForbiddenError('Only Technical Head, Service Head, or Director can give final approval.');
+  }
+
+  if (handover.decidedById === principal.userId && !isDirector) {
+    throw new DomainError('Stage 2 approval must be given by a different person than Stage 1.');
+  }
+
+  if (normalizedDecision === 'DECLINED') {
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.projectHandover.updateMany({
+        where: { id: handoverId, status: 'AWAITING_HEAD_APPROVAL' },
+        data: {
+          status: 'DECLINED',
+          headApprovedById: principal.userId,
+          headApprovedAt: now,
+          headDecisionNote: note ?? null,
+        },
+      });
+      if (updated.count === 0) throw new DomainError('This project handover has already been decided.');
+
+      const notifyUserIds = Array.from(new Set([handover.fromUserId, handover.toUserId].filter((uid) => uid !== principal.userId)));
+      if (notifyUserIds.length > 0) {
+        await notify(
+          {
+            userIds: notifyUserIds,
+            title: `Project handover declined by leadership: ${handover.project.name}`,
+            body: `${formatName(principal.fullName)} declined project handover of "${handover.project.name}". ${note ? `Reason: ${note}` : ''}`,
+            link: `/pm/projects/${handover.projectId}`,
+          },
+          tx,
+        );
+      }
+
+      await audit(
+        {
+          actorId: principal.userId,
+          module: 'pm',
+          action: 'project.handover.head_declined',
+          entityType: 'Project',
+          entityId: handover.projectId,
+          diff: { handoverId, stage: 2, decision: 'DECLINED', note: note ?? null },
+        },
+        tx,
+      );
+
+      return updated;
+    });
+  }
+
+  // Stage 2 ACCEPTED: Project transfers now!
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.projectHandover.updateMany({
+      where: { id: handoverId, status: 'AWAITING_HEAD_APPROVAL' },
+      data: {
+        status: 'ACCEPTED',
+        headApprovedById: principal.userId,
+        headApprovedAt: now,
+        headDecisionNote: note ?? null,
+      },
+    });
+    if (updated.count === 0) throw new DomainError('This project handover has already been decided.');
+
+    await transferProjectInTx(tx);
 
     await audit(
       {
         actorId: principal.userId,
         module: 'pm',
-        action: `project.handover.${normalizedDecision.toLowerCase()}`,
+        action: 'project.handover.accepted',
         entityType: 'Project',
         entityId: handover.projectId,
-        diff: { handoverId, decision: normalizedDecision, note: note ?? null },
+        diff: { handoverId, stage: 2, decision: 'ACCEPTED', note: note ?? null },
       },
       tx,
     );
@@ -605,7 +1296,9 @@ export async function decideProjectHandover(
 export async function cancelProjectHandover(principal: Principal, handoverId: string) {
   const handover = await prisma.projectHandover.findUnique({ where: { id: handoverId } });
   if (!handover) throw new NotFoundError('Project handover not found.');
-  if (handover.status !== 'PENDING') throw new DomainError('Only a pending project handover can be withdrawn.');
+  if (handover.status !== 'PENDING' && handover.status !== 'AWAITING_HEAD_APPROVAL') {
+    throw new DomainError('Only a pending project handover can be withdrawn.');
+  }
   const isRequester = handover.fromUserId === principal.userId;
   const isDirector = can(principal, 'pm.project.read.all');
   if (!isRequester && !isDirector) throw new ForbiddenError('Only the requester or a director can withdraw this.');
@@ -631,16 +1324,68 @@ export async function cancelProjectHandover(principal: Principal, handoverId: st
 
 /** The inbox: requests waiting on me, plus the ones I raised. */
 export async function listHandovers(principal: Principal) {
+  const people = await getOrgPeople(principal.companyId);
+  const isHead = hasPermissionAnywhere(principal, 'pm.oversight');
+  const isDirector = can(principal, 'pm.project.read.all');
+
+  // Squad members for whom principal is the squad lead (PM2)
+  const mySquadMemberIds = people
+    .filter((p) => teamRootOf(p.id, people) === principal.userId)
+    .map((p) => p.id);
+
+  // Incoming task handovers:
+  // 1. Direct to principal with status PENDING (intra-squad engineer, or direct assignment to PM)
+  // 2. Cross-squad into principal's squad with status PENDING (principal is receiving squad lead PM2)
+  // 3. Status AWAITING_HEAD_APPROVAL for Heads and Director (stage 2 approval)
+  // 4. Status PENDING for Director (who can decide any pending handover)
+  const taskIncomingWhere: Prisma.TaskHandoverWhereInput[] = [
+    { toUserId: principal.userId, status: 'PENDING' },
+  ];
+  if (mySquadMemberIds.length > 0) {
+    taskIncomingWhere.push({
+      toUserId: { in: mySquadMemberIds },
+      status: 'PENDING',
+    });
+  }
+  if (isHead || isDirector) {
+    taskIncomingWhere.push({
+      status: 'AWAITING_HEAD_APPROVAL',
+    });
+  }
+  if (isDirector) {
+    taskIncomingWhere.push({
+      status: 'PENDING',
+    });
+  }
+
+  // Incoming project handovers:
+  // 1. toUserId === principal.userId with status PENDING
+  // 2. Status AWAITING_HEAD_APPROVAL for Heads and Director
+  // 3. Status PENDING for Director
+  const projectIncomingWhere: Prisma.ProjectHandoverWhereInput[] = [
+    { toUserId: principal.userId, status: 'PENDING' },
+  ];
+  if (isHead || isDirector) {
+    projectIncomingWhere.push({
+      status: 'AWAITING_HEAD_APPROVAL',
+    });
+  }
+  if (isDirector) {
+    projectIncomingWhere.push({
+      status: 'PENDING',
+    });
+  }
+
   const [
     incoming,
     outgoing,
-    oversight,
+    oversightRaw,
     incomingProjects,
     outgoingProjects,
-    oversightProjects,
+    oversightProjectsRaw,
   ] = await Promise.all([
     prisma.taskHandover.findMany({
-      where: { toUserId: principal.userId, status: 'PENDING' },
+      where: { OR: taskIncomingWhere },
       include: handoverInclude,
       orderBy: { createdAt: 'desc' },
     }),
@@ -657,7 +1402,7 @@ export async function listHandovers(principal: Principal) {
     }),
     prisma.taskHandover.findMany({
       where: {
-        status: 'PENDING',
+        status: { in: ['PENDING', 'AWAITING_HEAD_APPROVAL'] },
         toUserId: { not: principal.userId },
         fromUserId: { not: principal.userId },
         task: { project: projectVisibilityWhere(principal) },
@@ -667,7 +1412,7 @@ export async function listHandovers(principal: Principal) {
       take: 50,
     }),
     prisma.projectHandover.findMany({
-      where: { toUserId: principal.userId, status: 'PENDING' },
+      where: { OR: projectIncomingWhere },
       include: projectHandoverInclude,
       orderBy: { createdAt: 'desc' },
     }),
@@ -679,7 +1424,7 @@ export async function listHandovers(principal: Principal) {
     }),
     prisma.projectHandover.findMany({
       where: {
-        status: 'PENDING',
+        status: { in: ['PENDING', 'AWAITING_HEAD_APPROVAL'] },
         toUserId: { not: principal.userId },
         fromUserId: { not: principal.userId },
         project: projectVisibilityWhere(principal),
@@ -689,6 +1434,12 @@ export async function listHandovers(principal: Principal) {
       take: 25,
     }),
   ]);
+
+  const incomingIds = new Set(incoming.map((h) => h.id));
+  const oversight = oversightRaw.filter((h) => !incomingIds.has(h.id));
+
+  const incomingProjectIds = new Set(incomingProjects.map((h) => h.id));
+  const oversightProjects = oversightProjectsRaw.filter((h) => !incomingProjectIds.has(h.id));
 
   return {
     incoming,
@@ -716,6 +1467,8 @@ const handoverInclude = {
   fromUser: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
   toUser: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
   requestedBy: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
+  decidedBy: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
+  headApprovedBy: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
 } as const;
 
 const projectHandoverInclude = {
@@ -732,6 +1485,8 @@ const projectHandoverInclude = {
   },
   fromUser: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
   toUser: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
+  decidedBy: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
+  headApprovedBy: { select: { id: true, fullName: true, avatarColor: true, designation: true } },
 } as const;
 
 /**
@@ -807,15 +1562,27 @@ export async function requestPanelHandover(
     throw new DomainError('Reassignment target must be an active engineering team member.');
   }
 
-  const team = await reassignTeamFor(principal);
-  if (team && !team.has(target.id)) {
-    throw new DomainError(OUTSIDE_TEAM_MESSAGE);
+  const people = await getOrgPeople(principal.companyId);
+  const firstOwner = eligibleTasks[0]!.assignments.find((a) => a.role === 'OWNER')!.userId;
+  const fromSquadRoot = teamRootOf(firstOwner, people);
+  const toSquadRoot = teamRootOf(target.id, people);
+  const isCross = fromSquadRoot !== toSquadRoot;
+
+  if (isCross && isExecutionStaff(principal)) {
+    throw new DomainError('Engineers cannot hand over tasks across squads. Ask your project manager.');
+  }
+
+  if (!isCross) {
+    const team = await reassignTeamFor(principal);
+    if (team && !team.has(target.id)) {
+      throw new DomainError(OUTSIDE_TEAM_MESSAGE);
+    }
   }
 
   const pendingHandovers = await prisma.taskHandover.findMany({
     where: {
       taskId: { in: eligibleTasks.map((t) => t.id) },
-      status: 'PENDING',
+      status: { in: ['PENDING', 'AWAITING_HEAD_APPROVAL'] },
     },
     select: { taskId: true },
   });
@@ -825,8 +1592,6 @@ export async function requestPanelHandover(
   if (tasksToHandover.length === 0) {
     throw new DomainError('All remaining tasks in this panel already have pending reassign requests.');
   }
-
-  const firstOwner = tasksToHandover[0]!.assignments.find((a) => a.role === 'OWNER')!.userId;
 
   return prisma.$transaction(async (tx) => {
     const createdList = [];
@@ -868,6 +1633,7 @@ export async function requestPanelHandover(
             remainingPercent,
             remainingHours,
             reason: input.reason,
+            crossSquad: isCross,
           },
         },
         tx,
@@ -896,16 +1662,35 @@ export async function requestPanelHandover(
       throw new DomainError('No tasks could be reassigned (target may already own them).');
     }
 
-    // Consolidated notification to receiver
-    await notify(
-      {
-        userIds: [input.toUserId],
-        title: `Panel handover: ${phaseTask.title} (${createdList.length} tasks)`,
-        body: `${formatName(principal.fullName)} requested to hand over ${createdList.length} tasks in "${phaseTask.title}" to you. Reason: ${input.reason.trim()}`,
-        link: '/pm/handovers',
-      },
-      tx,
-    );
+    if (isCross) {
+      // Cross-squad panel handover: receiving squad lead (PM2) and leadership notified
+      const oversightIds = await oversightRecipients(principal.companyId, phaseTask.project.departmentId, principal.userId);
+      const notifyUserIds = Array.from(
+        new Set([toSquadRoot, ...oversightIds].filter((uid): uid is string => Boolean(uid) && uid !== principal.userId)),
+      );
+      if (notifyUserIds.length > 0) {
+        await notify(
+          {
+            userIds: notifyUserIds,
+            title: `Cross-squad panel handover requested: ${phaseTask.title} (${createdList.length} tasks)`,
+            body: `${formatName(principal.fullName)} requested to hand over ${createdList.length} tasks in "${phaseTask.title}" to ${formatName(target.fullName)}. Receiving squad lead approval required.`,
+            link: '/pm/approvals',
+          },
+          tx,
+        );
+      }
+    } else {
+      // Consolidated notification to receiver
+      await notify(
+        {
+          userIds: [input.toUserId],
+          title: `Panel handover: ${phaseTask.title} (${createdList.length} tasks)`,
+          body: `${formatName(principal.fullName)} requested to hand over ${createdList.length} tasks in "${phaseTask.title}" to you. Reason: ${input.reason.trim()}`,
+          link: '/pm/handovers',
+        },
+        tx,
+      );
+    }
 
     // Consolidated notification to PM (if not requester)
     if (phaseTask.project.managerId !== principal.userId) {
@@ -950,21 +1735,29 @@ export async function decidePanelHandover(
   const pending = await prisma.taskHandover.findMany({
     where: {
       taskId: { in: taskIds },
-      toUserId: principal.userId,
-      status: 'PENDING',
+      status: { in: ['PENDING', 'AWAITING_HEAD_APPROVAL'] },
     },
     select: { id: true },
   });
 
   if (pending.length === 0) {
-    throw new DomainError('No pending reassignments found for you on this panel.');
+    throw new DomainError('No pending reassignments found for this panel.');
   }
 
   const results = [];
   for (const h of pending) {
-    const res = await decideHandover(principal, h.id, input.decision, input.note);
-    results.push(res);
+    try {
+      const res = await decideHandover(principal, h.id, input.decision, input.note);
+      results.push(res);
+    } catch {
+      // Handover might not be actionable by this principal
+    }
   }
+
+  if (results.length === 0) {
+    throw new DomainError('No pending reassignments on this panel were actionable by you.');
+  }
+
   return { count: results.length, decision: input.decision };
 }
 

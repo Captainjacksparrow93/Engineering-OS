@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import { ProgressBar, StatusBadge } from '@/components/ui';
-import { AssigneeCell } from '@/components/assignee-cell';
+import { AssigneeCell, type Colleague, type SquadGroup } from '@/components/assignee-cell';
 import { cleanTaskTitle } from '@/core/utils/strings';
 import { HandoverPanelButton } from './handover-panel-button';
 
@@ -29,19 +29,13 @@ interface WbsTask {
   _count: { children: number; dependencies: number; handovers: number };
 }
 
-interface Colleague {
-  id: string;
-  fullName: string;
-  designation?: string | null;
-  avatarColor?: string | null;
-}
-
 export function WbsTable({
   tasks,
   criticalTaskIds,
   projectId,
   canAssign = false,
   colleagues = [],
+  squadGroups,
   currentUserId,
 }: {
   tasks: WbsTask[];
@@ -49,6 +43,7 @@ export function WbsTable({
   projectId?: string;
   canAssign?: boolean;
   colleagues?: Colleague[];
+  squadGroups?: SquadGroup<Colleague>[];
   currentUserId?: string;
 }) {
   const [filterMode, setFilterMode] = useState<'all' | 'open' | 'review' | 'problems' | 'mine'>('all');
@@ -194,6 +189,7 @@ export function WbsTable({
                       panelTitle={unit.title}
                       remainingTaskCount={unit.remainingCount}
                       colleagues={colleagues}
+                      squadGroups={squadGroups}
                     />
                   )}
                   <div className="flex items-center gap-3 w-40">
@@ -262,6 +258,7 @@ export function WbsTable({
                                 assignees={task.assignments.map((a) => a.user)}
                                 canAssign={canAssign}
                                 colleagues={colleagues}
+                                squadGroups={squadGroups}
                               />
                             </td>
                             <td>

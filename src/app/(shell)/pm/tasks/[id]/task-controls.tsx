@@ -15,11 +15,13 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useToast } from '@/components/toast';
 import { formatName } from '@/core/utils/strings';
 import { useRouter } from 'next/navigation';
+import type { SquadGroup } from '@/components/assignee-cell';
 
 export function TaskControls({
   task,
   permissions,
   assignableUsers,
+  squadGroups,
 }: {
   task: { id: string; status: string; projectId: string };
   permissions: {
@@ -36,6 +38,7 @@ export function TaskControls({
     isHolder: boolean;
   };
   assignableUsers: Array<{ id: string; fullName: string; designation: string | null }>;
+  squadGroups?: SquadGroup<{ id: string; fullName: string; designation: string | null }>[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -359,11 +362,23 @@ export function TaskControls({
                       <div className="field">
                         <select name="userId" required className="select w-full text-xs" defaultValue="">
                           <option value="" disabled>Select colleague</option>
-                          {assignableUsers.map((user) => (
-                            <option key={user.id} value={user.id}>
-                              {formatName(user.fullName)} {user.designation ? `(${user.designation})` : ''}
-                            </option>
-                          ))}
+                          {squadGroups && squadGroups.length > 0 ? (
+                            squadGroups.map((group) => (
+                              <optgroup key={group.leadId} label={group.label}>
+                                {group.members.map((user) => (
+                                  <option key={user.id} value={user.id}>
+                                    {formatName(user.fullName)} {user.designation ? `(${user.designation})` : ''}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))
+                          ) : (
+                            assignableUsers.map((user) => (
+                              <option key={user.id} value={user.id}>
+                                {formatName(user.fullName)} {user.designation ? `(${user.designation})` : ''}
+                              </option>
+                            ))
+                          )}
                         </select>
                       </div>
                       <FormMessage state={assignState} />

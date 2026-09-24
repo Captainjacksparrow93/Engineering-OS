@@ -119,13 +119,15 @@ model User {
   completedTasks    Task[]            @relation("TaskCompletedBy")
   taskAssignments   TaskAssignment[]
   progressLogs      TaskProgressLog[]
-  handoversFrom     TaskHandover[]    @relation("HandoverFrom")
-  handoversTo       TaskHandover[]    @relation("HandoverTo")
-  handoversRequested TaskHandover[]   @relation("HandoverRequestedBy")
-  handoversDecided  TaskHandover[]    @relation("HandoverDecidedBy")
-  projectHandoversFrom    ProjectHandover[] @relation("ProjectHandoverFrom")
-  projectHandoversTo      ProjectHandover[] @relation("ProjectHandoverTo")
-  projectHandoversDecided ProjectHandover[] @relation("ProjectHandoverDecidedBy")
+  handoversFrom                TaskHandover[]    @relation("HandoverFrom")
+  handoversTo                  TaskHandover[]    @relation("HandoverTo")
+  handoversRequested           TaskHandover[]    @relation("HandoverRequestedBy")
+  handoversDecided             TaskHandover[]    @relation("HandoverDecidedBy")
+  taskHandoversHeadApproved    TaskHandover[]    @relation("TaskHandoverHeadApprovedBy")
+  projectHandoversFrom         ProjectHandover[] @relation("ProjectHandoverFrom")
+  projectHandoversTo           ProjectHandover[] @relation("ProjectHandoverTo")
+  projectHandoversDecided      ProjectHandover[] @relation("ProjectHandoverDecidedBy")
+  projectHandoversHeadApproved ProjectHandover[] @relation("ProjectHandoverHeadApprovedBy")
   comments          TaskComment[]
   commissioningAssignments CommissioningAssignment[]
   commissioningLogs        CommissioningLog[]
@@ -654,6 +656,7 @@ model TaskAssignment {
 
 enum HandoverStatus {
   PENDING
+  AWAITING_HEAD_APPROVAL
   ACCEPTED
   DECLINED
   WITHDRAWN
@@ -679,13 +682,17 @@ model TaskHandover {
   decidedById      String?
   decidedAt        DateTime?
   decisionNote     String?
+  headApprovedById String?
+  headApprovedAt   DateTime?
+  headDecisionNote String?
   createdAt        DateTime       @default(now())
 
-  task        Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  fromUser    User  @relation("HandoverFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  toUser      User  @relation("HandoverTo", fields: [toUserId], references: [id], onDelete: Cascade)
-  requestedBy User? @relation("HandoverRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
-  decidedBy   User? @relation("HandoverDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  task           Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromUser       User  @relation("HandoverFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser         User  @relation("HandoverTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  requestedBy    User? @relation("HandoverRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  decidedBy      User? @relation("HandoverDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  headApprovedBy User? @relation("TaskHandoverHeadApprovedBy", fields: [headApprovedById], references: [id], onDelete: SetNull)
 
   @@index([taskId])
   @@index([toUserId, status])
@@ -694,21 +701,25 @@ model TaskHandover {
 }
 
 model ProjectHandover {
-  id           String         @id @default(cuid())
-  projectId    String
-  fromUserId   String
-  toUserId     String
-  reason       String?
-  status       HandoverStatus @default(PENDING)
-  decidedById  String?
-  decidedAt    DateTime?
-  decisionNote String?
-  createdAt    DateTime       @default(now())
+  id               String         @id @default(cuid())
+  projectId        String
+  fromUserId       String
+  toUserId         String
+  reason           String?
+  status           HandoverStatus @default(PENDING)
+  decidedById      String?
+  decidedAt        DateTime?
+  decisionNote     String?
+  headApprovedById String?
+  headApprovedAt   DateTime?
+  headDecisionNote String?
+  createdAt        DateTime       @default(now())
 
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  fromUser  User    @relation("ProjectHandoverFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  toUser    User    @relation("ProjectHandoverTo", fields: [toUserId], references: [id], onDelete: Cascade)
-  decidedBy User?   @relation("ProjectHandoverDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fromUser       User    @relation("ProjectHandoverFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser         User    @relation("ProjectHandoverTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  decidedBy      User?   @relation("ProjectHandoverDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  headApprovedBy User?   @relation("ProjectHandoverHeadApprovedBy", fields: [headApprovedById], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([toUserId, status])

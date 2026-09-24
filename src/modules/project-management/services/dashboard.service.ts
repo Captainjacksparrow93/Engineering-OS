@@ -203,7 +203,7 @@ export async function getDashboard(
       orderBy: { submittedAt: 'asc' },
     }),
     prisma.taskHandover.findMany({
-      where: { status: 'PENDING', OR: [{ task: { project: visibility } }, { toUserId: principal.userId }] },
+      where: { status: { in: ['PENDING', 'AWAITING_HEAD_APPROVAL'] }, OR: [{ task: { project: visibility } }, { toUserId: principal.userId }] },
       select: {
         id: true,
         createdAt: true,
@@ -215,7 +215,7 @@ export async function getDashboard(
       orderBy: { createdAt: 'asc' },
     }),
     prisma.projectHandover.findMany({
-      where: { status: 'PENDING', OR: [{ project: visibility }, { toUserId: principal.userId }] },
+      where: { status: { in: ['PENDING', 'AWAITING_HEAD_APPROVAL'] }, OR: [{ project: visibility }, { toUserId: principal.userId }] },
       select: {
         id: true,
         createdAt: true,
@@ -773,7 +773,7 @@ export async function getEngineerPortfolio(
       },
     }),
     prisma.taskHandover.findMany({
-      where: { fromUserId: userId, status: 'PENDING' },
+      where: { fromUserId: userId, status: { in: ['PENDING', 'AWAITING_HEAD_APPROVAL'] } },
       select: {
         id: true,
         createdAt: true,

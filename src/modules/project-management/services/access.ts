@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/core/db/prisma';
 import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
-import { teamMemberIds } from '../domain/teams';
+import { teamMemberIds, teamRootOf, type OrgPerson } from '../domain/teams';
 import { isExecutionStaff } from '../domain/availability';
 import { ForbiddenError, NotFoundError } from '@/core/rbac/errors';
 import type { PermissionKey } from '@/core/rbac/permissions';
@@ -321,3 +321,44 @@ export async function teamOf(companyId: string, userId: string): Promise<Set<str
 }
 
 export const OUTSIDE_TEAM_MESSAGE = 'You can only reassign to engineers in your own team.';
+
+export async function getOrgPeople(companyId: string): Promise<(OrgPerson & { fullName: string })[]> {
+  const people = await prisma.user.findMany({
+    where: { companyId, status: 'ACTIVE' },
+    select: {
+      id: true,
+      fullName: true,
+      managerId: true,
+      roleAssignments: {
+        where: { role: { permissions: { some: { permission: { key: 'pm.oversight' } } } } },
+        select: { id: true },
+      },
+    },
+  });
+  return people.map((p) => ({
+    id: p.id,
+    fullName: p.fullName,
+    managerId: p.managerId,
+    hasOversight: p.roleAssignments.length > 0,
+  }));
+}
+
+export async function getSquadLeadForUser(companyId: string, userId: string): Promise<string> {
+  const people = await getOrgPeople(companyId);
+  return teamRootOf(userId, people);
+}
+
+export async function isCrossSquad(
+  companyId: string,
+  user1Id: string,
+  user2Id: string,
+): Promise<{ crossSquad: boolean; squad1RootId: string; squad2RootId: string }> {
+  const people = await getOrgPeople(companyId);
+  const squad1RootId = teamRootOf(user1Id, people);
+  const squad2RootId = teamRootOf(user2Id, people);
+  return {
+    crossSquad: squad1RootId !== squad2RootId,
+    squad1RootId,
+    squad2RootId,
+  };
+}

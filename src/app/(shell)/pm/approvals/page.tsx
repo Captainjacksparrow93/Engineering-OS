@@ -29,24 +29,32 @@ export default async function ApprovalsPage() {
   ]);
 
   const isDirector = can(principal, 'pm.project.read.all');
+  const isHead = hasPermissionAnywhere(principal, 'pm.oversight');
 
-  // Task handovers awaiting a decision:
-  // - Incoming: explicitly assigned to principal
-  // - Oversight: in projects visible to principal (all projects for Director, managed projects for PM)
-  const pendingTaskHandovers = [
-    ...handovers.incoming,
-    ...(isDirector
-      ? handovers.oversight
-      : handovers.oversight.filter((h) => h.task.project.managerId === principal.userId)),
-  ];
+  // Handovers where this user is the eligible decider:
+  // - PM2 for incoming cross-squad stage 1
+  // - Heads and Director for stage 2 (AWAITING_HEAD_APPROVAL)
+  // - Receiving PM for project transfers
+  // - Director for any company handover
+  const pendingTaskHandovers = Array.from(
+    new Map(
+      [
+        ...handovers.incoming,
+        ...(isDirector || isHead ? handovers.oversight.filter((h) => h.status === 'AWAITING_HEAD_APPROVAL') : []),
+        ...(isDirector ? handovers.oversight : []),
+      ].map((h) => [h.id, h]),
+    ).values(),
+  );
 
-  // Project handovers awaiting a decision:
-  // - Incoming: explicitly assigned to principal
-  // - Oversight: Director can decide any project handover in the company
-  const pendingProjectHandovers = [
-    ...handovers.incomingProjects,
-    ...(isDirector ? handovers.oversightProjects : []),
-  ];
+  const pendingProjectHandovers = Array.from(
+    new Map(
+      [
+        ...handovers.incomingProjects,
+        ...(isDirector || isHead ? handovers.oversightProjects.filter((h) => h.status === 'AWAITING_HEAD_APPROVAL') : []),
+        ...(isDirector ? handovers.oversightProjects : []),
+      ].map((h) => [h.id, h]),
+    ).values(),
+  );
 
   const handoversCount = pendingTaskHandovers.length + pendingProjectHandovers.length;
   const totalActionable = stepItems.length + commissioningLogs.length + handoversCount;

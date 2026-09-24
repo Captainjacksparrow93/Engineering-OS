@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { formatName } from '@/core/utils/strings';
 import { formatDate } from '@/core/utils/dates';
-import { Avatar, PriorityBadge } from '@/components/ui';
+import { Avatar, PriorityBadge, StatusBadge } from '@/components/ui';
 import { HandoverDecision, ProjectHandoverDecision } from '../handovers/handover-actions';
 
 interface TaskHandoverItem {
@@ -10,6 +10,12 @@ interface TaskHandoverItem {
   reason: string | null;
   remainingHours: number;
   remainingPercent: number;
+  status?: string;
+  decidedBy?: {
+    id: string;
+    fullName: string;
+  } | null;
+  decisionNote?: string | null;
   task: {
     id: string;
     code: string;
@@ -41,6 +47,12 @@ interface ProjectHandoverItem {
   id: string;
   createdAt: Date | string;
   reason: string | null;
+  status?: string;
+  decidedBy?: {
+    id: string;
+    fullName: string;
+  } | null;
+  decisionNote?: string | null;
   project: {
     id: string;
     code: string;
@@ -97,6 +109,9 @@ export function HandoversApprovalsTable({
                     <span className="badge bg-primary/10 text-primary font-semibold text-xs uppercase tracking-wider">
                       Project Handover
                     </span>
+                    {handover.status && handover.status !== 'PENDING' ? (
+                      <StatusBadge status={handover.status} />
+                    ) : null}
                     <PriorityBadge priority={handover.project.priority} />
                     <span className="text-caption text-muted">
                       {getAgeString(handover.createdAt)} ({formatDate(handover.createdAt)})
@@ -115,6 +130,13 @@ export function HandoversApprovalsTable({
                       ? ` · Target delivery: ${formatDate(handover.project.targetEndDate)}`
                       : ''}
                   </p>
+
+                  {handover.status === 'AWAITING_HEAD_APPROVAL' ? (
+                    <p className="mt-2 text-caption text-amber-700 dark:text-amber-300 font-medium">
+                      Approved by {formatName(handover.decidedBy?.fullName ?? 'squad lead')}, awaiting head sign-off.
+                      {handover.decisionNote ? ` Note: "${handover.decisionNote}"` : ''}
+                    </p>
+                  ) : null}
 
                   <div className="mt-2.5 flex flex-wrap items-center gap-2 text-body-sm text-ink">
                     <div className="flex items-center gap-1.5">
@@ -166,6 +188,9 @@ export function HandoversApprovalsTable({
                     <span className="badge badge-neutral text-xs uppercase tracking-wider font-semibold">
                       Task Reassign
                     </span>
+                    {handover.status && handover.status !== 'PENDING' ? (
+                      <StatusBadge status={handover.status} />
+                    ) : null}
                     <PriorityBadge priority={handover.task.priority} />
                     <span className="text-caption text-muted">
                       {getAgeString(handover.createdAt)} ({formatDate(handover.createdAt)})
@@ -182,6 +207,13 @@ export function HandoversApprovalsTable({
                     Project: {handover.task.project.name} · {handover.remainingPercent}% remaining (~{handover.remainingHours}h)
                     {handover.task.plannedEnd ? ` · Due ${formatDate(handover.task.plannedEnd)}` : ''}
                   </p>
+
+                  {handover.status === 'AWAITING_HEAD_APPROVAL' ? (
+                    <p className="mt-2 text-caption text-amber-700 dark:text-amber-300 font-medium">
+                      Approved by {formatName(handover.decidedBy?.fullName ?? 'squad lead')}, awaiting head sign-off.
+                      {handover.decisionNote ? ` Note: "${handover.decisionNote}"` : ''}
+                    </p>
+                  ) : null}
 
                   <div className="mt-2.5 flex flex-wrap items-center gap-2 text-body-sm text-ink">
                     <div className="flex items-center gap-1.5">

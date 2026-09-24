@@ -57,6 +57,7 @@ const STATUS_LABELS: Record<string, string> = {
   ON_HOLD: 'On hold',
   DRAFT: 'Draft',
   PENDING: 'Pending',
+  AWAITING_HEAD_APPROVAL: 'Awaiting Head Approval',
   ACCEPTED: 'Accepted',
   DECLINED: 'Declined',
   WITHDRAWN: 'Withdrawn',
@@ -92,6 +93,7 @@ const STATE_STYLES: Record<string, string> = {
   // Assignment and handover bookkeeping - system state, not work stage.
   ACTIVE: 'badge-ink',
   PENDING: 'badge-outline',
+  AWAITING_HEAD_APPROVAL: 'badge-outline text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800',
   ACCEPTED: 'badge-success',
   REJECTED: 'badge-error',
   DECLINED: 'badge-error',

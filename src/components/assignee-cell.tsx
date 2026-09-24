@@ -5,11 +5,19 @@ import { assignTaskAction } from '@/app/actions/pm';
 import { formatName } from '@/core/utils/strings';
 import { useToast } from '@/components/toast';
 
-interface Colleague {
+export interface Colleague {
   id: string;
   fullName: string;
   designation?: string | null;
   avatarColor?: string | null;
+}
+
+export interface SquadGroup<T = Colleague> {
+  leadId: string;
+  leadName: string;
+  isOwnSquad: boolean;
+  label: string;
+  members: T[];
 }
 
 export function AssigneeCell({
@@ -18,12 +26,14 @@ export function AssigneeCell({
   assignees,
   canAssign,
   colleagues,
+  squadGroups,
 }: {
   taskId: string;
   projectId?: string;
   assignees: Array<{ id: string; fullName: string; avatarColor?: string | null }>;
   canAssign: boolean;
   colleagues?: Colleague[];
+  squadGroups?: SquadGroup<Colleague>[];
 }) {
   const toast = useToast();
   const [isEditing, setIsEditing] = useState(false);
@@ -89,11 +99,23 @@ export function AssigneeCell({
         autoFocus
       >
         <option value="" disabled>Select engineer</option>
-        {colleagues.map((c) => (
-          <option key={c.id} value={c.id}>
-            {formatName(c.fullName)} {c.designation ? `(${c.designation})` : ''}
-          </option>
-        ))}
+        {squadGroups && squadGroups.length > 0 ? (
+          squadGroups.map((group) => (
+            <optgroup key={group.leadId} label={group.label}>
+              {group.members.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {formatName(c.fullName)} {c.designation ? `(${c.designation})` : ''}
+                </option>
+              ))}
+            </optgroup>
+          ))
+        ) : (
+          colleagues.map((c) => (
+            <option key={c.id} value={c.id}>
+              {formatName(c.fullName)} {c.designation ? `(${c.designation})` : ''}
+            </option>
+          ))
+        )}
       </select>
       <button
         type="button"

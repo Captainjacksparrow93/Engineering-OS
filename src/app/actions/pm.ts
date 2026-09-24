@@ -265,6 +265,7 @@ export async function requestHandoverAction(_prev: ActionState, form: FormData):
   });
   revalidatePath(`/pm/tasks/${taskId}`);
   revalidatePath('/pm/handovers');
+  revalidatePath('/pm/approvals');
   return state.error ? state : { success: 'Handover sent for acceptance.' };
 }
 
@@ -286,6 +287,7 @@ export async function cancelHandoverAction(_prev: ActionState, form: FormData): 
   const principal = await requirePrincipal();
   const state = await run(() => cancelHandover(principal, String(form.get('handoverId'))));
   revalidatePath('/pm/handovers');
+  revalidatePath('/pm/approvals');
   return state;
 }
 
@@ -309,6 +311,7 @@ export async function requestPanelHandoverAction(_prev: ActionState, form: FormD
 
   if (projectId) revalidatePath(`/pm/projects/${projectId}`);
   revalidatePath('/pm/handovers');
+  revalidatePath('/pm/approvals');
   return state.error ? state : { success: 'Panel handover requested.' };
 }
 
@@ -321,6 +324,7 @@ export async function decidePanelHandoverAction(
   try {
     const result = await decidePanelHandover(principal, { phaseTaskId, decision, note });
     revalidatePath('/pm/handovers');
+    revalidatePath('/pm/approvals');
     revalidatePath('/pm/my-work');
     revalidatePath('/dashboard');
     return { success: true, count: result.count };
@@ -489,6 +493,7 @@ export async function handoverProjectAction(_prev: ActionState, form: FormData):
   if (!state.error) {
     revalidatePath('/pm/projects/' + projectId);
     revalidatePath('/pm/handovers');
+    revalidatePath('/pm/approvals');
     revalidatePath('/dashboard');
   }
   return state;
@@ -527,6 +532,7 @@ export async function cancelProjectHandoverAction(_prev: ActionState, form: Form
   });
 
   revalidatePath('/pm/handovers');
+  revalidatePath('/pm/approvals');
   revalidatePath('/dashboard');
   return state;
 }

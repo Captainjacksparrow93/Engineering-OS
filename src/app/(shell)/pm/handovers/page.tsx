@@ -151,7 +151,9 @@ export default async function HandoversPage() {
                       </p>
                     </div>
                     <StatusBadge status={handover.status} />
-                    {handover.status === 'PENDING' ? <ProjectHandoverWithdraw handoverId={handover.id} /> : null}
+                    {handover.status === 'PENDING' || handover.status === 'AWAITING_HEAD_APPROVAL' ? (
+                      <ProjectHandoverWithdraw handoverId={handover.id} />
+                    ) : null}
                   </li>
                 ))}
 
@@ -169,7 +171,9 @@ export default async function HandoversPage() {
                       <p className="truncate text-caption text-muted">{handover.reason}</p>
                     </div>
                     <StatusBadge status={handover.status} />
-                    {handover.status === 'PENDING' ? <HandoverWithdraw handoverId={handover.id} /> : null}
+                    {handover.status === 'PENDING' || handover.status === 'AWAITING_HEAD_APPROVAL' ? (
+                      <HandoverWithdraw handoverId={handover.id} />
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -192,8 +196,13 @@ export default async function HandoversPage() {
                       <span>{formatName(handover.toUser.fullName)}</span>
                     </p>
                     {handover.reason ? <p className="mt-0.5 text-caption text-muted">{handover.reason}</p> : null}
-                    <div className="mt-1">
-                      <span className="text-caption text-muted">Pending receiver acceptance</span>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-caption text-muted">
+                        {handover.status === 'AWAITING_HEAD_APPROVAL'
+                          ? 'Approved by receiver, awaiting head sign-off'
+                          : 'Pending receiver acceptance'}
+                      </span>
+                      <StatusBadge status={handover.status} />
                     </div>
                   </li>
                 ))}
@@ -210,8 +219,13 @@ export default async function HandoversPage() {
                       </Link>
                     </p>
                     {handover.reason ? <p className="mt-0.5 text-caption text-muted">{handover.reason}</p> : null}
-                    <div className="mt-1">
-                      <span className="text-caption text-muted">Waiting on {formatName(handover.toUser.fullName)} to accept</span>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-caption text-muted">
+                        {handover.status === 'AWAITING_HEAD_APPROVAL'
+                          ? 'Stage 1 approved, awaiting head sign-off'
+                          : `Waiting on ${formatName(handover.toUser.fullName)} to accept`}
+                      </span>
+                      <StatusBadge status={handover.status} />
                     </div>
                   </li>
                 ))}

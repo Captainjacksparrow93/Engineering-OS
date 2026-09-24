@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 import { requestPanelHandoverAction, type ActionState } from '@/app/actions/pm';
 import { FormMessage, SubmitButton } from '@/components/form';
 import { formatName } from '@/core/utils/strings';
+import type { SquadGroup } from '@/components/assignee-cell';
 
 export function HandoverPanelButton({
   projectId,
@@ -11,12 +12,14 @@ export function HandoverPanelButton({
   panelTitle,
   remainingTaskCount,
   colleagues,
+  squadGroups,
 }: {
   projectId: string;
   phaseTaskId: string;
   panelTitle: string;
   remainingTaskCount: number;
   colleagues: Array<{ id: string; fullName: string; designation?: string | null }>;
+  squadGroups?: SquadGroup<{ id: string; fullName: string; designation?: string | null }>[];
 }) {
   const [show, setShow] = useState(false);
   const [state, action] = useActionState<ActionState, FormData>(requestPanelHandoverAction, {});
@@ -75,11 +78,23 @@ export function HandoverPanelButton({
             <label className="label text-caption font-semibold">Select engineer</label>
             <select name="toUserId" className="select w-full text-sm" required defaultValue="">
               <option value="" disabled>[ Choose an engineer ]</option>
-              {colleagues.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {formatName(c.fullName)} ({c.designation || 'Engineer'})
-                </option>
-              ))}
+              {squadGroups && squadGroups.length > 0 ? (
+                squadGroups.map((group) => (
+                  <optgroup key={group.leadId} label={group.label}>
+                    {group.members.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {formatName(c.fullName)} ({c.designation || 'Engineer'})
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+              ) : (
+                colleagues.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {formatName(c.fullName)} ({c.designation || 'Engineer'})
+                  </option>
+                ))
+              )}
             </select>
           </div>
 

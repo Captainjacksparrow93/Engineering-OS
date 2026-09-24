@@ -12,6 +12,8 @@ export interface OrgPerson {
   hasOversight: boolean;
 }
 
+export { isExecutionStaff } from './availability';
+
 export function teamRootOf(userId: string, people: OrgPerson[]): string {
   const byId = new Map(people.map((p) => [p.id, p]));
   const seen = new Set<string>();
@@ -47,4 +49,50 @@ export function teamMemberIds(userId: string, people: OrgPerson[]): Set<string> 
     }
   }
   return members;
+}
+
+export interface SquadGroup<T> {
+  leadId: string;
+  leadName: string;
+  isOwnSquad: boolean;
+  label: string;
+  members: T[];
+}
+
+export function groupEngineersBySquad<T extends { id: string; fullName: string }>(
+  engineers: T[],
+  people: OrgPerson[],
+  currentUserId: string,
+  hasOversight: boolean,
+  leadNameMap?: Map<string, string>,
+): SquadGroup<T>[] {
+  const currentSquadLeadId = teamRootOf(currentUserId, people);
+  const byLead = new Map<string, T[]>();
+
+  for (const eng of engineers) {
+    const leadId = teamRootOf(eng.id, people);
+    const list = byLead.get(leadId) ?? [];
+    list.push(eng);
+    byLead.set(leadId, list);
+  }
+
+  const groups: SquadGroup<T>[] = [];
+  for (const [leadId, members] of byLead.entries()) {
+    const isOwn = leadId === currentSquadLeadId;
+    const rawLeadName = leadNameMap?.get(leadId) ?? 'Squad Lead';
+    const label = hasOversight || isOwn ? rawLeadName : `${rawLeadName} (needs approval)`;
+    groups.push({
+      leadId,
+      leadName: rawLeadName,
+      isOwnSquad: isOwn,
+      label,
+      members: [...members].sort((a, b) => a.fullName.localeCompare(b.fullName)),
+    });
+  }
+
+  return groups.sort((a, b) => {
+    if (a.isOwnSquad && !b.isOwnSquad) return -1;
+    if (!a.isOwnSquad && b.isOwnSquad) return 1;
+    return a.leadName.localeCompare(b.leadName);
+  });
 }

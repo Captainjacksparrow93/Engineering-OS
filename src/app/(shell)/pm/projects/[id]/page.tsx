@@ -9,6 +9,9 @@ import { ProjectTimeline } from '@/components/project-timeline';
 import { WbsTable } from './wbs-table';
 import { AddTaskForm } from './add-task-form';
 import { TeamPanel } from './team-panel';
+import { hasPermissionAnywhere, can } from '@/core/rbac/engine';
+import { isExecutionStaff, groupEngineersBySquad } from '@/modules/project-management/domain/teams';
+import { getOrgPeople } from '@/modules/project-management/services/access';
 import { CompleteProjectButton } from './complete-project-button';
 import { HandoverProjectButton } from './handover-project-button';
 import { HoldProjectButton } from './hold-project-button';
@@ -45,18 +48,47 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
   const { project, tasks, summary, permissions, criticalTaskIds } = workspace;
 
-  const colleagues = permissions.canAssign || permissions.canManageMembers || permissions.canEditProject
-    ? await prisma.user.findMany({
-        where: {
-          companyId: principal.companyId,
-          status: 'ACTIVE',
-          id: { not: project.managerId },
-          roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER', 'PM_BASE'] } } } },
-        },
-        select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true, skills: true },
-        orderBy: { fullName: 'asc' },
-      })
-    : [];
+  const canHandoverProject = !isExecutionStaff(principal) && permissions.canManageMembers;
+
+  const [colleagues, eligibleManagers, people] = await Promise.all([
+    permissions.canAssign || permissions.canManageMembers || permissions.canEditProject
+      ? prisma.user.findMany({
+          where: {
+            companyId: principal.companyId,
+            status: 'ACTIVE',
+            id: { not: project.managerId },
+            roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER', 'PM_BASE'] } } } },
+          },
+          select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true, skills: true },
+          orderBy: { fullName: 'asc' },
+        })
+      : Promise.resolve([]),
+    canHandoverProject
+      ? prisma.user.findMany({
+          where: {
+            companyId: principal.companyId,
+            status: 'ACTIVE',
+            id: { not: project.managerId },
+            roleAssignments: {
+              some: {
+                role: {
+                  key: {
+                    in: ['PROJECT_MANAGER', 'ASST_MANAGER', 'PM_BASE', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'DIRECTOR'],
+                  },
+                },
+              },
+            },
+          },
+          select: { id: true, fullName: true, designation: true },
+          orderBy: { fullName: 'asc' },
+        })
+      : Promise.resolve([]),
+    getOrgPeople(principal.companyId),
+  ]);
+
+  const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight') || can(principal, 'pm.project.read.all');
+  const leadNameMap = new Map(people.map((p) => [p.id, p.fullName]));
+  const squadGroups = groupEngineersBySquad(colleagues, people, principal.userId, hasOversight, leadNameMap);
 
   const due = daysUntil(project.targetEndDate);
   const allLeafClosed = tasks
@@ -87,8 +119,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             <Link href={`/pm/resources?projectId=${project.id}`} className="btn btn-secondary text-body-sm">
               Team load
             </Link>
-            {permissions.canManageMembers && project.status !== 'ON_HOLD' && project.status !== 'CANCELLED' ? (
-              <HandoverProjectButton projectId={project.id} colleagues={colleagues} />
+            {canHandoverProject && project.status !== 'ON_HOLD' && project.status !== 'CANCELLED' ? (
+              <HandoverProjectButton projectId={project.id} colleagues={eligibleManagers} />
             ) : null}
             {permissions.canEditProject && project.status !== 'CANCELLED' ? (
               <HoldProjectButton projectId={project.id} projectName={project.name} status={project.status} />
@@ -216,6 +248,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             projectId={project.id}
             canAssign={permissions.canAssign}
             colleagues={colleagues}
+            squadGroups={squadGroups}
             currentUserId={principal.userId}
           />
         </Card>
