@@ -1192,6 +1192,23 @@ export async function deleteProject(principal: Principal, projectId: string, con
       where: { scopeType: 'PROJECT', scopeId: projectId },
     });
 
+    // Clean up notifications pointing to this project or its tasks
+    const tasks = await tx.task.findMany({
+      where: { projectId },
+      select: { id: true },
+    });
+    const taskLinks = tasks.map((t) => `/pm/tasks/${t.id}`);
+    const projectLinkPrefix = `/pm/projects/${projectId}`;
+
+    await tx.notification.deleteMany({
+      where: {
+        OR: [
+          { link: { startsWith: projectLinkPrefix } },
+          ...(taskLinks.length > 0 ? [{ link: { in: taskLinks } }] : []),
+        ],
+      },
+    });
+
     // Delete project (cascades to members, tasks, assignments, dependencies, handovers, etc.)
     await tx.project.delete({
       where: { id: projectId },
