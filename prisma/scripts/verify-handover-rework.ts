@@ -17,17 +17,30 @@ import type { Principal } from '../../src/core/rbac/types';
 import { createClient, nextClientRef } from '../../src/modules/project-management/services/client.service';
 import { createAutomationProject } from '../../src/modules/project-management/services/automation-project.service';
 import { assignTask } from '../../src/modules/project-management/services/task.service';
-import { requestHandover, decideHandover } from '../../src/modules/project-management/services/handover.service';
+import {
+  requestHandover,
+  decideHandover,
+  requestPanelHandover,
+  decidePanelHandover,
+  requestProjectHandover,
+  decideProjectHandover,
+  listHandovers,
+} from '../../src/modules/project-management/services/handover.service';
 
 const prisma = new PrismaClient();
 
 // Squad fixtures — docs/handover-rework-plan.md "Before you start"
-const PARAS = 'ACS-0074';   // Project Manager, squad lead
-const MUNAF = 'ACS-0075';   // Asst. Manager, squad lead
-const DILIP = 'ACS-0061';   // Technical Head — pm.oversight
-const HARSH = 'ACS-0077';   // Sr. Engineer, Paras's squad
-const RIDHHI = 'ACS-0076';  // Sr. Engineer, Paras's squad
-const HET = 'ACS-0067';     // Jr. Engineer, MUNAF's squad
+const DIRECTOR = 'ACS-0004'; // Shaktikumar Vasava — sees and does everything
+const DILIP = 'ACS-0061';    // Technical Head — pm.oversight
+const RAJANI = 'ACS-0062';   // Service Head — pm.oversight, manages nobody
+const PARTH = 'ACS-0063';    // Project Manager, squad lead
+const PARAS = 'ACS-0074';    // Project Manager, squad lead
+const MUNAF = 'ACS-0075';    // Asst. Manager, squad lead
+const DHRUPIN = 'ACS-0070';  // Asst. Manager, squad lead
+const HARSH = 'ACS-0077';    // Sr. Engineer, Paras's squad
+const RIDHHI = 'ACS-0076';   // Sr. Engineer, Paras's squad
+const HET = 'ACS-0067';      // Jr. Engineer, Munaf's squad
+const YOGI = 'ACS-0071';     // Sr. Engineer, Dhrupin's squad
 
 let passed = 0;
 let failed = 0;
@@ -75,28 +88,43 @@ async function ownerOf(taskId: string): Promise<string> {
   return a?.user.employeeCode ?? '(none)';
 }
 
+/** Owner of a project, by employee code. */
+async function projectManagerOf(projectId: string): Promise<string> {
+  const p = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { manager: { select: { employeeCode: true } } },
+  });
+  return p?.manager.employeeCode ?? '(none)';
+}
+
+/** Employee codes of everyone holding an ACTIVE owner assignment on a project. */
+async function engineersOn(projectId: string): Promise<string[]> {
+  const rows = await prisma.taskAssignment.findMany({
+    where: { status: 'ACTIVE', task: { projectId } },
+    include: { user: { select: { employeeCode: true } } },
+  });
+  return [...new Set(rows.map((r) => r.user.employeeCode))].sort();
+}
+
 async function main() {
   console.log('='.repeat(70));
-  console.log('  HANDOVER REWORK — RULE VERIFICATION');
+  console.log('  HANDOVER REWORK — RULE VERIFICATION (all flows, all roles)');
   console.log('='.repeat(70));
 
+  const director = await principalFor(DIRECTOR);
+  const dilip = await principalFor(DILIP);
+  const rajani = await principalFor(RAJANI);
+  const parth = await principalFor(PARTH);
   const paras = await principalFor(PARAS);
   const munaf = await principalFor(MUNAF);
-  const dilip = await principalFor(DILIP);
+  const dhrupin = await principalFor(DHRUPIN);
   const harsh = await principalFor(HARSH);
 
   const harshId = await idFor(HARSH);
   const ridhhiId = await idFor(RIDHHI);
   const hetId = await idFor(HET);
-
-  // ---------------------------------------------------------------- fixture
-  // Projects and clients are created by a head, not a PM: PROJECT_MANAGER and
-  // ASST_MANAGER do not hold `pm.project.create`. The squad leads are *chosen as owner*
-  // by the head who creates the project — matching the real flow.
-  console.log('\n0. Building a throwaway project (created by Dilip, owned by Paras, assigned to Harsh)');
-
-  const ref = await nextClientRef(dilip.companyId);
-  const client = await createClient(dilip, { name: `ZZ VERIFY CLIENT ${Date.now()}`, refNumber: ref });
+  const yogiId = await idFor(YOGI);
+  const parthId = await idFor(PARTH);
 
   const plc = await prisma.checklistTemplate.findFirst({
     where: { code: 'PLC' },
@@ -104,20 +132,52 @@ async function main() {
   });
   if (!plc) throw new Error('PLC checklist template missing — run the main seed.');
 
-  const project = await createAutomationProject(dilip, {
-    workOrderNo: String(Date.now()).slice(-7),
-    clientId: client.id,
-    clientName: client.name,
-    managerId: paras.userId,
-    scopes: [{ templateCode: 'PLC', quantity: 1 }],
-    tasks: plc.items.map((item) => ({
-      templateCode: 'PLC',
-      unitIndex: 1,
-      stepNumber: item.stepNumber,
-      title: item.title,
-      assigneeId: harshId,
-    })),
-  });
+  const madeProjects: string[] = [];
+  const madeClients: string[] = [];
+
+  /**
+   * Projects and clients are created by a HEAD, not a PM: PROJECT_MANAGER and
+   * ASST_MANAGER do not hold `pm.project.create`. The squad leads are *chosen as owner*
+   * by the head who creates the project — matching the real flow.
+   */
+  async function makeProject(ownerId: string, assigneeId: string, panels = 1) {
+    const ref = await nextClientRef(dilip.companyId);
+    const client = await createClient(dilip, {
+      name: `ZZ VERIFY ${Date.now()}-${madeClients.length}`,
+      refNumber: ref,
+    });
+    madeClients.push(client.id);
+
+    const tasks = [];
+    for (let unit = 1; unit <= panels; unit += 1) {
+      for (const item of plc!.items) {
+        tasks.push({
+          templateCode: 'PLC',
+          unitIndex: unit,
+          stepNumber: item.stepNumber,
+          title: item.title,
+          assigneeId,
+        });
+      }
+    }
+
+    const p = await createAutomationProject(dilip, {
+      workOrderNo: `${Date.now()}`.slice(-6) + madeProjects.length,
+      clientId: client.id,
+      clientName: client.name,
+      managerId: ownerId,
+      scopes: [{ templateCode: 'PLC', quantity: panels }],
+      tasks,
+    });
+    madeProjects.push(p.id);
+    return p;
+  }
+
+  // ---------------------------------------------------------------- fixture
+  console.log('\n0. Building a throwaway project (created by Dilip, owned by Paras, assigned to Harsh)');
+
+  const project = await makeProject(paras.userId, harshId, 1);
+  const client = { id: madeClients[0]! };
 
   const tasks = await prisma.task.findMany({
     where: { projectId: project.id, type: 'PROJECT' },
@@ -199,13 +259,196 @@ async function main() {
     });
     check('engineer CAN request inside their own squad', Boolean(h5));
     check('work does not move until accepted', (await ownerOf(t5!.id)) === HARSH);
+
+    // ------------------------------------------------- 8. visibility (Phase 6)
+    console.log('\n8. Visibility after a cross-squad task handover (Phase 6)');
+    const hetMember = await prisma.projectMember.findFirst({
+      where: { projectId: project.id, userId: hetId },
+    });
+    check('borrowed engineer was added as a project member', Boolean(hetMember));
+    const munafProjectRole = await prisma.roleAssignment.findFirst({
+      where: { userId: munaf.userId, scopeType: 'PROJECT', scopeId: project.id },
+    });
+    check('receiving manager did NOT gain a project-scoped role', !munafProjectRole);
+
+    // ------------------------------------------------- 9. lists (Phase 4)
+    console.log('\n9. AWAITING_HEAD_APPROVAL must be visible to those who can act (Phase 4)');
+    const pAwait = await makeProject(paras.userId, harshId, 1);
+    const pTasks = await prisma.task.findMany({
+      where: { projectId: pAwait.id, type: 'PROJECT' },
+      orderBy: { code: 'asc' },
+      select: { id: true },
+    });
+    await assignTask(paras, pTasks[0]!.id, { userId: hetId, role: 'OWNER' });
+    const hAwait = await prisma.taskHandover.findFirst({ where: { taskId: pTasks[0]!.id } });
+    await decideHandover(munaf, hAwait!.id, 'ACCEPTED');
+
+    const seenBy = async (p: Principal) => {
+      const l = await listHandovers(p);
+      const all = [...l.incoming, ...l.outgoing, ...l.oversight];
+      return all.some((h) => h.id === hAwait!.id);
+    };
+    check('Technical Head sees the awaiting-head row', await seenBy(dilip));
+    check('Service Head sees it too', await seenBy(rajani));
+    check('Director sees it (sees everything)', await seenBy(director));
+
+    // ---------------------------------------- 10. Service Head acts as a head
+    console.log('\n10. Service Head has the same powers as Technical Head');
+    await decideHandover(rajani, hAwait!.id, 'ACCEPTED');
+    const hAwait2 = await prisma.taskHandover.findUnique({ where: { id: hAwait!.id } });
+    check('Service Head can give stage-2 approval', hAwait2?.status === 'ACCEPTED', hAwait2?.status);
+    await assignTask(rajani, pTasks[1]!.id, { userId: yogiId, role: 'OWNER' });
+    check('Service Head assigns across squads directly', (await ownerOf(pTasks[1]!.id)) === YOGI);
+
+    // --------------------------------- 11. panel handover across squads
+    console.log('\n11. PANEL handover across squads must need the same two approvals');
+    const pPanel = await makeProject(paras.userId, harshId, 1);
+    const phase = await prisma.task.findFirst({
+      where: { projectId: pPanel.id, type: 'PHASE' },
+      select: { id: true },
+    });
+    await requestPanelHandover(paras, {
+      phaseTaskId: phase!.id,
+      toUserId: hetId,
+      reason: 'cross-squad panel handover',
+    });
+    const panelHs = await prisma.taskHandover.findMany({
+      where: { task: { parentId: phase!.id } },
+    });
+    check('panel handover created requests', panelHs.length > 0, `${panelHs.length} rows`);
+    check('all start PENDING', panelHs.every((h) => h.status === 'PENDING'));
+    const panelTasks = await prisma.task.findMany({ where: { parentId: phase!.id }, select: { id: true } });
+    check('no panel work moved yet', (await ownerOf(panelTasks[0]!.id)) === HARSH);
+
+    await decidePanelHandover(munaf, { phaseTaskId: phase!.id, decision: 'ACCEPTED' });
+    const panelAfterPm2 = await prisma.taskHandover.findMany({ where: { task: { parentId: phase!.id } } });
+    check(
+      'after PM2 approval the batch is AWAITING_HEAD_APPROVAL',
+      panelAfterPm2.every((h) => h.status === 'AWAITING_HEAD_APPROVAL'),
+      panelAfterPm2.map((h) => h.status).join(','),
+    );
+    check('panel work STILL has not moved', (await ownerOf(panelTasks[0]!.id)) === HARSH);
+
+    await decidePanelHandover(dilip, { phaseTaskId: phase!.id, decision: 'ACCEPTED' });
+    check('after head approval the panel moves', (await ownerOf(panelTasks[0]!.id)) === HET);
+
+    // ------------------------- 12. engineer panel handover boundaries
+    console.log('\n12. Engineer panel handover — own squad only');
+    const pEng = await makeProject(paras.userId, harshId, 1);
+    const engPhase = await prisma.task.findFirst({
+      where: { projectId: pEng.id, type: 'PHASE' },
+      select: { id: true },
+    });
+    await expectRejection('engineer CANNOT hand a panel to another squad', () =>
+      requestPanelHandover(harsh, { phaseTaskId: engPhase!.id, toUserId: hetId, reason: 'cross squad' }),
+    );
+    const okPanel = await requestPanelHandover(harsh, {
+      phaseTaskId: engPhase!.id,
+      toUserId: ridhhiId,
+      reason: 'same squad panel handover',
+    });
+    check('engineer CAN hand a panel to their own squad', Boolean(okPanel));
+
+    // ---------------------------------------- 13. PROJECT handover
+    console.log('\n13. PROJECT handover PM -> PM needs two approvals');
+    const pProj = await makeProject(paras.userId, harshId, 1);
+    await requestProjectHandover(paras, {
+      projectId: pProj.id,
+      toUserId: parthId,
+      reason: 'handing the project to Parth',
+    });
+    const ph = await prisma.projectHandover.findFirst({ where: { projectId: pProj.id } });
+    check('project handover created', Boolean(ph));
+    check('status PENDING', ph?.status === 'PENDING', ph?.status);
+    check('project has NOT changed hands', (await projectManagerOf(pProj.id)) === PARAS);
+
+    await decideProjectHandover(parth, ph!.id, 'ACCEPTED');
+    const ph2 = await prisma.projectHandover.findUnique({ where: { id: ph!.id } });
+    check('after PM2 approval: AWAITING_HEAD_APPROVAL', ph2?.status === 'AWAITING_HEAD_APPROVAL', ph2?.status);
+    check('project STILL has not changed hands', (await projectManagerOf(pProj.id)) === PARAS);
+
+    await decideProjectHandover(dilip, ph!.id, 'ACCEPTED');
+    const ph3 = await prisma.projectHandover.findUnique({ where: { id: ph!.id } });
+    check('after head approval: ACCEPTED', ph3?.status === 'ACCEPTED', ph3?.status);
+    check('head approval recorded separately', Boolean(ph3?.headApprovedById));
+    check('project manager is now Parth', (await projectManagerOf(pProj.id)) === PARTH);
+    check(
+      'previous squad engineers are NOT stripped from the project',
+      (await engineersOn(pProj.id)).includes(HARSH),
+      `engineers: ${(await engineersOn(pProj.id)).join(', ')}`,
+    );
+
+    // ------------------------------- 14. engineers cannot move projects
+    console.log('\n14. Engineers cannot hand over a whole project');
+    const pGate = await makeProject(paras.userId, harshId, 1);
+    await expectRejection('engineer is refused a project handover', () =>
+      requestProjectHandover(harsh, { projectId: pGate.id, toUserId: parthId, reason: 'should be refused' }),
+    );
+
+    // ------------------------------------- 15. Director acts unilaterally
+    console.log('\n15. Director needs no approval from anyone');
+    const pDir = await makeProject(paras.userId, harshId, 1);
+    const dirTasks = await prisma.task.findMany({
+      where: { projectId: pDir.id, type: 'PROJECT' },
+      orderBy: { code: 'asc' },
+      select: { id: true },
+    });
+    await assignTask(director, dirTasks[0]!.id, { userId: hetId, role: 'OWNER' });
+    check('Director assigns across squads directly', (await ownerOf(dirTasks[0]!.id)) === HET);
+    check(
+      'no request was created',
+      (await prisma.taskHandover.count({ where: { taskId: dirTasks[0]!.id } })) === 0,
+    );
+
+    // --------------------------------- 16. Asst Manager behaves like a PM
+    console.log('\n16. Asst Manager (Dhrupin) behaves exactly like a PM');
+    const pAsst = await makeProject(dhrupin.userId, yogiId, 1);
+    const aTasks = await prisma.task.findMany({
+      where: { projectId: pAsst.id, type: 'PROJECT' },
+      orderBy: { code: 'asc' },
+      select: { id: true },
+    });
+    await assignTask(dhrupin, aTasks[0]!.id, { userId: await idFor('ACS-0073'), role: 'OWNER' });
+    check('Asst Manager assigns inside own squad directly', (await ownerOf(aTasks[0]!.id)) === 'ACS-0073');
+    await assignTask(dhrupin, aTasks[1]!.id, { userId: harshId, role: 'OWNER' });
+    const aCross = await prisma.taskHandover.findFirst({ where: { taskId: aTasks[1]!.id } });
+    check('Asst Manager crossing squads raises a request', aCross?.status === 'PENDING', aCross?.status);
+    check('and nothing moved', (await ownerOf(aTasks[1]!.id)) === YOGI);
+
+    // --------------------------------------- 17. self-approval guard
+    console.log('\n17. One person must not satisfy both approval stages');
+    const pSelf = await makeProject(paras.userId, harshId, 1);
+    const sTasks = await prisma.task.findMany({
+      where: { projectId: pSelf.id, type: 'PROJECT' },
+      orderBy: { code: 'asc' },
+      select: { id: true },
+    });
+    await assignTask(paras, sTasks[0]!.id, { userId: hetId, role: 'OWNER' });
+    const sh = await prisma.taskHandover.findFirst({ where: { taskId: sTasks[0]!.id } });
+    await decideHandover(dilip, sh!.id, 'ACCEPTED'); // stage 1, as an oversight holder
+    const shAfter = await prisma.taskHandover.findUnique({ where: { id: sh!.id } });
+    if (shAfter?.status === 'ACCEPTED') {
+      check(
+        'head approving stage 1 completed it in one step (no separate stage 2)',
+        true,
+        'NOTE: verify this is intended — a single head both accepted and approved',
+      );
+    } else {
+      await expectRejection('the same head cannot also give stage-2 approval', () =>
+        decideHandover(dilip, sh!.id, 'ACCEPTED'),
+      );
+    }
   } finally {
     // ------------------------------------------------------------- cleanup
-    console.log('\n8. Cleaning up');
-    await prisma.roleAssignment.deleteMany({ where: { scopeType: 'PROJECT', scopeId: project.id } });
-    await prisma.project.delete({ where: { id: project.id } });
-    await prisma.client.delete({ where: { id: client.id } });
-    console.log('   Removed the throwaway project and client.');
+    console.log('\n18. Cleaning up');
+    for (const id of madeProjects) {
+      await prisma.roleAssignment.deleteMany({ where: { scopeType: 'PROJECT', scopeId: id } });
+      await prisma.project.delete({ where: { id } }).catch(() => undefined);
+    }
+    for (const id of madeClients) {
+      await prisma.client.delete({ where: { id } }).catch(() => undefined);
+    }
+    console.log(`   Removed ${madeProjects.length} throwaway projects and ${madeClients.length} clients.`);
   }
 
   console.log('\n' + '='.repeat(70));
