@@ -68,6 +68,7 @@ export function ProjectsClient({
     { key: 'ON_HOLD', label: `On hold (${projects.filter((p) => p.status === 'ON_HOLD').length})` },
     { key: 'COMPLETED', label: `Completed (${projects.filter((p) => p.status === 'COMPLETED').length})` },
     { key: 'CLOSED', label: `Closed (${projects.filter((p) => p.status === 'CLOSED').length})` },
+    { key: 'CANCELLED', label: `Cancelled (${projects.filter((p) => p.status === 'CANCELLED').length})` },
   ];
 
   return (

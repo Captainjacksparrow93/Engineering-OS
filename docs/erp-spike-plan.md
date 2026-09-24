@@ -1,5 +1,21 @@
 # ERPNext spike — decide the architecture with evidence
 
+> ## ⛔ PARKED — PLANNING ONLY. DO NOT IMPLEMENT.
+>
+> The user has put ERP on hold (Sept 2026). This document is a **record of thinking**, not
+> a work order. **Do not start it, do not offer it as the next task, and do not install
+> ERPNext anywhere.**
+>
+> The same applies to **HRMS and Gate Entry**. They appear in
+> `src/core/modules/registry.ts` as `COMING_SOON` — that is the product roadmap, not a
+> backlog. Note that HRMS in particular must not be built before the ERP question is
+> settled: Frappe HR already covers attendance, leave and payroll, so building it natively
+> risks being thrown away.
+>
+> Take work only from `docs/follow-up-plan-gemini.md` and
+> `docs/site-commissioning-plan.md`. If both are empty, **ask rather than picking something
+> from here.**
+
 **Branch:** `feat/erp-spike`
 **Type:** time-boxed investigation. **Throwaway code. Nothing here gets merged or shipped.**
 **Time box:** 5 working days. Stop at the box even if unfinished and report what is known.

@@ -12,6 +12,7 @@ import { TeamPanel } from './team-panel';
 import { CompleteProjectButton } from './complete-project-button';
 import { HandoverProjectButton } from './handover-project-button';
 import { HoldProjectButton } from './hold-project-button';
+import { ProjectDangerActions } from './project-danger-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,20 +87,52 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             <Link href={`/pm/resources?projectId=${project.id}`} className="btn btn-secondary text-body-sm">
               Team load
             </Link>
-            {permissions.canManageMembers && project.status !== 'ON_HOLD' ? (
+            {permissions.canManageMembers && project.status !== 'ON_HOLD' && project.status !== 'CANCELLED' ? (
               <HandoverProjectButton projectId={project.id} colleagues={colleagues} />
             ) : null}
-            {permissions.canEditProject ? (
+            {permissions.canEditProject && project.status !== 'CANCELLED' ? (
               <HoldProjectButton projectId={project.id} projectName={project.name} status={project.status} />
             ) : null}
-            {permissions.canCreateTask && project.status !== 'ON_HOLD' ? (
+            {permissions.canCreateTask && project.status !== 'ON_HOLD' && project.status !== 'CANCELLED' ? (
               <Link href={`/pm/adhoc?projectId=${project.id}`} className="btn btn-primary text-body-sm">
                 Add urgent task
               </Link>
             ) : null}
+            {permissions.canDeleteProject && project.status !== 'CANCELLED' ? (
+              <ProjectDangerActions
+                projectId={project.id}
+                projectCode={project.code}
+                projectName={project.name}
+                status={project.status}
+              />
+            ) : null}
           </div>
         }
       />
+
+      {/* Cancelled Banner */}
+      {project.status === 'CANCELLED' ? (
+        <div className="mb-5 rounded-lg border border-hairline-strong bg-surface-subtle p-4 text-ink">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-ink">Project is cancelled</span>
+              </div>
+              <p className="mt-1 text-body-sm text-muted">
+                This project was cancelled. All work, tasks, and history have been preserved. You can restore it to planning at any time.
+              </p>
+            </div>
+            {permissions.canDeleteProject ? (
+              <ProjectDangerActions
+                projectId={project.id}
+                projectCode={project.code}
+                projectName={project.name}
+                status={project.status}
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {/* On Hold Banner */}
       {project.status === 'ON_HOLD' ? (

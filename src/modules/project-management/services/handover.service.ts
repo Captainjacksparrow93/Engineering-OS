@@ -7,7 +7,7 @@ import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
 import { formatName } from '@/core/utils/strings';
-import { assertTaskPermission, OUTSIDE_TEAM_MESSAGE, oversightRecipients, reassignTeamFor } from './access';
+import { assertTaskPermission, OUTSIDE_TEAM_MESSAGE, oversightRecipients, projectVisibilityWhere, reassignTeamFor } from './access';
 
 /**
  * Reassign Request (Unified Request -> Accept flow for everyone).
@@ -222,9 +222,11 @@ export async function decideHandover(
   if (!handover) throw new NotFoundError('Reassign request not found.');
   if (handover.status !== 'PENDING') throw new DomainError('This reassign request has already been decided.');
 
-  // Step 4.6: Strictly the receiver
-  if (handover.toUserId !== principal.userId) {
-    throw new ForbiddenError('Only the assigned recipient can accept or decline this reassign request.');
+  const isReceiver = handover.toUserId === principal.userId;
+  const isDirector = can(principal, 'pm.project.read.all');
+  const isProjectManager = handover.task.project.managerId === principal.userId;
+  if (!isReceiver && !isDirector && !isProjectManager) {
+    throw new ForbiddenError('Only the assigned recipient, project manager, or a director can accept or decline this reassign request.');
   }
 
   const now = new Date();
@@ -369,8 +371,9 @@ export async function cancelHandover(principal: Principal, handoverId: string) {
   if (handover.status !== 'PENDING') throw new DomainError('Only a pending request can be withdrawn.');
 
   const isRequester = handover.requestedById === principal.userId || handover.fromUserId === principal.userId;
-  if (!isRequester) {
-    throw new ForbiddenError('Only the requester can withdraw this reassign request.');
+  const isDirector = can(principal, 'pm.project.read.all');
+  if (!isRequester && !isDirector) {
+    throw new ForbiddenError('Only the requester or a director can withdraw this reassign request.');
   }
 
   await prisma.$transaction(async (tx) => {
@@ -488,9 +491,11 @@ export async function decideProjectHandover(
   if (!handover) throw new NotFoundError('Project handover request not found.');
   if (handover.status !== 'PENDING') throw new DomainError('This handover request has already been decided.');
 
-  // Only the assigned new manager can accept or decline
-  if (handover.toUserId !== principal.userId) {
-    throw new ForbiddenError('Only the assigned new manager can accept or decline this project handover.');
+  // Only the assigned new manager or a director can accept or decline
+  const isReceiver = handover.toUserId === principal.userId;
+  const isDirector = can(principal, 'pm.project.read.all');
+  if (!isReceiver && !isDirector) {
+    throw new ForbiddenError('Only the assigned new manager or a director can accept or decline this project handover.');
   }
 
   return prisma.$transaction(async (tx) => {
@@ -601,7 +606,9 @@ export async function cancelProjectHandover(principal: Principal, handoverId: st
   const handover = await prisma.projectHandover.findUnique({ where: { id: handoverId } });
   if (!handover) throw new NotFoundError('Project handover not found.');
   if (handover.status !== 'PENDING') throw new DomainError('Only a pending project handover can be withdrawn.');
-  if (handover.fromUserId !== principal.userId) throw new ForbiddenError('Only the requester can withdraw this.');
+  const isRequester = handover.fromUserId === principal.userId;
+  const isDirector = can(principal, 'pm.project.read.all');
+  if (!isRequester && !isDirector) throw new ForbiddenError('Only the requester or a director can withdraw this.');
 
   await prisma.$transaction(async (tx) => {
     await tx.projectHandover.update({
@@ -653,7 +660,7 @@ export async function listHandovers(principal: Principal) {
         status: 'PENDING',
         toUserId: { not: principal.userId },
         fromUserId: { not: principal.userId },
-        task: { project: { managerId: principal.userId } },
+        task: { project: projectVisibilityWhere(principal) },
       },
       include: handoverInclude,
       orderBy: { createdAt: 'desc' },
@@ -675,7 +682,7 @@ export async function listHandovers(principal: Principal) {
         status: 'PENDING',
         toUserId: { not: principal.userId },
         fromUserId: { not: principal.userId },
-        project: { managerId: principal.userId },
+        project: projectVisibilityWhere(principal),
       },
       include: projectHandoverInclude,
       orderBy: { createdAt: 'desc' },
@@ -703,7 +710,7 @@ const handoverInclude = {
       priority: true,
       plannedEnd: true,
       percentComplete: true,
-      project: { select: { id: true, code: true, name: true } },
+      project: { select: { id: true, code: true, name: true, managerId: true, clientName: true } },
     },
   },
   fromUser: { select: { id: true, fullName: true, avatarColor: true, designation: true } },

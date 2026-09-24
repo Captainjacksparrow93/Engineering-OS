@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import clsx from 'clsx';
 
 export interface ConfirmDialogProps {
@@ -10,6 +11,8 @@ export interface ConfirmDialogProps {
   cancelLabel?: string;
   tone?: 'danger' | 'default';
   isPending?: boolean;
+  confirmMatch?: string;
+  confirmInputPlaceholder?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -22,10 +25,27 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   tone = 'default',
   isPending = false,
+  confirmMatch,
+  confirmInputPlaceholder,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const [inputVal, setInputVal] = useState('');
+
   if (!isOpen) return null;
+
+  const matchRequired = typeof confirmMatch === 'string' && confirmMatch.length > 0;
+  const isMatchValid = !matchRequired || inputVal.trim() === confirmMatch.trim();
+
+  const handleCancel = () => {
+    setInputVal('');
+    onCancel();
+  };
+
+  const handleConfirm = () => {
+    if (!isMatchValid) return;
+    onConfirm();
+  };
 
   return (
     <div
@@ -43,24 +63,41 @@ export function ConfirmDialog({
           {description}
         </p>
 
+        {matchRequired && (
+          <div className="mt-4 space-y-1.5">
+            <label className="text-caption text-muted block">
+              Type <strong className="font-mono text-ink select-all">{confirmMatch}</strong> to confirm:
+            </label>
+            <input
+              type="text"
+              autoFocus
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+              placeholder={confirmInputPlaceholder ?? confirmMatch}
+              className="input text-body-sm w-full font-mono"
+              disabled={isPending}
+            />
+          </div>
+        )}
+
         <div className="mt-6 flex items-center justify-end gap-3">
           <button
             type="button"
             disabled={isPending}
-            onClick={onCancel}
+            onClick={handleCancel}
             className="btn btn-secondary text-body-sm px-4 py-2"
           >
             {cancelLabel}
           </button>
           <button
             type="button"
-            disabled={isPending}
-            onClick={onConfirm}
+            disabled={isPending || !isMatchValid}
+            onClick={handleConfirm}
             className={clsx(
               'btn text-body-sm px-4 py-2 font-medium',
               tone === 'danger'
-                ? 'bg-error text-on-primary hover:opacity-90'
-                : 'btn-primary'
+                ? 'bg-error text-on-primary hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed'
+                : 'btn-primary disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
             {isPending ? 'Processing...' : confirmLabel}

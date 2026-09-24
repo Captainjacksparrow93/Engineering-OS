@@ -562,6 +562,7 @@ export async function getProjectWorkspace(principal: Principal, projectId: strin
       canEditProject: can(principal, 'pm.project.update', { projectId, departmentId: project.departmentId }) || project.managerId === principal.userId,
       canManageMembers:
         can(principal, 'pm.project.member.manage', { projectId, departmentId: project.departmentId }) || project.managerId === principal.userId,
+      canDeleteProject: can(principal, 'pm.project.delete', { projectId, departmentId: project.departmentId }),
     },
   };
 }
@@ -1039,3 +1040,164 @@ export async function quickFind(principal: Principal, query: string): Promise<Qu
     })),
   };
 }
+
+/**
+ * Cancel a project (Director only).
+ * Sets status to CANCELLED. Reversible via restoreProject.
+ */
+export async function cancelProject(principal: Principal, projectId: string) {
+  const project = await assertProjectPermission(principal, projectId, 'pm.project.delete');
+  if (project.status === 'CANCELLED') {
+    throw new DomainError('Project is already cancelled.');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.project.update({
+      where: { id: projectId },
+      data: { status: 'CANCELLED' },
+    });
+
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'pm',
+        action: 'pm.project.cancelled',
+        entityType: 'Project',
+        entityId: projectId,
+        diff: { from: project.status, to: 'CANCELLED' },
+      },
+      tx,
+    );
+
+    await publish(
+      {
+        name: EVENTS.PROJECT_STATUS_CHANGED,
+        module: 'pm',
+        entityType: 'Project',
+        entityId: projectId,
+        actorId: principal.userId,
+        payload: { from: project.status, to: 'CANCELLED', code: project.code },
+      },
+      tx,
+    );
+
+    return updated;
+  });
+}
+
+/**
+ * Restore a cancelled project back to PLANNING (Director only).
+ */
+export async function restoreProject(principal: Principal, projectId: string) {
+  const project = await assertProjectPermission(principal, projectId, 'pm.project.delete');
+  if (project.status !== 'CANCELLED') {
+    throw new DomainError('Only cancelled projects can be restored.');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.project.update({
+      where: { id: projectId },
+      data: { status: 'PLANNING' },
+    });
+
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'pm',
+        action: 'pm.project.restored',
+        entityType: 'Project',
+        entityId: projectId,
+        diff: { from: 'CANCELLED', to: 'PLANNING' },
+      },
+      tx,
+    );
+
+    await publish(
+      {
+        name: EVENTS.PROJECT_STATUS_CHANGED,
+        module: 'pm',
+        entityType: 'Project',
+        entityId: projectId,
+        actorId: principal.userId,
+        payload: { from: 'CANCELLED', to: 'PLANNING', code: project.code },
+      },
+      tx,
+    );
+
+    return updated;
+  });
+}
+
+/**
+ * Permanently delete a project (Director only, strictly guarded).
+ *
+ * Guard 1: Block delete if any progress log exists across tasks.
+ * Guard 2: Type-to-confirm project code.
+ * Guard 3: Audit before deleting in the same transaction.
+ */
+export async function deleteProject(principal: Principal, projectId: string, confirmationCode?: string) {
+  await assertProjectPermission(principal, projectId, 'pm.project.delete');
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: {
+      _count: { select: { tasks: true } },
+    },
+  });
+  if (!project) throw new NotFoundError('Project not found.');
+
+  // Guard 2: Type-to-confirm project code
+  if (confirmationCode !== undefined && confirmationCode.trim() !== project.code.trim()) {
+    throw new DomainError(`Confirmation code does not match "${project.code}".`);
+  }
+
+  // Guard 1: Block delete if any real work has been recorded.
+  const [progressLogCount, commissioningLogCount] = await Promise.all([
+    prisma.taskProgressLog.count({
+      where: { task: { projectId } },
+    }),
+    prisma.commissioningLog.count({
+      where: { projectId },
+    }),
+  ]);
+
+  if (progressLogCount > 0 || commissioningLogCount > 0) {
+    throw new DomainError(
+      'Cannot delete project with recorded progress logs. Please cancel the project instead to preserve history.',
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    // Guard 3: Audit inside the same transaction BEFORE deleting.
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'pm',
+        action: 'pm.project.deleted',
+        entityType: 'Project',
+        entityId: projectId,
+        diff: {
+          code: project.code,
+          name: project.name,
+          clientName: project.clientName,
+          workOrderNo: project.workOrderNo,
+          taskCount: project._count.tasks,
+        },
+      },
+      tx,
+    );
+
+    // Clean up scoped role assignments for this project
+    await tx.roleAssignment.deleteMany({
+      where: { scopeType: 'PROJECT', scopeId: projectId },
+    });
+
+    // Delete project (cascades to members, tasks, assignments, dependencies, handovers, etc.)
+    await tx.project.delete({
+      where: { id: projectId },
+    });
+
+    return { success: true, code: project.code };
+  });
+}
+

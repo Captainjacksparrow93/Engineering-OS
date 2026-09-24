@@ -1,5 +1,11 @@
 # ERPNext integration — architecture and phased plan
 
+> ## ⛔ PARKED — PLANNING ONLY. DO NOT IMPLEMENT.
+>
+> ERP is on hold (Sept 2026). This is a record of thinking, not a work order. Do not start
+> it and do not offer it as the next task. Same for HRMS and Gate Entry. See
+> `docs/erp-spike-plan.md` for the full note.
+
 > **CONDITIONAL — this is Path A, and the path has not been chosen yet.**
 > This document assumes Engineering OS stays on Next.js and integrates ERPNext over its
 > API. That assumption is no longer safe: the production projects turned out to be **demo

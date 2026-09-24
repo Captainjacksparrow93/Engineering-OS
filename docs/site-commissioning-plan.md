@@ -216,7 +216,7 @@ the `.card` recipe. No new colours, no shadows.
 
 ---
 
-# Part B2 — The director cannot reach pending handovers (priority: HIGH, live bug)
+# Part B2 — The director cannot reach pending handovers ✅ DONE
 
 **Confirmed on production.** The director sees "2 items waiting on decisions" on his
 dashboard, and there is **no screen in the app where he can see or act on them**. Approvals

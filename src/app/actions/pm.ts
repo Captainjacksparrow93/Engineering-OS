@@ -15,12 +15,15 @@ import {
 } from '@/modules/project-management/validation/schemas';
 import {
   addProjectMember,
+  cancelProject,
   completeAutomationProject,
+  deleteProject,
   getProjectTimeline,
   holdProject,
   quickFind,
   reassignAllMemberTasks,
   removeProjectMember,
+  restoreProject,
   resumeProject,
 } from '@/modules/project-management/services/project.service';
 import {
@@ -273,6 +276,7 @@ export async function decideHandoverAction(_prev: ActionState, form: FormData): 
     return decideHandover(principal, handoverId, input.decision, input.note);
   });
   revalidatePath('/pm/handovers');
+  revalidatePath('/pm/approvals');
   revalidatePath('/pm/my-work');
   revalidatePath('/dashboard');
   return state;
@@ -422,6 +426,51 @@ export async function resumeProjectAction(projectId: string) {
   }
 }
 
+export async function cancelProjectAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    await cancelProject(principal, projectId);
+    await drainOutbox().catch(() => undefined);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/pm/resources');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to cancel project.' };
+  }
+}
+
+export async function restoreProjectAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    await restoreProject(principal, projectId);
+    await drainOutbox().catch(() => undefined);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/pm/resources');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to restore project.' };
+  }
+}
+
+export async function deleteProjectAction(projectId: string, confirmationCode: string) {
+  const principal = await requirePrincipal();
+  try {
+    await deleteProject(principal, projectId, confirmationCode);
+    await drainOutbox().catch(() => undefined);
+    revalidatePath('/pm/projects');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to delete project.' };
+  }
+}
+
 export async function handoverProjectAction(_prev: ActionState, form: FormData): Promise<ActionState> {
   const principal = await requirePrincipal();
   const projectId = String(form.get('projectId'));
@@ -448,19 +497,20 @@ export async function handoverProjectAction(_prev: ActionState, form: FormData):
 export async function decideProjectHandoverAction(_prev: ActionState, form: FormData): Promise<ActionState> {
   const principal = await requirePrincipal();
   const handoverId = String(form.get('handoverId'));
-  const decision = String(form.get('decision')) as 'ACCEPTED' | 'REJECTED';
+  const decision = String(form.get('decision')) as 'ACCEPTED' | 'DECLINED' | 'REJECTED';
   const note = form.get('note') ? String(form.get('note')) : undefined;
 
-  if (!handoverId || !['ACCEPTED', 'REJECTED'].includes(decision)) {
+  if (!handoverId || !['ACCEPTED', 'DECLINED', 'REJECTED'].includes(decision)) {
     return { error: 'Invalid handover decision.' };
   }
 
   const state = await run(async () => {
     await decideProjectHandover(principal, handoverId, decision, note);
-    return decision === 'ACCEPTED' ? 'Project handover accepted.' : 'Project handover rejected.';
+    return decision === 'ACCEPTED' ? 'Project handover accepted.' : 'Project handover declined.';
   });
 
   revalidatePath('/pm/handovers');
+  revalidatePath('/pm/approvals');
   revalidatePath('/pm/projects');
   revalidatePath('/dashboard');
   return state;

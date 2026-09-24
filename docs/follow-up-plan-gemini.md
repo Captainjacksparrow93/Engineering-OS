@@ -12,7 +12,8 @@ Hand this to Gemini (or any agent) as the next work order. The September update 
 | 3 | **Task 4c** — move the dashboard period toggle | Small, self-contained. |
 | 4 | **Task 5** — server-side "every panel has an engineer" | ~5 lines beside an existing check. |
 | 5 | **Task 2** — project On Hold | The real feature. Decisions already made; needs a migration. |
-| 6 | **Task 7** — RBAC remediation | **BLOCKED** on user approval. Land alone, after everything else is stable. |
+| 6 | **Task 8** — cancel / delete a project ✅ DONE | Director-only. Self-contained, no schema change. |
+| 7 | **Task 7** — RBAC remediation | **BLOCKED** on user approval. Land alone, after everything else is stable. |
 
 **Jump the queue for this one:** `docs/site-commissioning-plan.md` **Part B2** — the director
 cannot see or act on pending handovers anywhere in the app, confirmed live on production.
@@ -24,6 +25,16 @@ the new Site Commissioning module. That depends on Task 2 (the Hold tile reads 0
 it), so finish this queue first.
 
 Tasks 1, 3, 4 and 6 are **done** — see the ✅ markers. Do not redo them.
+
+## Out of scope — do not start these, do not propose them
+
+**ERP / ERPNext, HRMS and Gate Entry are PLANNING ONLY.** They are not being implemented.
+`docs/erp-spike-plan.md` and `docs/erp-integration-plan.md` are records of thinking, not
+work orders, and the `COMING_SOON` entries in `src/core/modules/registry.ts` are a product
+roadmap, not a backlog.
+
+Take work **only** from this document and `docs/site-commissioning-plan.md`. When both are
+finished, **ask what is next** rather than picking something from a parked plan.
 
 ## Rules
 
@@ -308,6 +319,64 @@ the user has explicitly asked for. Same applies to `SUPER_ADMIN`.
 
 After any RBAC change, re-verify as a director: a task in review on a project he does not
 manage must still be approvable.
+
+---
+
+## Task 8 — Cancel and delete a project ✅ DONE
+
+**Confirmed decisions:** both actions; **Cancel is the everyday one**; delete is guarded;
+**Director only**.
+
+**Current state:** `pm.project.delete` exists in `src/core/rbac/permissions.ts` and is held by
+`DIRECTOR` and `SUPER_ADMIN` only — **not** `PROJECT_MANAGER`, `ASST_MANAGER` or
+`TECHNICAL_HEAD`, which is what the user wants. The audit page already renders a
+`pm.project.deleted` label. But **nothing implements either action** — no service, no route,
+no UI. This is a build, not a wiring-up.
+
+### Cancel — the default action
+
+Sets `status = 'CANCELLED'`. Reversible, keeps every task, log and handover.
+
+`CANCELLED` is already handled in the data layer (the dashboard query excludes it), but the
+projects list has **no `CANCELLED` filter chip** (`projects-client.tsx`, `filterChips`). Add
+one — without it a cancelled project cannot be found again, and "reversible" is a fiction.
+
+Add a **Restore** action from the cancelled state that returns the project to `PLANNING`.
+Audit both directions.
+
+### Delete — guarded, and genuinely permanent
+
+`Project` cascades on delete to `ProjectMember`, `Task`, `Milestone` and `ProjectHandover`,
+and `Task` cascades on to `TaskAssignment`, `TaskProgressLog`, `TaskComment`,
+`TaskDependency` and `TaskHandover`. **A delete erases the entire work history of the
+project.** There is no undo short of a database restore.
+
+Three guards, all required:
+
+1. **Block the delete if any real work has been recorded.** The test: any `TaskProgressLog`
+   row against any task of the project. If there is one, refuse with a message saying to
+   cancel it instead. This is the rule that makes the feature safe — you can remove a
+   mistake, you can never erase history.
+2. **Type-to-confirm.** The dialog requires typing the project code exactly (e.g.
+   `ACS-0001-0001`). Follow `confirm-dialog.tsx`, extended to take a confirmation string.
+3. **Audit before deleting, not after.** The row is gone afterwards, so write the audit
+   entry (code, name, client, work order, task count) inside the same transaction and
+   *before* the delete. Use the existing `pm.project.deleted` action key.
+
+### Where it goes
+
+`src/app/(shell)/pm/projects/[id]/page.tsx`, alongside the existing
+`complete-project-button.tsx` and `handover-project-button.tsx` — follow their pattern
+(server action + confirm dialog + audit). Both actions must be invisible to anyone without
+`pm.project.delete`; do not render them and then reject server-side.
+
+### Verify
+
+As a director: cancel a project → it leaves the active lists, appears under the new
+`Cancelled` chip, and restores cleanly. Delete a project with **no** progress logs → gone,
+with an audit entry naming it. Attempt to delete one **with** progress logs → refused with a
+clear message. As a PM: neither action is visible, and calling the endpoint directly is
+rejected.
 
 ---
 
