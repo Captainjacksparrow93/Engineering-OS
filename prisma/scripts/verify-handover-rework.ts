@@ -134,6 +134,9 @@ async function main() {
 
   const madeProjects: string[] = [];
   const madeClients: string[] = [];
+  // Notifications are not foreign-keyed to projects, so deleting the test projects leaves
+  // them behind pointing at dead links. Everything created from here on is ours to remove.
+  const startedAt = new Date();
 
   /**
    * Projects and clients are created by a HEAD, not a PM: PROJECT_MANAGER and
@@ -448,7 +451,12 @@ async function main() {
     for (const id of madeClients) {
       await prisma.client.delete({ where: { id } }).catch(() => undefined);
     }
-    console.log(`   Removed ${madeProjects.length} throwaway projects and ${madeClients.length} clients.`);
+    const notifs = await prisma.notification.deleteMany({ where: { createdAt: { gte: startedAt } } });
+    const events = await prisma.domainEvent.deleteMany({ where: { createdAt: { gte: startedAt } } });
+    console.log(
+      `   Removed ${madeProjects.length} projects, ${madeClients.length} clients, ` +
+        `${notifs.count} notifications and ${events.count} domain events.`,
+    );
   }
 
   console.log('\n' + '='.repeat(70));
