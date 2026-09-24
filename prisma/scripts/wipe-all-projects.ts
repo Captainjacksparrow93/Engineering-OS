@@ -13,6 +13,7 @@ async function getCounts() {
     projectHandovers,
     taskHandovers,
     projectRoles,
+    notificationsWithLinks,
     users,
     clients,
     templates,
@@ -26,6 +27,7 @@ async function getCounts() {
     prisma.projectHandover.count(),
     prisma.taskHandover.count(),
     prisma.roleAssignment.count({ where: { scopeType: 'PROJECT' } }),
+    prisma.notification.count({ where: { link: { not: null } } }),
     prisma.user.count(),
     prisma.client.count(),
     prisma.checklistTemplate.count(),
@@ -41,6 +43,7 @@ async function getCounts() {
     projectHandovers,
     taskHandovers,
     projectRoles,
+    notificationsWithLinks,
     users,
     clients,
     templates,
@@ -63,17 +66,29 @@ async function main() {
   console.log('   - Project Handovers:                 ', before.projectHandovers);
   console.log('   - Task Handovers:                    ', before.taskHandovers);
   console.log('   - PROJECT-scoped Role Assignments:   ', before.projectRoles);
+  console.log('   - Notifications with deep links:     ', before.notificationsWithLinks);
   console.log('   - Users (should stay unchanged):     ', before.users);
   console.log('   - Clients (should stay unchanged):   ', before.clients);
   console.log('   - Templates (should stay unchanged): ', before.templates);
 
-  if (before.projects === 0 && before.projectRoles === 0) {
-    console.log('\n[INFO] 0 projects and 0 project-scoped roles found. System is already clean.');
+  if (before.projects === 0 && before.projectRoles === 0 && before.notificationsWithLinks === 0) {
+    console.log('\n[INFO] 0 projects, 0 project roles, and 0 linked notifications found. System is already clean.');
     return;
   }
 
-  console.log('\n2. Deleting project-scoped role assignments and all projects in a transaction...');
+  console.log('\n2. Deleting in a single atomic transaction:');
+  console.log('   - Notifications linking to deleted projects/tasks (clearing to prevent 404 dead links)');
+  console.log('   - PROJECT-scoped role assignments');
+  console.log('   - All projects and their cascaded entities');
+
   await prisma.$transaction(async (tx) => {
+    // Decision on notifications: clear notifications pointing to projects/tasks
+    // so users do not hit 404s on dead links after the wipe.
+    const deletedNotifications = await tx.notification.deleteMany({
+      where: { link: { not: null } },
+    });
+    console.log(`   - Deleted ${deletedNotifications.count} notifications linking to projects/tasks.`);
+
     const deletedRoles = await tx.roleAssignment.deleteMany({
       where: { scopeType: 'PROJECT' },
     });
@@ -94,12 +109,19 @@ async function main() {
   console.log('   - Project Handovers:                 ', after.projectHandovers, after.projectHandovers === 0 ? '✓' : '✗ FAILED');
   console.log('   - Task Handovers:                    ', after.taskHandovers, after.taskHandovers === 0 ? '✓' : '✗ FAILED');
   console.log('   - PROJECT-scoped Role Assignments:   ', after.projectRoles, after.projectRoles === 0 ? '✓' : '✗ FAILED');
+  console.log('   - Notifications with deep links:     ', after.notificationsWithLinks, after.notificationsWithLinks === 0 ? '✓' : '✗ FAILED');
   console.log('   - Users (unchanged):                 ', after.users, after.users === before.users ? '✓' : '✗ CHANGED');
   console.log('   - Clients (unchanged):               ', after.clients, after.clients === before.clients ? '✓' : '✗ CHANGED');
   console.log('   - Templates (unchanged):             ', after.templates, after.templates === before.templates ? '✓' : '✗ CHANGED');
 
-  if (after.projects === 0 && after.tasks === 0 && after.projectRoles === 0 && after.users === before.users) {
-    console.log('\n==> SUCCESS: All projects and cascading project data wiped cleanly.');
+  if (
+    after.projects === 0 &&
+    after.tasks === 0 &&
+    after.projectRoles === 0 &&
+    after.notificationsWithLinks === 0 &&
+    after.users === before.users
+  ) {
+    console.log('\n==> SUCCESS: All projects and cascading project data wiped cleanly with no orphaned links.');
   } else {
     throw new Error('Verification failed: some records were not wiped or non-project records changed.');
   }

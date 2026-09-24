@@ -122,6 +122,17 @@ COMMIT;
 Everything under a project cascades (`onDelete: Cascade` on tasks, members, milestones,
 handovers, and onward to assignments, logs, comments, dependencies).
 
+### Notifications are not cleared by the cascade
+
+`Notification` stores a `link` string, not a foreign key, so every existing notification
+survives the wipe and points at a deleted project or task — a 404 for each. Users currently
+have dozens.
+
+**Decide and state which:** clear them in the same run
+(`prisma.notification.deleteMany({ where: { link: { not: null } } })`), or leave them as dead
+history. Clearing is the tidier default for a clean slate; say so in the script output
+either way.
+
 ### Verify
 
 ```sql
@@ -160,10 +171,30 @@ Role seeding is create-only, so assign it to **Rajani Bhurabhai Nagar (`ACS-0062
 one-off script under `prisma/scripts/`, at `DEPARTMENT` scope on `TECH` — matching how
 `TECHNICAL_HEAD` is granted to Dilip.
 
-> **Do not give `SERVICE_HEAD` the `pm.oversight` permission unless you also intend to
-> change squad boundaries.** Squads are computed by walking up to the nearest
-> `pm.oversight` holder (`teamOf` → `teamMemberIds`). Adding a second oversight holder
-> inside the tree re-cuts every squad and silently changes who may hand work to whom.
+### `SERVICE_HEAD` must include `pm.oversight` — CORRECTION
+
+An earlier draft of this plan said to leave `pm.oversight` **off** `SERVICE_HEAD`. **That was
+wrong and must be fixed.** Add it to the permission list.
+
+**Why it is needed.** `reassignTeamFor` grants unrestricted assignment only to
+`pm.oversight` holders; everyone else is confined to their own squad. Without it, Rajani's
+"team" resolves to just herself, so **every assignment she attempts is rejected as outside
+her team** — and she would not qualify as a head approver in the two-stage handover flow
+(`docs/handover-rework-plan.md` Phase 3), nor receive oversight notifications. That directly
+contradicts the confirmed rule *"head can reassign without approval"*.
+
+**Why it is safe.** `teamRootOf` walks **up a person's own manager chain** and stops at the
+first manager holding oversight. A second oversight holder only re-cuts squads if they sit
+**inside** that chain. Under §3b Rajani manages **nobody** — the four squad leads report to
+Dilip — so she is in no one's chain and no squad boundary moves.
+
+> **The rule to preserve:** exactly **one** oversight holder may sit above the four squad
+> leads in the reporting line, and that is **Dilip Asediya**. Oversight held by someone
+> outside the chain (Rajani, the Directors) is harmless. If Rajani is ever made the manager
+> of a squad lead, this breaks — revisit it then.
+
+After adding it, re-run `grant-service-head.ts` so the existing role row picks up the new
+permission (role seeding is create-only and will not add it retroactively).
 
 ### 3b. Reporting line changes
 

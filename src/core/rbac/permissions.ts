@@ -156,6 +156,7 @@ export const SYSTEM_ROLES: Record<
       'pm.template.manage',
       'pm.commissioning.manage',
       'pm.commissioning.approve',
+      'pm.oversight',
       'pm.handover.request',
       'pm.handover.decide',
       'pm.resource.read',
