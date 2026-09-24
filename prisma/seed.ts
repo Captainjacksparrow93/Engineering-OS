@@ -1371,40 +1371,9 @@ async function main() {
   }
 
   // --------------------------------------------------------------------- clients
-  // Reference numbers are ALLOCATED here, never hardcoded. The client master is not
-  // owned by this seed: the migration backfill creates a row per existing project's
-  // client, and users create more in the app. A fixed 'ACS-0001' collides with whoever
-  // already holds it, and because the seed runs on every container start that collision
-  // aborts the rest of the seed (see entrypoint.sh).
-  const clientSeeds = ['Tata Chemicals Ltd', 'Sunrise Cement Industries', 'Godrej Foods Pvt Ltd'];
-
-  for (const name of clientSeeds) {
-    const existing = await prisma.client.findUnique({
-      where: { companyId_name: { companyId: company.id, name } },
-      select: { id: true },
-    });
-    if (existing) {
-      continue;
-    }
-
-    const taken = await prisma.client.findMany({
-      where: { companyId: company.id },
-      select: { refNumber: true },
-    });
-    let maxSeq = 0;
-    for (const c of taken) {
-      const match = c.refNumber.match(/^ACS-(\d{4})$/i);
-      if (match) maxSeq = Math.max(maxSeq, Number.parseInt(match[1]!, 10));
-    }
-
-    await prisma.client.create({
-      data: {
-        companyId: company.id,
-        name,
-        refNumber: `ACS-${String(maxSeq + 1).padStart(4, '0')}`,
-      },
-    });
-  }
+  // Deliberately NOT seeded. The client master is owned by the app: users add clients
+  // through the project wizard's "Add new client". Seeding sample clients here meant
+  // deleted ones reappeared on the next container start. Do not reintroduce this.
 
   console.log(`Successfully seeded ${people.length} people across ${departmentTree.length} departments!`);
   console.log(`Primary Super Admin: admin@acsengitech.com / <SEED_PASSWORD>`);
