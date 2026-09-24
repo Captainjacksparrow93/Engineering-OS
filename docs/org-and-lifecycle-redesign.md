@@ -166,9 +166,14 @@ One principle governs everything below:
 
 | Role | Can hand over |
 |---|---|
-| Engineer | **task only** |
-| PM / Asst PM | **task or whole project** |
-| Head, Director | **task or whole project** |
+| Engineer | **a single task**, or **a whole panel's remaining work** — not a project |
+| PM / Asst PM | task, panel, or **whole project** |
+| Head, Director | task, panel, or **whole project** |
+
+"A panel's remaining work" is the existing `requestPanelHandover`: an engineer who has
+finished, say, 5 of 13 steps passes the remaining 8 to someone else in one action. Engineers
+rely on it — it is not being taken away. The only thing an engineer may not move is a whole
+project.
 
 ### The matrix
 

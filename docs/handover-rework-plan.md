@@ -218,8 +218,23 @@ holding work on the project regardless of squad.
 
 ## Phase 7 — role gates
 
-- **Engineers: tasks only.** Hide the project-handover control and reject it server-side.
-- **PM / Asst PM / Head / Director: task or project.**
+| Role | May hand over |
+|---|---|
+| Engineer | **a single task**, or **a whole panel's remaining work** — never a project |
+| PM / Asst PM / Head / Director | a task, a panel, or **a whole project** |
+
+**"A panel's remaining work" already exists** — `requestPanelHandover` in
+`handover.service.ts`, built in the September release. It takes the phase task, finds the
+caller's still-incomplete steps under it, and moves them as one batch. **Engineers use this
+today: do not remove or hide it.** The only thing they may not do is transfer a project.
+
+`requestPanelHandover` already enforces the squad boundary via `reassignTeamFor` +
+`OUTSIDE_TEAM_MESSAGE`, so an engineer cannot send a panel to another squad — correct, and
+it stays that way.
+
+**But a PM or head handing a panel across squads must follow the same two-approval path as a
+task** (Phases 2 and 3). Apply the branch to `requestPanelHandover` as well, not only to
+`assignTask` — otherwise panels become a way to move work across squads without approval.
 
 UI must hide what a role cannot do *and* the service must reject it — never one alone.
 
