@@ -1,6 +1,6 @@
 import { prisma } from '@/core/db/prisma';
-import { assertCan } from '@/core/rbac/guard';
-import { DomainError, NotFoundError } from '@/core/rbac/errors';
+import { hasPermissionAnywhere } from '@/core/rbac/engine';
+import { DomainError, ForbiddenError, NotFoundError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
 import { startOfDay } from '@/core/utils/dates';
@@ -17,7 +17,9 @@ export interface CreateCommissioningLogInput {
  * Head / Director view (pm.commissioning.manage).
  */
 export async function listCommissioningProjects(principal: Principal) {
-  assertCan(principal, 'pm.commissioning.manage');
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.manage')) {
+    throw new ForbiddenError('Missing permission: pm.commissioning.manage');
+  }
 
   const projects = await prisma.project.findMany({
     where: {
@@ -95,7 +97,9 @@ export async function listCommissioningProjects(principal: Principal) {
  * All active engineers across every team (not filtered by PM).
  */
 export async function listEligibleEngineers(principal: Principal) {
-  assertCan(principal, 'pm.commissioning.manage');
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.manage')) {
+    throw new ForbiddenError('Missing permission: pm.commissioning.manage');
+  }
 
   const users = await prisma.user.findMany({
     where: {
@@ -130,7 +134,9 @@ export async function assignEngineerToCommissioning(
   projectId: string,
   userId: string
 ) {
-  assertCan(principal, 'pm.commissioning.manage');
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.manage')) {
+    throw new ForbiddenError('Missing permission: pm.commissioning.manage');
+  }
 
   const project = await prisma.project.findFirst({
     where: { id: projectId, companyId: principal.companyId },
@@ -204,7 +210,9 @@ export async function releaseEngineerFromCommissioning(
   projectId: string,
   userId: string
 ) {
-  assertCan(principal, 'pm.commissioning.manage');
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.manage')) {
+    throw new ForbiddenError('Missing permission: pm.commissioning.manage');
+  }
 
   const assignment = await prisma.commissioningAssignment.findUnique({
     where: { projectId_userId: { projectId, userId } },
@@ -238,7 +246,9 @@ export async function releaseEngineerFromCommissioning(
  * Mark commissioning complete -> project moves to CLOSED.
  */
 export async function closeCommissioning(principal: Principal, projectId: string) {
-  assertCan(principal, 'pm.commissioning.manage');
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.manage')) {
+    throw new ForbiddenError('Missing permission: pm.commissioning.manage');
+  }
 
   const project = await prisma.project.findFirst({
     where: { id: projectId, companyId: principal.companyId },
@@ -289,7 +299,9 @@ export async function closeCommissioning(principal: Principal, projectId: string
  * Engineer view (pm.commissioning.log).
  */
 export async function getMyCommissioningProjects(principal: Principal) {
-  assertCan(principal, 'pm.commissioning.log');
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.log')) {
+    throw new ForbiddenError('Missing permission: pm.commissioning.log');
+  }
 
   const assignments = await prisma.commissioningAssignment.findMany({
     where: {
@@ -322,7 +334,9 @@ export async function getMyCommissioningProjects(principal: Principal) {
  * Recent daily commissioning logs by the current engineer.
  */
 export async function getMyCommissioningLogs(principal: Principal, limit: number = 30) {
-  assertCan(principal, 'pm.commissioning.log');
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.log')) {
+    throw new ForbiddenError('Missing permission: pm.commissioning.log');
+  }
 
   const logs = await prisma.commissioningLog.findMany({
     where: {
@@ -353,7 +367,9 @@ export async function createCommissioningLog(
   principal: Principal,
   input: CreateCommissioningLogInput
 ) {
-  assertCan(principal, 'pm.commissioning.log');
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.log')) {
+    throw new ForbiddenError('Missing permission: pm.commissioning.log');
+  }
 
   const workDone = input.workDone?.trim();
   if (!workDone) {
@@ -425,7 +441,9 @@ export async function createCommissioningLog(
  * Head / Director view (pm.commissioning.approve).
  */
 export async function listPendingCommissioningApprovals(principal: Principal) {
-  assertCan(principal, 'pm.commissioning.approve');
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.approve')) {
+    throw new ForbiddenError('Missing permission: pm.commissioning.approve');
+  }
 
   const logs = await prisma.commissioningLog.findMany({
     where: {
@@ -464,7 +482,9 @@ export async function listPendingCommissioningApprovals(principal: Principal) {
  * Approve a daily commissioning log.
  */
 export async function approveCommissioningLog(principal: Principal, logId: string) {
-  assertCan(principal, 'pm.commissioning.approve');
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.approve')) {
+    throw new ForbiddenError('Missing permission: pm.commissioning.approve');
+  }
 
   const log = await prisma.commissioningLog.findUnique({
     where: { id: logId },
@@ -507,7 +527,9 @@ export async function rejectCommissioningLog(
   logId: string,
   decisionNote?: string
 ) {
-  assertCan(principal, 'pm.commissioning.approve');
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.approve')) {
+    throw new ForbiddenError('Missing permission: pm.commissioning.approve');
+  }
 
   const log = await prisma.commissioningLog.findUnique({
     where: { id: logId },

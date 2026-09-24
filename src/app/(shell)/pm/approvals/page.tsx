@@ -19,7 +19,12 @@ export default async function ApprovalsPage() {
 
   const [stepItems, commissioningLogs, handovers] = await Promise.all([
     listPendingApprovals(principal),
-    canApproveCommissioning ? listPendingCommissioningApprovals(principal) : Promise.resolve([]),
+    canApproveCommissioning
+      ? listPendingCommissioningApprovals(principal).catch((err) => {
+          console.error('Failed to load commissioning approvals:', err);
+          return [];
+        })
+      : Promise.resolve([]),
     listHandovers(principal),
   ]);
 

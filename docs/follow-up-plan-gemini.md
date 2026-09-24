@@ -15,6 +15,22 @@ Hand this to Gemini (or any agent) as the next work order. The September update 
 | 6 | **Task 8** — cancel / delete a project ✅ DONE | Director-only. Self-contained, no schema change. |
 | 7 | **Task 7** — RBAC remediation | **BLOCKED** on user approval. Land alone, after everything else is stable. |
 
+## 🔥 DO THIS FIRST — live breakage on production
+
+`docs/site-commissioning-plan.md` → **HOTFIX** section at the top.
+
+**Technical Head gets "Something went wrong" on both `/pm/approvals` and
+`/pm/commissioning`.** The permissions are granted correctly; the bug is that
+`commissioning.service.ts` calls `assertCan(principal, 'pm.commissioning.*')` **with no
+scope**, and `scopeMatches` returns `false` for a `DEPARTMENT`-scoped grant when no scope is
+supplied. Only GLOBAL grants pass, so Director works and Technical Head — the role the
+feature was built for — is locked out. Approvals is a daily-use page and it is 500ing.
+
+Full diagnosis and the fix are in that section. **Do not grant TECHNICAL_HEAD a GLOBAL role
+as a workaround.**
+
+---
+
 **Jump the queue for this one:** `docs/site-commissioning-plan.md` **Part B2** — the director
 cannot see or act on pending handovers anywhere in the app, confirmed live on production.
 Oversight queries are scoped to projects you personally manage, and the director manages

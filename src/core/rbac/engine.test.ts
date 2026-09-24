@@ -87,4 +87,21 @@ describe('hasPermissionAnywhere', () => {
     const pWithoutTemplate = principal([{ permission: 'pm.task.read', scopeType: 'GLOBAL', scopeId: null }]);
     expect(hasPermissionAnywhere(pWithoutTemplate, 'pm.template.manage')).toBe(false);
   });
+
+  it('passes hasPermissionAnywhere for department-scoped grants where scopeless can() fails', () => {
+    // Technical Head holds commissioning permissions at DEPARTMENT scope
+    const techHead = principal([
+      { permission: 'pm.commissioning.manage', scopeType: 'DEPARTMENT', scopeId: 'dept-tech' },
+      { permission: 'pm.commissioning.approve', scopeType: 'DEPARTMENT', scopeId: 'dept-tech' },
+    ], { coveredDepartmentIds: ['dept-tech', 'dept-design'] });
+
+    // Scope-less can() fails because DEPARTMENT grants require a target departmentId
+    expect(can(techHead, 'pm.commissioning.manage')).toBe(false);
+    expect(can(techHead, 'pm.commissioning.approve')).toBe(false);
+
+    // hasPermissionAnywhere correctly recognizes the grant exists
+    expect(hasPermissionAnywhere(techHead, 'pm.commissioning.manage')).toBe(true);
+    expect(hasPermissionAnywhere(techHead, 'pm.commissioning.approve')).toBe(true);
+  });
 });
+

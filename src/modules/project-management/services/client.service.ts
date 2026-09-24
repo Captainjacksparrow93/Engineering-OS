@@ -1,6 +1,6 @@
 import { prisma } from '@/core/db/prisma';
-import { assertCan } from '@/core/rbac/guard';
-import { DomainError } from '@/core/rbac/errors';
+import { hasPermissionAnywhere } from '@/core/rbac/engine';
+import { DomainError, ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
 
@@ -50,7 +50,9 @@ export async function createClient(
   principal: Principal,
   input: { name: string; refNumber: string }
 ) {
-  assertCan(principal, 'pm.project.create');
+  if (!hasPermissionAnywhere(principal, 'pm.project.create')) {
+    throw new ForbiddenError('Missing permission: pm.project.create');
+  }
 
   const name = input.name.trim();
   const refNumber = input.refNumber.trim().toUpperCase();

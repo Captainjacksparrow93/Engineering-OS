@@ -17,6 +17,96 @@ numbers. The second turned out to need a whole new module, which is most of this
 
 ---
 
+# HOTFIX — Technical Head is locked out of both new pages (LIVE on production)
+
+**Symptoms**, reproduced by the user as `Dilip Asediya · TECHNICAL HEAD`:
+
+- `/pm/approvals` → "Something went wrong"
+- `/pm/commissioning` → "Something went wrong"
+
+**Server log:**
+
+```
+⨯ Error [ForbiddenError]: Missing permission: pm.commissioning.approve
+⨯ Error [ForbiddenError]: Missing permission: pm.commissioning.manage
+```
+
+## Root cause — scope mismatch between the page gate and the service assert
+
+The permissions **are** granted correctly. Verified in production:
+`TECHNICAL_HEAD` holds `pm.commissioning.manage` and `pm.commissioning.approve`.
+
+The problem is **how the grant is scoped versus how it is checked**:
+
+1. `TECHNICAL_HEAD` is assigned at **`DEPARTMENT`** scope (`prisma/seed.ts:933,934,946` —
+   TECH and DESIGN). It is not a GLOBAL role.
+2. `commissioning.service.ts` checks with **`assertCan(principal, 'pm.commissioning.manage')`
+   — passing no scope** (lines 20, 98, 133, 207, 241, 292, 325, 356, 428…).
+3. `scopeMatches` in `src/core/rbac/engine.ts` handles a DEPARTMENT grant as:
+
+   ```ts
+   case 'DEPARTMENT': {
+     const target = scope.departmentId;
+     if (!target) return false;      // ← no scope passed, so ALWAYS false
+   ```
+
+So a scope-less `assertCan` can **only ever be satisfied by a GLOBAL grant**. Director and
+Super Admin pass; Technical Head — the role this whole feature was designed around — is
+refused.
+
+The approvals page compounds it: it gates the commissioning section with
+`hasPermissionAnywhere(principal, 'pm.commissioning.approve')`, which **ignores scope** and
+returns `true` for the head, then calls a service that asserts *with* scope and throws. The
+gate and the assert disagree, so the whole page 500s instead of hiding one section.
+
+PMs are unaffected — `hasPermissionAnywhere` is false for them, so the section is skipped
+and the page still renders. **The regression is limited to department-scoped holders, i.e.
+Technical Head.**
+
+## Fix
+
+**Commissioning is a company-wide capability, not a departmental one.** A head assigns
+engineers "from any PM's team", so there is no meaningful department to scope against.
+
+Replace every scope-less `assertCan(principal, 'pm.commissioning.*')` in
+`src/modules/project-management/services/commissioning.service.ts` with a scope-agnostic
+check that throws the same error type:
+
+```ts
+if (!hasPermissionAnywhere(principal, 'pm.commissioning.manage')) {
+  throw new ForbiddenError('Missing permission: pm.commissioning.manage');
+}
+```
+
+This is the existing precedent — `autoAssignAutomationTeam` in
+`automation-project.service.ts` does exactly this for `pm.project.create`. It also makes the
+service agree with how the pages already gate.
+
+**Do not "fix" this by granting `TECHNICAL_HEAD` a GLOBAL role.** That would quietly widen
+every other permission the role holds, well beyond commissioning.
+
+## Also harden the approvals page
+
+Even with the fix, one failing section should not take down the page. Wrap the
+commissioning fetch so a failure yields an empty list and the task-approval and handover
+sections still render. `/pm/approvals` is a daily-use screen for PMs and heads; it must not
+be brought down by an unrelated feature.
+
+## Verify
+
+As `TECHNICAL_HEAD`: `/pm/commissioning` loads, a completed project can be assigned an
+engineer, `/pm/approvals` loads with all three sections. As `DIRECTOR`: unchanged. As a
+`PROJECT_MANAGER`: `/pm/approvals` still loads and shows **no** commissioning section, and
+`/pm/commissioning` is neither visible in the sidebar nor reachable by URL.
+
+## Audit the same mistake elsewhere
+
+Grep for other scope-less `assertCan(` / `can(principal, 'x')` calls added recently. Any
+permission checked without a scope is invisible to DEPARTMENT- and PROJECT-scoped holders,
+so the same trap may exist in the hold and delete work.
+
+---
+
 # Part A — Site Commissioning module
 
 The substantial piece. Build this before Part B, because two dashboard tiles depend on it.
