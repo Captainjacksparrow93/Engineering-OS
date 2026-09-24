@@ -237,6 +237,94 @@ role and excludes designations containing "Manager"/"Asst" — "Service Engineer
 neither, and his role assignment is unchanged. **Re-check the wizard dropdown after the
 change.**
 
+### 3e. Grant `ASST_MANAGER` to the two Assistant Managers — CONFIRMED
+
+**Found during verification after §3b ran:** both Asst Managers still hold only
+`SENIOR_ENGINEER`.
+
+```
+ACS-0070  Dhrupin Vaghasiya   SENIOR_ENGINEER
+ACS-0075  Munaf Multani       SENIOR_ENGINEER
+ACS-0063  Parth Nagar         PM_BASE, PROJECT_MANAGER
+ACS-0074  Paras Prajapati     PM_BASE, PROJECT_MANAGER
+```
+
+`getPMTeamData` selects users holding `PROJECT_MANAGER` **or** `ASST_MANAGER`, so the wizard
+currently offers **2 project owners, not the 4 required**. Their squads are already correct
+— squad membership comes from the manager chain, not the role — so this is purely a grant.
+
+**User confirmed: `ASST_MANAGER` carries PM-equivalent rights** (create and edit projects,
+assign tasks, approve progress).
+
+**Write a one-off script under `prisma/scripts/`** — idempotent, matching by `employeeCode`,
+printing every change:
+
+1. **Grant `ASST_MANAGER`** to `ACS-0070` and `ACS-0075` at **`GLOBAL`** scope, matching how
+   `PROJECT_MANAGER` is granted to Parth and Paras today.
+2. **Remove their `SENIOR_ENGINEER` assignment.** They are squad leads, not assignable
+   engineers. Parth and Paras hold no engineer role, and these two should match. Without
+   this they appear **both** as a squad-lead group heading *and* inside another group in the
+   grouped picker (`docs/handover-rework-plan.md` Phase 5), and remain selectable as
+   assignees on the project page — whose `colleagues` query filters on role only, with no
+   designation exclusion.
+
+**Do this now, while the database holds zero tasks and zero assignments** (§Part 2). Removing
+an engineer role from someone holding live work would be far riskier later.
+
+Do **not** add `PM_BASE`: `ASST_MANAGER` already includes `pm.resource.read`,
+`pm.report.read` and `pm.handover.decide`, so it would be redundant.
+
+> **Scope caveat:** `GLOBAL` is used for consistency with the existing PMs, which is exactly
+> the flaw `docs/rbac-audit.md` Finding 1 raises — every PM currently has manager rights on
+> every project. Do not fix that here for two people; fix all four together in Task 7.
+
+**Verify:** the project wizard offers **four** owners (Parth, Paras, Munaf, Dhrupin); each
+one's engineer list is exactly their own reports; and Munaf and Dhrupin no longer appear in
+any engineer or assignee dropdown.
+
+### 3f. Krupesh Solanki must leave the PM team
+
+**The user supplied the authoritative Project & Service roster (screenshots, 24 Sep).
+Krupesh Bhikhbhai Solanki (`ACS-0081`) is not on it.** The four squads are exactly:
+
+| Lead | Members |
+|---|---|
+| Parth Nagar | Shivam Prajapati, Sahil Patil, Abbasali Sunasara, Harmitsinh Udavat — **4** |
+| Munaf Multani | Het Patel, Agastya Patel, Dixit Prajapati, Hitesh Malviya, Ashish Hajare — **5** |
+| Dhrupin Vaghasiya | Yogi Patel, Jigar Nayak, Tejas Rokade — **3** |
+| Paras Prajapati | Harsh Suthar, Ridhhi Patel, Anurag Vaishnav, Chirag Prajapati, **Akash Vasava** — **5** |
+
+Krupesh currently sits in TECH as a Sr. Engineer reporting to Paras, which makes him
+assignable as one of Paras's engineers — wrong. Note Paras's count of 5 looks right today
+only because Krupesh's presence masks Akash's absence; add Akash without moving Krupesh and
+Paras has **6**.
+
+He is now a **leaf** — §3b moved Ashish Hajare and Tejas Rokade off him, so nobody reports to
+him. Moving him is therefore clean and low risk.
+
+**Where he goes.** The chart puts him in **QC under Prakash Darji** — but Prakash does not
+exist in the app (he is on the parked new-joiners list). The app's QC department is headed by
+**Amey Kulkarni (`ACS-0057`, Testing & QC Manager)**.
+
+**DECIDED — move him to QC under Amey Kulkarni:**
+
+| Field | From | To |
+|---|---|---|
+| Department | Technical & Project Management (`TECH`) | **Quality Control & Testing** |
+| Manager | Paras Prajapati (`ACS-0074`) | **Amey Kulkarni (`ACS-0057`)** |
+
+Designation stays `Sr. Engineer` — the chart says Junior Engineer, but that belongs to the
+parked org import, and demoting someone is not a change to make as a side effect of a squad
+fix. Re-point him to Prakash Darji when that import happens.
+
+Add this to the §3b script, keyed by `employeeCode`, idempotent, printing the change. Look
+the department up by **code**, not name, and fail loudly if it is missing rather than
+silently leaving him in TECH.
+
+Leave his `SENIOR_ENGINEER` role alone — he is still an engineer, just not one of Paras's.
+
+**Verify:** Paras's squad is exactly the five above, and Krupesh appears in no PM squad.
+
 ### 3d. New person — Akash Vasava (CONFIRMED)
 
 **Add him to the team.** The only genuinely new name in this squad.
