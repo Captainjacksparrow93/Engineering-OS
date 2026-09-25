@@ -18,7 +18,7 @@ Three requests came from the client over WhatsApp. This plan covers each one. Cl
 ### Gate: build this before any feature below
 
 **A. CI gate**
-- Add a `ci.yml` workflow that runs on every PR and every push: `npm ci` → `prisma validate` → `tsc --noEmit` → `npm run lint` → `npm test` → `next build`.
+- Add a `ci.yml` workflow that runs on every PR and every push: `npm ci` → `prisma validate` → `tsc --noEmit` → `npm test` → `next build`.
 - Change `deploy.yml` so it runs **only after `ci.yml` passes on main** (use `workflow_run`, or a `needs:` in the same workflow).
 - Protect the default branch so work lands through PRs.
 
@@ -269,7 +269,7 @@ This is a data task, not a code change.
 - **Local commits only. Never push.** A push to `main` deploys to the live site until #0 A is in place. The user relays each batch to Claude for review before anything is pushed.
 - One commit per plan section, with a message like `feat(pm): #6 clients menu`.
 - Line numbers in this plan go stale as soon as you edit. Search for the quoted code instead.
-- Before each commit, run `npm run typecheck && npm run lint && npm test && npm run build`. Also run `npm run test:int` once #0 B exists. All of them must pass.
+- Before each commit, run `npm run typecheck && npm test && npm run build` (there is no lint script yet; #0 A adds one if wanted). Also run `npm run test:int` once #0 B exists. All of them must pass.
 - Do not touch the parked items #4 and #7, or ERP, HRMS and Gate.
 
 **Already done: do not redo or revert:**
