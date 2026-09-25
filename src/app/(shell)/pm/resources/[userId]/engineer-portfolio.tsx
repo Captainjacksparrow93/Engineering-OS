@@ -5,6 +5,7 @@ import { formatDate } from '@/core/utils/dates';
 import { Avatar, ProgressBar, StatusBadge } from '@/components/ui';
 import type { EngineerPortfolioData } from '@/modules/project-management/services/dashboard.service';
 import { HealthBadge } from '@/app/(shell)/dashboard/director-dashboard';
+import { projectLabel } from '@/modules/project-management/domain/project-label';
 
 export function EngineerPortfolio({ data }: { data: EngineerPortfolioData }) {
   const { engineer, capacity, headline, projects, panels, openTasks, handovers } = data;
@@ -132,7 +133,7 @@ export function EngineerPortfolio({ data }: { data: EngineerPortfolioData }) {
                       href={`/pm/projects/${panel.projectId}`}
                       className="text-caption text-primary hover:underline"
                     >
-                      {panel.projectName}
+                      {projectLabel({ name: panel.projectName, clientName: panel.clientName, workOrderNo: panel.workOrderNo })}
                     </Link>
                   </div>
                   <span className="text-caption font-bold text-ink font-mono">{panel.progressPercent}%</span>
@@ -226,7 +227,7 @@ export function EngineerPortfolio({ data }: { data: EngineerPortfolioData }) {
                     )}
                   </div>
                   <p className="text-caption text-muted">
-                    {task.projectName} · {task.estimatedHours}h estimated · Due {formatDate(task.plannedEnd)}
+                    {projectLabel({ name: task.projectName, clientName: task.clientName, workOrderNo: task.workOrderNo })} · {task.estimatedHours}h estimated · Due {formatDate(task.plannedEnd)}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
@@ -257,7 +258,7 @@ export function EngineerPortfolio({ data }: { data: EngineerPortfolioData }) {
                       <div>
                         <p className="text-body-sm font-medium text-ink">{h.taskTitle}</p>
                         <p className="text-caption text-muted">
-                          {h.projectName} · Offered by {h.fromUserName}
+                          {projectLabel({ name: h.projectName, clientName: h.clientName, workOrderNo: h.workOrderNo })} · Offered by {h.fromUserName}
                         </p>
                       </div>
                       <Link href="/pm/handovers" className="btn btn-secondary btn-sm text-xs">
@@ -277,7 +278,7 @@ export function EngineerPortfolio({ data }: { data: EngineerPortfolioData }) {
                       <div>
                         <p className="text-body-sm font-medium text-ink">{h.taskTitle}</p>
                         <p className="text-caption text-muted">
-                          {h.projectName} · Offered to {h.toUserName}
+                          {projectLabel({ name: h.projectName, clientName: h.clientName, workOrderNo: h.workOrderNo })} · Offered to {h.toUserName}
                         </p>
                       </div>
                       <span className="badge bg-surface-strong text-muted text-xs">Pending</span>

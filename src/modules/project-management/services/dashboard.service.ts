@@ -629,6 +629,7 @@ export interface EngineerPortfolioData {
     code: string;
     name: string;
     clientName: string;
+    workOrderNo?: string | null;
     status: string;
     progressPercent: number;
     health: HealthStatus;
@@ -640,6 +641,8 @@ export interface EngineerPortfolioData {
     code: string;
     title: string;
     projectName: string;
+    clientName?: string | null;
+    workOrderNo?: string | null;
     projectId: string;
     progressPercent: number;
     totalTasks: number;
@@ -651,6 +654,8 @@ export interface EngineerPortfolioData {
     code: string;
     title: string;
     projectName: string;
+    clientName?: string | null;
+    workOrderNo?: string | null;
     projectId: string;
     status: string;
     plannedEnd: Date | string | null;
@@ -663,6 +668,8 @@ export interface EngineerPortfolioData {
       taskId: string;
       taskTitle: string;
       projectName: string;
+      clientName?: string | null;
+      workOrderNo?: string | null;
       fromUserName: string;
       createdAt: Date | string;
     }>;
@@ -671,6 +678,8 @@ export interface EngineerPortfolioData {
       taskId: string;
       taskTitle: string;
       projectName: string;
+      clientName?: string | null;
+      workOrderNo?: string | null;
       toUserName: string;
       createdAt: Date | string;
     }>;
@@ -737,6 +746,7 @@ export async function getEngineerPortfolio(
                 code: true,
                 name: true,
                 clientName: true,
+                workOrderNo: true,
                 status: true,
                 startDate: true,
                 targetEndDate: true,
@@ -768,7 +778,7 @@ export async function getEngineerPortfolio(
       select: {
         id: true,
         createdAt: true,
-        task: { select: { id: true, title: true, project: { select: { name: true } } } },
+        task: { select: { id: true, title: true, project: { select: { name: true, clientName: true, workOrderNo: true } } } },
         fromUser: { select: { fullName: true } },
       },
     }),
@@ -777,7 +787,7 @@ export async function getEngineerPortfolio(
       select: {
         id: true,
         createdAt: true,
-        task: { select: { id: true, title: true, project: { select: { name: true } } } },
+        task: { select: { id: true, title: true, project: { select: { name: true, clientName: true, workOrderNo: true } } } },
         toUser: { select: { fullName: true } },
       },
     }),
@@ -828,6 +838,7 @@ export async function getEngineerPortfolio(
       id: p.id,
       code: p.code,
       name: p.name,
+      workOrderNo: p.workOrderNo,
       clientName: p.clientName,
       status: p.status,
       progressPercent,
@@ -846,6 +857,8 @@ export async function getEngineerPortfolio(
     code: string;
     title: string;
     projectName: string;
+    clientName?: string | null;
+    workOrderNo?: string | null;
     projectId: string;
     progressPercent: number;
     totalTasks: number;
@@ -863,6 +876,8 @@ export async function getEngineerPortfolio(
       code: t.code,
       title: cleanTaskTitle(t.title),
       projectName: t.project.name,
+      clientName: t.project.clientName,
+      workOrderNo: t.project.workOrderNo,
       projectId: t.project.id,
       status: t.status,
       plannedEnd: t.plannedEnd,
@@ -880,6 +895,8 @@ export async function getEngineerPortfolio(
           code: p.code,
           title: cleanTaskTitle(p.title),
           projectName: t.project.name,
+          clientName: t.project.clientName,
+          workOrderNo: t.project.workOrderNo,
           projectId: t.project.id,
           progressPercent: p.percentComplete,
           totalTasks: total,
@@ -932,6 +949,8 @@ export async function getEngineerPortfolio(
         taskId: h.task.id,
         taskTitle: cleanTaskTitle(h.task.title),
         projectName: h.task.project.name,
+        clientName: h.task.project.clientName,
+        workOrderNo: h.task.project.workOrderNo,
         fromUserName: formatName(h.fromUser.fullName),
         createdAt: h.createdAt,
       })),
@@ -940,6 +959,8 @@ export async function getEngineerPortfolio(
         taskId: h.task.id,
         taskTitle: cleanTaskTitle(h.task.title),
         projectName: h.task.project.name,
+        clientName: h.task.project.clientName,
+        workOrderNo: h.task.project.workOrderNo,
         toUserName: formatName(h.toUser.fullName),
         createdAt: h.createdAt,
       })),

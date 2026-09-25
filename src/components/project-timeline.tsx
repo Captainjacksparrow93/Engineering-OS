@@ -242,39 +242,48 @@ export function ProjectTimeline({
       {/* Main Timeline Graphic */}
       <div className="relative mt-5 overflow-x-auto pb-6 pt-2">
         <div className="min-w-[650px] space-y-6">
-          {/* Axis Header with dates */}
-          <div className="relative h-6 text-caption text-muted border-b border-hairline-strong">
-            <span className="absolute left-0 font-medium text-ink">
-              Start: {formatDate(data.startDate)}
-            </span>
+          {/* Axis Header with dates - 2 rows to prevent overlapping */}
+          <div className="relative h-12 text-caption text-muted border-b border-hairline-strong flex flex-col justify-between">
+            {/* Row 1: Start (left) and Target/Forecast (right) */}
+            <div className="relative h-6 flex justify-between items-center whitespace-nowrap">
+              <span className="font-medium text-ink whitespace-nowrap">
+                Start: {formatDate(data.startDate)}
+              </span>
 
-            {isForecastLate ? (
-              <>
-                <span
-                  className="absolute -translate-x-1/2 font-medium text-muted"
-                  style={{ left: `${targetEndX}%` }}
-                >
+              {isForecastLate ? (
+                <span className="font-medium text-error whitespace-nowrap">
+                  Target {formatDate(data.targetEndDate)} · Forecast {formatDate(data.forecastEndDate)} (Late)
+                </span>
+              ) : (
+                <span className="font-medium text-ink whitespace-nowrap">
                   Target: {formatDate(data.targetEndDate)}
                 </span>
-                <span className="absolute right-0 font-medium text-error">
-                  Forecast: {formatDate(data.forecastEndDate)} (Late)
-                </span>
-              </>
-            ) : (
-              <span className="absolute right-0 font-medium text-ink">
-                Target: {formatDate(data.targetEndDate)}
-              </span>
-            )}
+              )}
+            </div>
 
-            {/* Today marker label */}
-            {todayMs >= startMs && todayMs <= maxMs ? (
-              <span
-                className="absolute -top-1 -translate-x-1/2 text-caption font-semibold text-ink bg-surface-strong px-1.5 py-0.5 rounded shadow-sm z-20 whitespace-nowrap"
-                style={{ left: `${todayX}%` }}
-              >
-                Today ({formatDate(today)})
-              </span>
-            ) : null}
+            {/* Row 2: Today pill at todayX% and target end dashed tick */}
+            <div className="relative h-6">
+              {isForecastLate && (
+                <div
+                  className="absolute bottom-0 w-px h-3 border-r border-dashed border-ink/40 pointer-events-none"
+                  style={{ left: `${targetEndX}%` }}
+                  title={`Target: ${formatDate(data.targetEndDate)}`}
+                />
+              )}
+
+              {/* Today marker label with edge clamping */}
+              {todayMs >= startMs && todayMs <= maxMs ? (
+                <span
+                  className={clsx(
+                    'absolute bottom-0.5 text-caption font-semibold text-ink bg-surface-strong px-1.5 py-0.5 rounded shadow-sm z-20 whitespace-nowrap',
+                    todayX < 10 ? 'translate-x-0' : todayX > 90 ? '-translate-x-full' : '-translate-x-1/2'
+                  )}
+                  style={{ left: `${todayX}%` }}
+                >
+                  Today ({formatDate(today)})
+                </span>
+              ) : null}
+            </div>
           </div>
 
           {/* Lanes */}
