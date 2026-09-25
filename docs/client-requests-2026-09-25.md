@@ -296,6 +296,72 @@ This is a data task, not a code change.
 
 **When done:** give the user a short summary per section. List the files changed, the tests added, the tool results (graph impact and so on), and anything skipped and why.
 
+## Review of Antigravity batch 1 (commits `5a887d0`..`3f6bd94`): fixes required before push
+
+**Status:** typecheck, 115 unit tests and `next build` all pass. The integration tests were **not** run, because Docker was down locally. **Do not push.** Fixes R1 and R2 would take the live site down.
+
+### Live DB facts (checked on the VPS, 2026-09-25, read-only)
+
+- `_prisma_migrations` holds **only `20260910134722_init`**. The five later migrations were applied through `db push` and were never recorded.
+- The live schema matches the deployed `schema.prisma` at `eaff6f6` exactly (`migrate diff --from-url … --to-schema-datamodel` gives an empty migration).
+- **The migration folder is broken.** Replayed on an empty DB, `20260924000002_handover_rework` fails with P1014 (`pm_project_handovers` does not exist), because no migration ever creates that table. `prisma migrate deploy` therefore fails both on a fresh CI database and on production. On production it would try to re-run `20260923000001_client_master` against existing tables, then `set -e` crash-loops the container.
+
+### R1 (blocker): replace the migration history with a baseline
+
+1. Move the six existing migration folders out of `prisma/migrations/` into `prisma/migrations-archive/` for reference. Prisma must not see them.
+2. Generate the baseline from the **live** schema, which is `schema.prisma` as of `eaff6f6` (no service call):
+   `git show eaff6f6:prisma/schema.prisma > /tmp/live.prisma`
+   `npx prisma migrate diff --from-empty --to-schema-datamodel /tmp/live.prisma --script > prisma/migrations/20260925000000_baseline/migration.sql`
+3. Keep `20260925000001_service_call` as the next migration, unchanged.
+4. Prove it on a local Postgres, starting from an empty DB:
+   - `migrate deploy` applies both migrations cleanly.
+   - `migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url …` returns an empty migration.
+   - The seed runs.
+5. Production cut-over, done by Claude on the VPS after the user approves, **before** the push that deploys this code:
+   1. Run `pg_dump` into `backups/pre-baseline-<ts>.sql` and copy it off the box.
+   2. `DELETE FROM _prisma_migrations;` removes the single stale `init` row.
+   3. `prisma migrate resolve --applied 20260925000000_baseline`.
+   4. Check with `migrate status`: exactly one pending migration, `20260925000001_service_call`.
+   5. Then push. The entrypoint's `migrate deploy` applies only the service-call migration, which is additive (a new enum, a new column with a default, and dropping `NOT NULL`).
+
+   Rollback: restore the dump, then redeploy `eaff6f6`.
+6. Add this to `docs/deployment-runbook.md`: from now on, every schema change needs a migration made with `prisma migrate dev`. `db push` is never used against production again.
+
+### R2 (blocker): the Sales Head grant must not run on every start
+
+Remove `grant-sales-head.ts` from both branches of `entrypoint.sh`. Change the script so that it:
+- removes **only** a `DEPARTMENT_HEAD` assignment, and only if it still exists;
+- never deletes other roles;
+- is idempotent.
+
+Claude runs it once on the VPS after the deploy: `docker compose exec app npx tsx prisma/scripts/grant-sales-head.ts`.
+
+`grant-password-reset.ts` may stay in the entrypoint. It is additive only.
+
+### R3: secure password generator
+
+`generateSecurePassword` uses `Math.random`. Switch it to `crypto.getRandomValues`, which works in both the browser and Node 20, and use rejection sampling or a modulo over a `Uint32Array`.
+
+### R4: keep bcrypt out of the client bundle
+
+`users-table.tsx` (a `'use client'` component) imports from `core/auth/password.ts`, which also imports `bcryptjs`. Move `generateSecurePassword` and `passwordIssues` into `core/auth/password-policy.ts`, which has no bcrypt import. `password.ts` re-exports `passwordIssues`, so existing server imports still work.
+
+### R5: company-scope the client lookup
+
+In `getClientPortfolio`, put `companyId: principal.companyId` inside the `findFirst` `where`, alongside the `id`/`refNumber` OR, instead of checking it after the lookup.
+
+### R6: run the integration tests
+
+With Docker Desktop up, run:
+- `docker compose -f docker-compose.local.yml up -d db`
+- `npx prisma migrate deploy`
+- `npm run db:seed`
+- `npm run test:int`
+
+All must pass. Paste the output into the summary.
+
+**Commit these as local commits only:** `fix(db): R1 baseline migrations`, `fix(rbac): R2 sales head one-off`, `fix(auth): R3/R4 password generator`, `fix(pm): R5 client lookup scope`. Then hand back to Claude for re-review and the production cut-over.
+
 ## Order
 
 0. #0 A–C: CI gate, integration test setup, migrate deploy. **Nothing ships before this.**
