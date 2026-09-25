@@ -1,7 +1,7 @@
 import type { TaskStatus as PrismaTaskStatus } from '@prisma/client';
 import { prisma, type Tx } from '@/core/db/prisma';
-import { DomainError, NotFoundError } from '@/core/rbac/errors';
-import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
+import { DomainError, ForbiddenError, NotFoundError } from '@/core/rbac/errors';
+import { can, hasPermissionAnywhere, isReadOnly } from '@/core/rbac/engine';
 import type { Principal } from '@/core/rbac/types';
 import { audit, diffOf } from '@/core/audit/audit';
 import { publish } from '@/core/events/bus';
@@ -787,6 +787,7 @@ export async function getTaskDetail(principal: Principal, taskId: string) {
 }
 
 export async function addComment(principal: Principal, taskId: string, body: string) {
+  if (isReadOnly(principal)) throw new ForbiddenError('Read-only access cannot post comments.');
   await assertTaskVisible(principal, taskId);
   const trimmed = body.trim();
   if (trimmed.length < 1) throw new DomainError('Comment cannot be empty.');

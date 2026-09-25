@@ -39,7 +39,7 @@ const SENIORITY_LABELS: Record<string, string> = {
   TRAINEE: 'Trainee Engineer',
 };
 
-export function TemplateManagerClient({ templates }: { templates: Template[] }) {
+export function TemplateManagerClient({ templates, canManage }: { templates: Template[]; canManage: boolean }) {
   const [activeCode, setActiveCode] = useState(templates[0]?.code ?? 'PLC');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -150,12 +150,14 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
               );
             })() : null}
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="btn btn-primary btn-sm flex items-center gap-1.5"
-          >
-            <span>+ Add Subtask</span>
-          </button>
+          {canManage && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="btn btn-primary btn-sm flex items-center gap-1.5"
+            >
+              <span>+ Add Subtask</span>
+            </button>
+          )}
         </div>
 
         <div className="p-0 overflow-x-auto">
@@ -277,7 +279,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
                             Cancel
                           </button>
                         </div>
-                      ) : (
+                      ) : canManage ? (
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => startEdit(item)}
@@ -293,7 +295,7 @@ export function TemplateManagerClient({ templates }: { templates: Template[] }) 
                             Delete
                           </button>
                         </div>
-                      )}
+                      ) : null}
                     </td>
                   </tr>
                 );

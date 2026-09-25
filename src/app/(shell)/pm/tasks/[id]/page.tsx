@@ -6,7 +6,7 @@ import { prisma } from '@/core/db/prisma';
 import { getTaskDetail } from '@/modules/project-management/services/task.service';
 import { handoverCandidates, peersForHandover } from '@/modules/project-management/services/availability.service';
 import { getOrgPeople } from '@/modules/project-management/services/access';
-import { hasPermissionAnywhere, can } from '@/core/rbac/engine';
+import { hasPermissionAnywhere, can, isReadOnly } from '@/core/rbac/engine';
 import { groupEngineersBySquad } from '@/modules/project-management/domain/teams';
 import { formatDate, formatDateRange, daysUntil } from '@/core/utils/dates';
 import { Alert, Avatar, Card, PageHeader, PriorityBadge, ProgressBar, StatusBadge } from '@/components/ui';
@@ -239,7 +239,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             )}
           </Card>
 
-          <CommentBox taskId={task.id} comments={task.comments} />
+          <CommentBox taskId={task.id} comments={task.comments} canPost={!isReadOnly(principal)} />
         </div>
 
         <div className="space-y-4">

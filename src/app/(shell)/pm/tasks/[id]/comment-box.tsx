@@ -13,7 +13,7 @@ interface Comment {
   user: { id: string; fullName: string; avatarColor: string };
 }
 
-export function CommentBox({ taskId, comments }: { taskId: string; comments: Comment[] }) {
+export function CommentBox({ taskId, comments, canPost }: { taskId: string; comments: Comment[]; canPost: boolean }) {
   const [state, action] = useActionState<ActionState, FormData>(addCommentAction, {});
 
   return (
@@ -22,6 +22,7 @@ export function CommentBox({ taskId, comments }: { taskId: string; comments: Com
         <h2 className="card-title">Discussion</h2>
       </header>
       <div className="card-body">
+        {canPost ? (
         <form action={action}>
           <input type="hidden" name="taskId" value={taskId} />
           <textarea name="body" rows={2} required className="textarea" placeholder="Ask a question or add context…" />
@@ -30,6 +31,7 @@ export function CommentBox({ taskId, comments }: { taskId: string; comments: Com
             <SubmitButton size="sm">Post</SubmitButton>
           </div>
         </form>
+        ) : null}
 
         {comments.length > 0 ? (
           <ul className="mt-4 space-y-3 border-t border-hairline pt-3">

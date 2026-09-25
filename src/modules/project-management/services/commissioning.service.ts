@@ -17,8 +17,8 @@ export interface CreateCommissioningLogInput {
  * Head / Director view (pm.commissioning.manage).
  */
 export async function listCommissioningProjects(principal: Principal) {
-  if (!hasPermissionAnywhere(principal, 'pm.commissioning.manage')) {
-    throw new ForbiddenError('Missing permission: pm.commissioning.manage');
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.read')) {
+    throw new ForbiddenError('Missing permission: pm.commissioning.read');
   }
 
   const projects = await prisma.project.findMany({

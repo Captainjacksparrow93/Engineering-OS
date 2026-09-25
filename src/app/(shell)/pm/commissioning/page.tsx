@@ -17,13 +17,14 @@ export const metadata = {
 export default async function SiteCommissioningPage() {
   const principal = await requirePrincipal();
 
-  if (!hasPermissionAnywhere(principal, 'pm.commissioning.manage')) {
+  if (!hasPermissionAnywhere(principal, 'pm.commissioning.read')) {
     redirect('/dashboard');
   }
+  const canManage = hasPermissionAnywhere(principal, 'pm.commissioning.manage');
 
   const [projectsData, engineers] = await Promise.all([
     listCommissioningProjects(principal),
-    listEligibleEngineers(principal),
+    canManage ? listEligibleEngineers(principal) : Promise.resolve([]),
   ]);
 
   return (
@@ -37,6 +38,7 @@ export default async function SiteCommissioningPage() {
         pendingProjects={projectsData.pending}
         inCommissioningProjects={projectsData.inCommissioning}
         engineers={engineers}
+        canManage={canManage}
       />
     </div>
   );

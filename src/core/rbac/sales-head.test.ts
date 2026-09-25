@@ -13,6 +13,8 @@ describe('SALES_HEAD System Role (#2)', () => {
     expect(role.permissions).toContain('pm.task.read');
     expect(role.permissions).toContain('pm.resource.read');
     expect(role.permissions).toContain('pm.report.read');
+    expect(role.permissions).toContain('pm.commissioning.read');
+    expect(role.permissions).toContain('pm.template.read');
 
     // Must NOT have oversight (no notification floods)
     expect(role.permissions).not.toContain('pm.oversight');
@@ -22,6 +24,17 @@ describe('SALES_HEAD System Role (#2)', () => {
     for (const perm of role.permissions) {
       for (const verb of mutatingVerbs) {
         expect(perm).not.toContain(`.${verb}`);
+      }
+    }
+  });
+
+  it('can open every page a Technical Head can view, just not act on it', async () => {
+    const { isReadOnly } = await import('./engine');
+    const grants = SYSTEM_ROLES.SALES_HEAD.permissions.map((permission) => ({ permission, scopeType: 'GLOBAL' as const, scopeId: null }));
+    expect(isReadOnly({ grants } as never)).toBe(true);
+    for (const [manage, read] of [['pm.commissioning.manage', 'pm.commissioning.read'], ['pm.template.manage', 'pm.template.read']] as const) {
+      for (const role of ['DIRECTOR', 'TECHNICAL_HEAD', 'SERVICE_HEAD'] as const) {
+        if (SYSTEM_ROLES[role].permissions.includes(manage)) expect(SYSTEM_ROLES[role].permissions).toContain(read);
       }
     }
   });

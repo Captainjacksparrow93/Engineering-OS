@@ -105,3 +105,19 @@ describe('hasPermissionAnywhere', () => {
   });
 });
 
+
+describe('isReadOnly', () => {
+  it('is true only when every grant is a read key', async () => {
+    const { isReadOnly } = await import('./engine');
+    const reader = principal([
+      { permission: 'pm.project.read.all', scopeType: 'GLOBAL', scopeId: null },
+      { permission: 'pm.commissioning.read', scopeType: 'GLOBAL', scopeId: null },
+    ]);
+    expect(isReadOnly(reader)).toBe(true);
+    const writer = principal([
+      { permission: 'pm.project.read', scopeType: 'GLOBAL', scopeId: null },
+      { permission: 'pm.progress.log', scopeType: 'GLOBAL', scopeId: null },
+    ]);
+    expect(isReadOnly(writer)).toBe(false);
+  });
+});

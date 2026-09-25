@@ -70,10 +70,12 @@ export function CommissioningClient({
   pendingProjects,
   inCommissioningProjects,
   engineers,
+  canManage,
 }: {
   pendingProjects: CommissioningProject[];
   inCommissioningProjects: CommissioningProject[];
   engineers: EngineerOption[];
+  canManage: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -182,6 +184,7 @@ export function CommissioningClient({
                       </p>
                     </div>
 
+                    {canManage && (
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -191,6 +194,7 @@ export function CommissioningClient({
                         Commissioning complete
                       </button>
                     </div>
+                    )}
                   </div>
 
                   {/* Assigned Engineers */}
@@ -199,7 +203,7 @@ export function CommissioningClient({
                       <span className="text-caption font-semibold uppercase tracking-wider text-muted">
                         Site Engineers ({p.commissioningAssignments.length})
                       </span>
-                      {assigningProjectId !== p.id && (
+                      {canManage && assigningProjectId !== p.id && (
                         <button
                           type="button"
                           onClick={() => {
@@ -232,6 +236,7 @@ export function CommissioningClient({
                               ({assignment.user.employeeCode})
                             </span>
                           </div>
+                          {canManage && (
                           <button
                             type="button"
                             onClick={() => handleRelease(p.id, assignment.userId, assignment.user.fullName)}
@@ -240,6 +245,7 @@ export function CommissioningClient({
                           >
                             ×
                           </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -342,6 +348,7 @@ export function CommissioningClient({
                     </p>
                   </div>
 
+                  {canManage && (
                   <div>
                     {assigningProjectId !== p.id ? (
                       <button
@@ -386,6 +393,7 @@ export function CommissioningClient({
                       </div>
                     )}
                   </div>
+                  )}
                 </div>
               </div>
             ))}

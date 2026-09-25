@@ -14,9 +14,10 @@ export const metadata = {
 export default async function ChecklistTemplatesPage() {
   const principal = await requirePrincipal();
 
-  if (!hasPermissionAnywhere(principal, 'pm.template.manage')) {
+  if (!hasPermissionAnywhere(principal, 'pm.template.read')) {
     redirect('/pm/projects');
   }
+  const canManage = hasPermissionAnywhere(principal, 'pm.template.manage');
 
   const templates = await listChecklistTemplates();
 
@@ -31,7 +32,7 @@ export default async function ChecklistTemplatesPage() {
         ]}
       />
 
-      <TemplateManagerClient templates={templates} />
+      <TemplateManagerClient templates={templates} canManage={canManage} />
     </>
   );
 }
