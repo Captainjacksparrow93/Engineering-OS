@@ -116,6 +116,7 @@ const WORKSPACE_NAV: NavItem[] = [
 
 const MANAGEMENT_NAV: NavItem[] = [
   { label: 'Projects', href: '/pm/projects', requires: 'pm.project.read', icon: Icons.Projects },
+  { label: 'Clients', href: '/pm/clients', requires: 'pm.project.read', icon: Icons.Projects },
   { label: 'Site Commissioning', href: '/pm/commissioning', requires: 'pm.commissioning.manage', icon: Icons.Commissioning },
   { label: 'Team load', href: '/pm/resources', requires: 'pm.resource.read', icon: Icons.Resources },
 ];

@@ -48,7 +48,7 @@ import {
   requestPanelHandover,
   decidePanelHandover,
 } from '@/modules/project-management/services/handover.service';
-import { createClient, listClients } from '@/modules/project-management/services/client.service';
+import { createClient, listClients, nextClientRef } from '@/modules/project-management/services/client.service';
 import { autoAssignAutomationTeam } from '@/modules/project-management/services/automation-project.service';
 import { markAllRead, markRead } from '@/core/notifications/notify';
 import { toState, value, list, type ActionState } from '@/core/utils/actions';
@@ -337,9 +337,20 @@ export async function createClientAction(name: string, refNumber: string) {
   const principal = await requirePrincipal();
   try {
     const client = await createClient(principal, { name, refNumber });
+    revalidatePath('/pm/clients');
     return { success: true, client };
   } catch (err: unknown) {
     return { success: false, error: err instanceof Error ? err.message : 'Failed to create client.' };
+  }
+}
+
+export async function getNextClientRefAction() {
+  const principal = await requirePrincipal();
+  try {
+    const nextRef = await nextClientRef(principal.companyId);
+    return { success: true, nextRef };
+  } catch (err: unknown) {
+    return { success: false, error: 'Failed to generate next client ref.' };
   }
 }
 

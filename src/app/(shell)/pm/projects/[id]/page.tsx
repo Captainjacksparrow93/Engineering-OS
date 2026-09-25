@@ -95,6 +95,22 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     .filter((t) => t.type !== 'PHASE' && !tasks.some((c) => c.parentId === t.id))
     .every((t) => t.status === 'COMPLETED' || t.status === 'CANCELLED');
 
+  let clientHref: string | null = null;
+  if (project.clientId) {
+    clientHref = `/pm/clients/${project.clientId}`;
+  } else if (project.clientName) {
+    const match = await prisma.client.findFirst({
+      where: {
+        companyId: principal.companyId,
+        name: { equals: project.clientName, mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+    if (match) {
+      clientHref = `/pm/clients/${match.id}`;
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -102,7 +118,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         title={project.name}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
-            <span>{project.clientName}</span>
+            {clientHref ? (
+              <Link href={clientHref} className="font-semibold text-ink hover:text-primary hover:underline">
+                {project.clientName}
+              </Link>
+            ) : (
+              <span>{project.clientName}</span>
+            )}
             <span className="text-muted-soft">·</span>
             {project.workOrderNo ? (
               <>
