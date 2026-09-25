@@ -6,7 +6,7 @@ import { Avatar, StatusBadge } from '@/components/ui';
 import { DataTable, type ColumnDef } from '@/components/data-table';
 import { UserAdminPanel } from './user-admin-panel';
 import type { UserStatus } from '@prisma/client';
-import { generateSecurePassword, passwordIssues } from '@/core/auth/password';
+import { generateSecurePassword, passwordIssues } from '@/core/auth/password-policy';
 import { resetUserPasswordAction } from '@/app/actions/admin';
 
 export interface UserRow {
