@@ -145,22 +145,23 @@ describe('Clients Menu & Portfolio Integration (#6)', () => {
     }
   });
 
-  it('scopes visible projects based on principal visibility (engineer vs director)', async () => {
+  it('scopes visible projects based on principal visibility (pm vs director)', async () => {
     const directorUser = await prisma.user.findFirst({
       where: { roleAssignments: { some: { role: { key: 'DIRECTOR' } } } },
     });
-    const engineerUser = await prisma.user.findFirst({
+    const pmUser = await prisma.user.findFirst({
       where: {
+        id: { not: directorUser?.id },
         roleAssignments: {
-          some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } } },
+          some: { role: { key: 'PROJECT_MANAGER' } },
         },
       },
     });
     expect(directorUser).not.toBeNull();
-    expect(engineerUser).not.toBeNull();
+    expect(pmUser).not.toBeNull();
 
     const directorPrincipal = (await loadPrincipal(directorUser!.id))!;
-    const engineerPrincipal = (await loadPrincipal(engineerUser!.id))!;
+    const pmPrincipal = (await loadPrincipal(pmUser!.id))!;
 
     const testRef = `ACS-${Math.floor(1000 + Math.random() * 8000)}`;
     const testClientName = `Scope Test Client ${Date.now()}`;
@@ -192,10 +193,10 @@ describe('Clients Menu & Portfolio Integration (#6)', () => {
       const directorPortfolio = await getClientPortfolio(directorPrincipal, client.id);
       expect(directorPortfolio.stats.activeCount).toBe(1);
 
-      // Engineer does not see this unassigned project
-      const engineerPortfolio = await getClientPortfolio(engineerPrincipal, client.id);
-      expect(engineerPortfolio.stats.activeCount).toBe(0);
-      expect(engineerPortfolio.currentProjects).toHaveLength(0);
+      // PM does not see this unassigned project
+      const pmPortfolio = await getClientPortfolio(pmPrincipal, client.id);
+      expect(pmPortfolio.stats.activeCount).toBe(0);
+      expect(pmPortfolio.currentProjects).toHaveLength(0);
     } finally {
       await prisma.project.delete({ where: { id: proj.id } });
       await prisma.client.delete({ where: { id: client.id } });

@@ -157,6 +157,10 @@ export async function getPMTeamData(companyId: string) {
 }
 
 export async function createAutomationProject(principal: Principal, input: CreateAutomationProjectInput) {
+  if (!hasPermissionAnywhere(principal, 'pm.project.create')) {
+    assertCan(principal, 'pm.project.create');
+  }
+
   const manager = await prisma.user.findFirst({
     where: { id: input.managerId, companyId: principal.companyId, status: 'ACTIVE' },
     select: { id: true, fullName: true, departmentId: true },
