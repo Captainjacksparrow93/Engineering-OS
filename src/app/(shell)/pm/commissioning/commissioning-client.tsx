@@ -28,7 +28,7 @@ interface CommissioningProject {
   code: string;
   name: string;
   clientName: string;
-  workOrderNo: string;
+  workOrderNo?: string | null;
   status: string;
   panelCount: number;
   startDate: Date | string | null;
@@ -163,7 +163,13 @@ export function CommissioningClient({
                           {p.code}
                         </Link>
                         <StatusBadge status={p.status} />
-                        <span className="text-caption text-muted">WO: {p.workOrderNo}</span>
+                        {p.workOrderNo ? (
+                          <span className="text-caption text-muted">WO: {p.workOrderNo}</span>
+                        ) : (
+                          <span className="badge bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+                            SERVICE CALL
+                          </span>
+                        )}
                       </div>
                       <h3 className="text-base font-semibold text-ink mt-1">
                         <Link href={`/pm/projects/${p.id}`} className="hover:underline">
@@ -317,7 +323,13 @@ export function CommissioningClient({
                         {p.code}
                       </Link>
                       <StatusBadge status="PENDING" />
-                      <span className="text-caption text-muted">WO: {p.workOrderNo}</span>
+                      {p.workOrderNo ? (
+                        <span className="text-caption text-muted">WO: {p.workOrderNo}</span>
+                      ) : (
+                        <span className="badge bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+                          SERVICE CALL
+                        </span>
+                      )}
                     </div>
                     <h3 className="text-base font-semibold text-ink mt-1">
                       <Link href={`/pm/projects/${p.id}`} className="hover:underline">

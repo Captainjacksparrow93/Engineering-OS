@@ -404,6 +404,11 @@ enum ProjectStatus {
   CANCELLED
 }
 
+enum ProjectKind {
+  WORK_ORDER
+  SERVICE_CALL
+}
+
 enum ProjectPriority {
   LOW
   MEDIUM
@@ -417,7 +422,8 @@ model Project {
   id            String          @id @default(cuid())
   companyId     String
   code          String          @unique
-  workOrderNo   String          @unique
+  kind          ProjectKind     @default(WORK_ORDER)
+  workOrderNo   String?         @unique
   name          String
   description   String?
   clientId      String?

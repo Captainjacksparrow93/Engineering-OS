@@ -117,3 +117,49 @@ describe('templateItemSchema', () => {
     expect(() => templateItemSchema.parse({ title: 'ab' })).toThrow();
   });
 });
+
+describe('Service Call Validation (#1)', () => {
+  it('allows SERVICE_CALL without workOrderNo and without scopes', () => {
+    const valid = {
+      kind: 'SERVICE_CALL',
+      clientId: 'client-1',
+      clientName: 'Torrent Pharma',
+      managerId: 'pm-1',
+      scopes: [],
+      tasks: [],
+    };
+    const parsed = createAutomationProjectSchema.parse(valid);
+    expect(parsed.kind).toBe('SERVICE_CALL');
+    expect(parsed.workOrderNo).toBeUndefined();
+    expect(parsed.scopes).toEqual([]);
+  });
+
+  it('rejects WORK_ORDER without workOrderNo', () => {
+    const invalid = {
+      kind: 'WORK_ORDER',
+      clientId: 'client-1',
+      clientName: 'Torrent Pharma',
+      managerId: 'pm-1',
+      scopes: [{ templateCode: 'PLC', name: 'PLC', quantity: 1 }],
+      tasks: [],
+    };
+    expect(() => createAutomationProjectSchema.parse(invalid)).toThrow(
+      'Work Order No. must contain digits only'
+    );
+  });
+
+  it('rejects WORK_ORDER with empty scopes', () => {
+    const invalid = {
+      kind: 'WORK_ORDER',
+      workOrderNo: '1234',
+      clientId: 'client-1',
+      clientName: 'Torrent Pharma',
+      managerId: 'pm-1',
+      scopes: [],
+      tasks: [],
+    };
+    expect(() => createAutomationProjectSchema.parse(invalid)).toThrow(
+      'Select at least one automation scope'
+    );
+  });
+});

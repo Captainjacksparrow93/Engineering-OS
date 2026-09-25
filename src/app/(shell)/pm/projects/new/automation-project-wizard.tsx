@@ -73,6 +73,7 @@ export function AutomationProjectWizard({
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
 
   // Step 1: Order details
+  const [isServiceCall, setIsServiceCall] = useState(false);
   const [workOrderNo, setWorkOrderNo] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientName, setClientName] = useState('');
@@ -397,13 +398,15 @@ export function AutomationProjectWizard({
   // Step 1 validation
   const handleProceedToStep2 = () => {
     setStep1Error(null);
-    if (!workOrderNo.trim()) {
-      setStep1Error('Work Order No. is required.');
-      return;
-    }
-    if (!/^\d+$/.test(workOrderNo.trim())) {
-      setStep1Error('Work Order No. must contain digits only.');
-      return;
+    if (!isServiceCall) {
+      if (!workOrderNo.trim()) {
+        setStep1Error('Work Order No. is required.');
+        return;
+      }
+      if (!/^\d+$/.test(workOrderNo.trim())) {
+        setStep1Error('Work Order No. must contain digits only.');
+        return;
+      }
     }
     if (!clientId) {
       setStep1Error('Please select a client.');
@@ -459,8 +462,12 @@ export function AutomationProjectWizard({
     e.preventDefault();
     setError(null);
 
-    if (!workOrderNo.trim() || !clientId || !selectedPMId) {
-      setError('Please fill in Work Order No, select a Client, and choose a Project Manager.');
+    if ((!isServiceCall && !workOrderNo.trim()) || !clientId || !selectedPMId) {
+      setError(
+        isServiceCall
+          ? 'Please select a Client and choose a Project Manager.'
+          : 'Please fill in Work Order No, select a Client, and choose a Project Manager.'
+      );
       return;
     }
 
@@ -517,8 +524,9 @@ export function AutomationProjectWizard({
 
     startTransition(async () => {
       const res = await createAutomationProjectAction({
-        name: `WO ${workOrderNo.trim()}`,
-        workOrderNo: workOrderNo.trim(),
+        kind: isServiceCall ? 'SERVICE_CALL' : 'WORK_ORDER',
+        name: isServiceCall ? undefined : `WO ${workOrderNo.trim()}`,
+        workOrderNo: isServiceCall ? (workOrderNo.trim() || undefined) : workOrderNo.trim(),
         clientId,
         clientName: clientName.trim(),
         clientRefNumber: clientRefNumber.trim() || undefined,
@@ -655,24 +663,53 @@ export function AutomationProjectWizard({
           ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            {/* Work Order No. (Digits Only) */}
-            <div>
-              <label className="label text-xs font-semibold" htmlFor="workOrderNo">
-                Work Order No. *
+            {/* Service Call / Work Order Toggle */}
+            <div className="sm:col-span-2 flex items-center justify-between p-3.5 rounded-lg border border-hairline bg-surface-strong/20">
+              <div>
+                <p className="text-body-sm font-semibold text-ink">Urgent Service Call (no WO)</p>
+                <p className="text-caption text-muted">Create project directly in client's name without waiting for a Work Order.</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isServiceCall}
+                  onChange={(e) => {
+                    setIsServiceCall(e.target.checked);
+                    if (e.target.checked) setWorkOrderNo('');
+                  }}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-surface-strong peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
               </label>
-              <input
-                id="workOrderNo"
-                type="text"
-                pattern="\d+"
-                inputMode="numeric"
-                value={workOrderNo}
-                onChange={(e) => setWorkOrderNo(e.target.value.replace(/\D/g, ''))}
-                placeholder="e.g. 1042"
-                className="input text-sm w-full font-mono"
-                required
-              />
-              <span className="text-[11px] text-muted">Digits only, unique across all projects.</span>
             </div>
+
+            {/* Work Order No. (Digits Only) or Service Call Notice */}
+            {!isServiceCall ? (
+              <div>
+                <label className="label text-xs font-semibold" htmlFor="workOrderNo">
+                  Work Order No. *
+                </label>
+                <input
+                  id="workOrderNo"
+                  type="text"
+                  pattern="\d+"
+                  inputMode="numeric"
+                  value={workOrderNo}
+                  onChange={(e) => setWorkOrderNo(e.target.value.replace(/\D/g, ''))}
+                  placeholder="e.g. 1042"
+                  className="input text-sm w-full font-mono"
+                  required
+                />
+                <span className="text-[11px] text-muted">Digits only, unique across all projects.</span>
+              </div>
+            ) : (
+              <div className="flex flex-col justify-center rounded border border-dashed border-hairline p-3 bg-surface-strong/10">
+                <span className="text-xs font-semibold text-ink">Project Identifier: Service Call</span>
+                <span className="text-[11px] text-muted mt-0.5">
+                  Named automatically as SC &lt;Client&gt; &lt;Date&gt;. A WO can be attached later once received.
+                </span>
+              </div>
+            )}
 
             {/* Client Select & Add Client */}
             <div>

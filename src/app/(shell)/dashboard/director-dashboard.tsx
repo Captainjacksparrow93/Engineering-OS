@@ -348,9 +348,15 @@ export function DirectorDashboard({
                       )}
                     </td>
                     <td>
-                      <span className="font-mono text-body-sm text-ink font-medium">
-                        {p.workOrderNo ? `WO ${p.workOrderNo}` : '—'}
-                      </span>
+                      {p.workOrderNo ? (
+                        <span className="font-mono text-body-sm text-ink font-medium">
+                          WO {p.workOrderNo}
+                        </span>
+                      ) : (
+                        <span className="badge bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs font-bold whitespace-nowrap">
+                          SERVICE CALL
+                        </span>
+                      )}
                     </td>
                     <td>
                       <div className="space-y-1">

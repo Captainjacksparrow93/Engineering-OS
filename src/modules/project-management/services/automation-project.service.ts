@@ -38,20 +38,24 @@ export interface TaskAssignmentDraft {
 }
 
 export interface CreateAutomationProjectInput {
+  kind?: 'WORK_ORDER' | 'SERVICE_CALL';
   name?: string;
-  workOrderNo: string;
+  workOrderNo?: string | null;
   code?: string;
   clientId: string;
   clientName: string;
   clientRefNumber?: string;
   endUserName?: string;
   applicationName?: string;
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  description?: string;
+  status?: 'DRAFT' | 'PLANNING' | 'IN_PROGRESS' | 'ON_HOLD' | 'COMPLETED' | 'COMMISSIONING' | 'CLOSED' | 'CANCELLED';
   targetEndDate?: string;
   startDate?: string;
   managerId: string;
   departmentId?: string;
-  scopes: ScopeSelection[];
-  tasks: TaskAssignmentDraft[];
+  scopes?: ScopeSelection[];
+  tasks?: TaskAssignmentDraft[];
 }
 
 /** In-memory BFS to find all descendants of a manager given a map of direct reports */
@@ -162,8 +166,14 @@ export async function createAutomationProject(principal: Principal, input: Creat
   const departmentId = input.departmentId || manager.departmentId || principal.departmentId;
   assertCan(principal, 'pm.project.create', { departmentId: departmentId ?? undefined });
 
+  const isServiceCall = input.kind === 'SERVICE_CALL' || !input.workOrderNo;
+  const kind = isServiceCall ? 'SERVICE_CALL' : 'WORK_ORDER';
+
+  const scopes = input.scopes ?? [];
+  const tasks = input.tasks ?? [];
+
   // Validate all assignees belong to company and are active
-  const assigneeIds = input.tasks
+  const assigneeIds = tasks
     .map((t) => t.assigneeId)
     .filter((id): id is string => Boolean(id) && id !== manager.id);
 
@@ -191,7 +201,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
 
   // Every panel must have an assigned engineer before creating the project.
   const unassignedPanels = new Set<string>();
-  for (const task of input.tasks) {
+  for (const task of tasks) {
     if (!task.assigneeId) {
       unassignedPanels.add(`${task.templateCode} Panel ${task.unitIndex}`);
     }
@@ -226,12 +236,21 @@ export async function createAutomationProject(principal: Principal, input: Creat
   const existing = await prisma.project.findUnique({ where: { code } });
   if (existing) throw new DomainError(`Project code ${code} is already in use.`);
 
-  const existingWO = await prisma.project.findUnique({ where: { workOrderNo: input.workOrderNo } });
-  if (existingWO) throw new DomainError(`Work Order No. ${input.workOrderNo} is already in use.`);
+  const trimmedWO = input.workOrderNo ? input.workOrderNo.trim() : null;
+  if (trimmedWO) {
+    const existingWO = await prisma.project.findUnique({ where: { workOrderNo: trimmedWO } });
+    if (existingWO) throw new DomainError(`Work Order No. ${trimmedWO} is already in use.`);
+  }
 
   const start = input.startDate ? new Date(input.startDate) : new Date();
   const targetEnd = input.targetEndDate ? new Date(input.targetEndDate) : addWorkingDays(start, 45);
-  const projectName = input.name?.trim() || `WO ${input.workOrderNo}`;
+
+  const dayStr = String(start.getDate()).padStart(2, '0');
+  const monthStr = start.toLocaleString('en-US', { month: 'short' });
+  const defaultName = isServiceCall
+    ? `SC ${input.clientName} ${dayStr}-${monthStr}`
+    : `WO ${trimmedWO}`;
+  const projectName = input.name?.trim() || defaultName;
 
   const managerRole = await prisma.role.findUnique({ where: { key: 'PROJECT_MANAGER' }, select: { id: true } });
 
@@ -247,20 +266,22 @@ export async function createAutomationProject(principal: Principal, input: Creat
       data: {
         companyId: principal.companyId,
         code,
-        workOrderNo: input.workOrderNo,
+        kind,
+        workOrderNo: trimmedWO,
         name: projectName,
+        description: input.description ?? null,
         clientId: input.clientId,
         clientName: input.clientName,
         endUserName: input.endUserName ?? null,
         applicationName: input.applicationName ?? null,
-        status: 'PLANNING',
-        priority: 'MEDIUM',
+        status: input.status ?? (isServiceCall ? 'IN_PROGRESS' : 'PLANNING'),
+        priority: input.priority ?? (isServiceCall ? 'HIGH' : 'MEDIUM'),
         startDate: start,
         targetEndDate: targetEnd,
         managerId: manager.id,
         sponsorId: principal.userId,
         departmentId: departmentId ?? null,
-        automationTypes: [...new Set(input.scopes.filter((s) => s.quantity > 0 && templateMap.has(s.templateCode)).map((s) => s.templateCode))],
+        automationTypes: [...new Set(scopes.filter((s) => s.quantity > 0 && templateMap.has(s.templateCode)).map((s) => s.templateCode))],
       },
     });
 
@@ -292,7 +313,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
 
     // 3. Collect unique assigned engineers and add them as project members
     const assignedUserIds = new Set<string>();
-    for (const t of input.tasks) {
+    for (const t of tasks) {
       if (t.assigneeId && t.assigneeId !== manager.id) {
         assignedUserIds.add(t.assigneeId);
       }
@@ -308,7 +329,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
     let phaseCounter = 1;
     let globalTaskCounter = 1;
 
-    for (const scope of input.scopes) {
+    for (const scope of scopes) {
       if (scope.quantity <= 0) continue;
       const tpl = templateMap.get(scope.templateCode);
       if (!tpl) continue;
@@ -342,7 +363,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
         const stepTaskIdMap = new Map<number, string>();
         for (let idx = 0; idx < tpl.items.length; idx++) {
           const item = tpl.items[idx];
-          const draft = input.tasks.find(
+          const draft = tasks.find(
             (d) =>
               d.templateCode === scope.templateCode &&
               d.unitIndex === unit &&

@@ -131,7 +131,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 <span className="text-caption text-muted font-mono">WO {project.workOrderNo}</span>
                 <span className="text-muted-soft">·</span>
               </>
-            ) : null}
+            ) : (
+              <>
+                <span className="badge bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs font-bold">
+                  SERVICE CALL
+                </span>
+                <span className="text-muted-soft">·</span>
+              </>
+            )}
             <StatusBadge status={project.status} />
             <PriorityBadge priority={project.priority} />
           </span>

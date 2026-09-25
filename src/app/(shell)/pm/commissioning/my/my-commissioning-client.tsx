@@ -12,7 +12,7 @@ interface AssignedProject {
   code: string;
   name: string;
   clientName: string;
-  workOrderNo: string;
+  workOrderNo?: string | null;
   panelCount: number;
   status: string;
 }
