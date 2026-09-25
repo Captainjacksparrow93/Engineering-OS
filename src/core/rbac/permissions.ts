@@ -242,4 +242,15 @@ export const SYSTEM_ROLES: Record<
     description: 'Read-only access, for auditors and cross-functional observers.',
     permissions: ['pm.project.read', 'pm.task.read', 'pm.report.read'],
   },
+  SALES_HEAD: {
+    name: 'Sales Head',
+    description: 'Read-only access across all company projects, tasks, resources and reports.',
+    permissions: [
+      'pm.project.read',
+      'pm.project.read.all',
+      'pm.task.read',
+      'pm.resource.read',
+      'pm.report.read',
+    ],
+  },
 };

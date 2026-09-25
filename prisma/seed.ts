@@ -339,7 +339,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0002',
       skills: ['sales strategy', 'client negotiations', 'key accounts'],
-      roles: [{ key: 'DEPARTMENT_HEAD', scopeType: 'DEPARTMENT', scope: 'SALES' }],
+      roles: [{ key: 'SALES_HEAD', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0011',
