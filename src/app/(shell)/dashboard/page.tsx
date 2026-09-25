@@ -69,7 +69,13 @@ export default async function DashboardPage({
       };
     }
 
-    return <DirectorDashboard data={data} initialTimeline={initialTimeline} />;
+    return (
+      <DirectorDashboard
+        data={data}
+        initialTimeline={initialTimeline}
+        canCreateProject={hasPermissionAnywhere(principal, 'pm.project.create')}
+      />
+    );
   }
 
   if (data.kind === 'pm') {

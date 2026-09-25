@@ -319,7 +319,8 @@ export async function getDashboard(
   const freeEngineers = engineers.filter((w) => w.status === 'FREE');
   const loadPercent = (w: Workload) => Math.round((w.committedHours / Math.max(w.capacityHours, 1)) * 100);
 
-  if (hasOversight) {
+  // Company-wide viewers (e.g. Sales Head) get the portfolio view without oversight notifications.
+  if (hasOversight || hasPermissionAnywhere(principal, 'pm.project.read.all')) {
     const lateProjects = liveProjects.filter((p) => p.health === 'LATE');
     const onTimeProjects = liveProjects.filter((p) => p.health !== 'LATE');
 

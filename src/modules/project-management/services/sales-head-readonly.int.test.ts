@@ -11,6 +11,7 @@ import {
 } from './commissioning.service';
 import { addTemplateItem, deleteTemplateItem, updateTemplateItem } from './template.service';
 import { addComment } from './task.service';
+import { getDashboard } from './dashboard.service';
 
 // Relies on prisma/scripts/grant-read-permissions.ts having run (it runs on every container start).
 async function salesHead() {
@@ -50,5 +51,10 @@ describe('Sales Head is read-only everywhere (#12)', () => {
     const p = await salesHead();
     const task = await prisma.task.findFirst({ select: { id: true } });
     await expect(addComment(p, task?.id ?? 'any', 'hello')).rejects.toThrow(ForbiddenError);
+  });
+
+  it('gets the company-wide Director dashboard', async () => {
+    const data = await getDashboard(await salesHead());
+    expect(data.kind).toBe('director');
   });
 });

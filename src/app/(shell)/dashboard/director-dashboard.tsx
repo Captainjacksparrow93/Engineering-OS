@@ -26,9 +26,11 @@ export function HealthBadge({ health }: { health: string }) {
 export function DirectorDashboard({
   data,
   initialTimeline,
+  canCreateProject,
 }: {
   data: DirectorDashboardData;
   initialTimeline: ProjectTimelineData;
+  canCreateProject: boolean;
 }) {
   const [filterHealth, setFilterHealth] = useState<'ALL' | 'LATE' | 'AT_RISK' | 'ON_TRACK'>('ALL');
   const [selectedProjectId, setSelectedProjectId] = useState<string>(initialTimeline.projectId);
@@ -85,11 +87,13 @@ export function DirectorDashboard({
           </p>
         </div>
 
-        <div>
-          <Link href="/pm/projects/new" className="btn btn-primary text-body-sm px-4 py-2 font-medium">
-            New project
-          </Link>
-        </div>
+        {canCreateProject ? (
+          <div>
+            <Link href="/pm/projects/new" className="btn btn-primary text-body-sm px-4 py-2 font-medium">
+              New project
+            </Link>
+          </div>
+        ) : null}
       </div>
 
       {/* Count Tiles: Row 1 & Row 2 & Commissioning (Sheet 1 + Part A) */}
