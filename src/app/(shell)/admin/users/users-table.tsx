@@ -1,10 +1,13 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useTransition } from 'react';
+import Link from 'next/link';
 import { Avatar, StatusBadge } from '@/components/ui';
 import { DataTable, type ColumnDef } from '@/components/data-table';
 import { UserAdminPanel } from './user-admin-panel';
 import type { UserStatus } from '@prisma/client';
+import { generateSecurePassword, passwordIssues } from '@/core/auth/password';
+import { resetUserPasswordAction } from '@/app/actions/admin';
 
 export interface UserRow {
   id: string;
@@ -17,12 +20,17 @@ export interface UserRow {
   status: UserStatus;
   department: { id: string; name: string } | null;
   manager: { id: string; fullName: string } | null;
+  managerId?: string | null;
   roleAssignments: Array<{
     id: string;
     scopeType: string;
     scopeId: string | null;
     role: { key: string; name: string };
   }>;
+  createdAt?: string | Date;
+  lastSignInAt?: string | Date | null;
+  openTasksCount?: number;
+  loadHours?: number;
 }
 
 interface UsersTableProps {
@@ -31,6 +39,7 @@ interface UsersTableProps {
   projects: Array<{ id: string; code: string; name: string }>;
   canManage?: boolean;
   canAssign?: boolean;
+  canResetPassword?: boolean;
   roleOptions?: Array<{ key: string; name: string }>;
   searchQuery?: string;
 }
@@ -46,6 +55,221 @@ function formatFirstLastName(fullName: string | null | undefined): string {
   }
   const last = parts[parts.length - 1]!;
   return `${first} ${last}`;
+}
+
+function formatDate(d: string | Date | null | undefined): string {
+  if (!d) return 'Never';
+  const date = typeof d === 'string' ? new Date(d) : d;
+  if (isNaN(date.getTime())) return 'Never';
+  return date.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function PasswordResetSection({
+  user,
+}: {
+  user: UserRow;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [mode, setMode] = useState<'generate' | 'type'>('generate');
+  const [password, setPassword] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [successInfo, setSuccessInfo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (isOpen && mode === 'generate') {
+      setPassword(generateSecurePassword());
+      setSuccessInfo(null);
+      setError(null);
+    }
+  }, [isOpen, mode]);
+
+  const handleRegenerate = () => {
+    setPassword(generateSecurePassword());
+    setCopied(false);
+  };
+
+  const handleCopy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const issues = passwordIssues(password);
+    if (issues.length > 0) {
+      setError(issues.join(' '));
+      return;
+    }
+    setError(null);
+
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.set('userId', user.id);
+      formData.set('password', password);
+      const res = await resetUserPasswordAction({}, formData);
+      if (res.error) {
+        setError(res.error);
+      } else {
+        setSuccessInfo(password);
+      }
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-hairline bg-canvas p-3 text-body-sm space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="font-medium text-ink">Employee Password</span>
+          <p className="text-caption text-muted">Only Directors can reset passwords</p>
+        </div>
+        {!isOpen && !successInfo && (
+          <button
+            type="button"
+            onClick={() => setIsOpen(true)}
+            className="btn btn-secondary btn-xs"
+          >
+            Set new password
+          </button>
+        )}
+      </div>
+
+      {successInfo && (
+        <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-caption font-semibold text-emerald-600 dark:text-emerald-400">
+              Password updated for {formatFirstLastName(user.fullName)}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSuccessInfo(null);
+                setIsOpen(false);
+              }}
+              className="text-caption text-muted hover:text-ink"
+            >
+              Done
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-2 bg-canvas-soft p-2 rounded border border-hairline">
+            <code className="font-mono text-body font-bold text-ink select-all break-all">{successInfo}</code>
+            <button
+              type="button"
+              onClick={() => handleCopy(successInfo)}
+              className="btn btn-secondary btn-xs shrink-0"
+            >
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <p className="text-caption text-amber-600 dark:text-amber-400">
+            Copy and hand this password to the employee in person. It is never retrievable again.
+          </p>
+        </div>
+      )}
+
+      {isOpen && !successInfo && (
+        <form onSubmit={handleSubmit} className="space-y-3 pt-2 border-t border-hairline">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMode('generate')}
+              className={`btn btn-xs ${mode === 'generate' ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              Generate
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode('type');
+                setPassword('');
+              }}
+              className={`btn btn-xs ${mode === 'type' ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              Type one
+            </button>
+          </div>
+
+          {mode === 'generate' ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={password}
+                  className="input input-sm font-mono flex-1 bg-canvas-soft"
+                />
+                <button
+                  type="button"
+                  onClick={handleRegenerate}
+                  className="btn btn-secondary btn-xs"
+                  title="Generate another"
+                >
+                  Regenerate
+                </button>
+              </div>
+              <p className="text-caption text-muted">
+                Generated password satisfies minimum 10 characters, upper, lower, and digits.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError(null);
+                }}
+                placeholder="Enter at least 10 characters..."
+                className="input input-sm font-mono w-full"
+                autoFocus
+              />
+              {password.length > 0 && (
+                <div className="text-caption space-y-1">
+                  {passwordIssues(password).map((issue, idx) => (
+                    <p key={idx} className="text-error">• {issue}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {error && <p className="text-caption text-error">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(false);
+                setError(null);
+              }}
+              className="btn btn-secondary btn-xs"
+              disabled={isPending}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary btn-xs"
+              disabled={isPending || (mode === 'type' && passwordIssues(password).length > 0)}
+            >
+              {isPending ? 'Saving...' : 'Save password'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
 }
 
 const ROLE_PRIORITY: Record<string, number> = {
@@ -75,6 +299,7 @@ export function UsersTable({
   projects,
   canManage,
   canAssign,
+  canResetPassword,
   roleOptions = [],
   searchQuery = '',
 }: UsersTableProps) {
@@ -216,11 +441,15 @@ export function UsersTable({
             <div className="truncate">
               {roleInfo ? (
                 <span
-                  className="badge bg-surface-strong text-body font-medium"
+                  className="text-body-sm text-ink"
                   title={roleInfo.all.map((a) => a.role.name).join(', ')}
                 >
-                  {roleInfo.primary.role.key.replaceAll('_', ' ').toLowerCase()}
-                  {roleInfo.total > 1 ? ` (+${roleInfo.total - 1})` : ''}
+                  {roleInfo.primary.role.name}
+                  {roleInfo.total > 1 ? (
+                    <span className="text-muted ml-1 text-caption">
+                      (+{roleInfo.total - 1})
+                    </span>
+                  ) : null}
                 </span>
               ) : (
                 <span className="text-caption text-muted">{u.designation ?? '-'}</span>
@@ -320,7 +549,13 @@ export function UsersTable({
               <div className="flex items-center justify-between p-base border-b border-hairline bg-canvas-soft">
                 <div className="flex items-center gap-3 min-w-0">
                   <Avatar name={formatFirstLastName(selectedUser.fullName)} color={selectedUser.avatarColor} size={40} />
-                  <h3 className="text-body font-semibold text-ink truncate">{formatFirstLastName(selectedUser.fullName)}</h3>
+                  <div className="min-w-0">
+                    <h3 className="text-body font-semibold text-ink truncate">{formatFirstLastName(selectedUser.fullName)}</h3>
+                    <p className="text-caption text-muted truncate">
+                      {getPrimaryRole(selectedUser.roleAssignments)?.primary.role.name ?? selectedUser.designation ?? 'Employee'}
+                      {selectedUser.department ? ` · ${selectedUser.department.name}` : ''}
+                    </p>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -357,8 +592,24 @@ export function UsersTable({
                       <span className="text-muted">Status</span>
                       <StatusBadge status={selectedUser.status} />
                     </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted">Account Created</span>
+                      <span className="text-ink">{formatDate(selectedUser.createdAt)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted">Last Sign-in</span>
+                      <span className="text-ink">{formatDate(selectedUser.lastSignInAt)}</span>
+                    </div>
                   </div>
                 </div>
+
+                {/* Password Section (Directors only) */}
+                {canResetPassword ? (
+                  <div>
+                    <h4 className="text-caption-uppercase font-semibold uppercase text-muted tracking-wider mb-2">Password</h4>
+                    <PasswordResetSection user={selectedUser} />
+                  </div>
+                ) : null}
 
                 {/* Organization Details */}
                 <div>
@@ -372,9 +623,26 @@ export function UsersTable({
                       <span className="text-muted">Designation</span>
                       <span className="text-ink">{selectedUser.designation ?? '-'}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span className="text-muted">Reports To</span>
-                      <span className="text-ink">{formatFirstLastName(selectedUser.manager?.fullName)}</span>
+                      {selectedUser.manager ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const mgr = users.find(
+                              (u) =>
+                                u.fullName === selectedUser.manager?.fullName ||
+                                (selectedUser.managerId && u.id === selectedUser.managerId)
+                            );
+                            if (mgr) setSelectedUser(mgr);
+                          }}
+                          className="text-primary hover:underline font-medium text-left"
+                        >
+                          {formatFirstLastName(selectedUser.manager.fullName)}
+                        </button>
+                      ) : (
+                        <span className="text-muted">-</span>
+                      )}
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted">Working Capacity</span>
@@ -385,9 +653,27 @@ export function UsersTable({
 
                 {/* Roles & Permissions */}
                 <div>
-                  <h4 className="text-caption-uppercase font-semibold uppercase text-muted tracking-wider mb-2">Assigned Roles & Scopes</h4>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-caption-uppercase font-semibold uppercase text-muted tracking-wider">Assigned Roles & Scopes</h4>
+                    {canAssign ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedUser(null);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="text-caption text-primary hover:underline font-medium"
+                      >
+                        Assign role
+                      </button>
+                    ) : null}
+                  </div>
                   {selectedUser.roleAssignments.length === 0 ? (
-                    <p className="text-caption text-error">No access or roles assigned yet.</p>
+                    <div className="rounded-lg border border-hairline bg-canvas p-3">
+                      <p className="text-caption text-muted">
+                        No app access, so this employee cannot sign in to any module.
+                      </p>
+                    </div>
                   ) : (
                     <div className="space-y-2">
                       {[...selectedUser.roleAssignments]
@@ -402,6 +688,29 @@ export function UsersTable({
                         ))}
                     </div>
                   )}
+                </div>
+
+                {/* Workload */}
+                <div>
+                  <h4 className="text-caption-uppercase font-semibold uppercase text-muted tracking-wider mb-2">Workload</h4>
+                  <div className="rounded-lg border border-hairline bg-canvas p-3 space-y-2 text-body-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted">Open Tasks</span>
+                      <span className="font-mono text-ink">{selectedUser.openTasksCount ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted">Current Load</span>
+                      <span className="font-mono text-ink">{selectedUser.loadHours ?? 0} hrs</span>
+                    </div>
+                    <div className="pt-2 border-t border-hairline flex justify-end">
+                      <Link
+                        href={`/pm/resources/${selectedUser.id}`}
+                        className="text-caption text-primary hover:underline font-medium inline-flex items-center gap-1"
+                      >
+                        View workload & tasks →
+                      </Link>
+                    </div>
+                  </div>
                 </div>
               </div>
 

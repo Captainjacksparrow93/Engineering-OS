@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   // -- Platform administration -------------------------------------------------
   'admin.user.read': 'View employee accounts',
   'admin.user.manage': 'Create, edit and deactivate employee accounts',
+  'admin.user.password.reset': "Reset an employee's password",
   'admin.role.read': 'View roles and their permissions',
   'admin.role.manage': 'Create roles and grant/revoke permissions',
   'admin.role.assign': 'Assign roles to people at any scope',
@@ -84,6 +85,7 @@ export const SYSTEM_ROLES: Record<
     permissions: [
       'admin.user.read',
       'admin.user.manage',
+      'admin.user.password.reset',
       'admin.role.read',
       'admin.role.assign',
       'admin.audit.read',

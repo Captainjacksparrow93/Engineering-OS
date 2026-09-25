@@ -12,58 +12,12 @@ export const metadata = {
   title: 'Audit trail',
 };
 
-// Human-friendly mapping for actions
-function formatAction(module: string, action: string): string {
-  const fullKey = `${module}.${action}`;
-  const map: Record<string, string> = {
-    'core.auth.signed_in': 'Signed in',
-    'core.auth.signed_out': 'Signed out',
-    'core.auth.failed_login': 'Sign in failed',
-    'admin.user.created': 'Added employee',
-    'admin.user.status_changed': 'Changed status',
-    'admin.user.updated': 'Updated employee',
-    'admin.user.password_reset': 'Reset password',
-    'admin.role.assigned': 'Granted role',
-    'admin.role.revoked': 'Removed role',
-    'pm.project.created': 'Created project',
-    'pm.project.updated': 'Updated project',
-    'pm.project.deleted': 'Deleted project',
-    'pm.task.created': 'Created task',
-    'pm.task.updated': 'Updated task',
-    'pm.task.status_changed': 'Changed task status',
-    'pm.task.assigned': 'Assigned task',
-    'pm.task.reassigned': 'Reassigned task',
-    'pm.task.handover': 'Handed over task',
-    'pm.wbs.created': 'Created WBS',
-    'pm.milestone.created': 'Created milestone',
-    'pm.document.uploaded': 'Uploaded document',
-  };
-
-  if (map[fullKey]) return map[fullKey];
-
-  // Fallback: clean the action string
-  const clean = action.replace(/_/g, ' ').replace(/\./g, ' ');
-  return clean.charAt(0).toUpperCase() + clean.slice(1);
-}
-
-// Human-friendly mapping for item types
-function formatItemType(entityType: string): string {
-  const map: Record<string, string> = {
-    User: 'Employee',
-    RoleAssignment: 'Access Role',
-    Project: 'Project',
-    Task: 'Task',
-    TaskAssignment: 'Assignment',
-    TaskHandover: 'Handover',
-    WbsNode: 'WBS item',
-    Milestone: 'Milestone',
-    Document: 'Document',
-    Department: 'Department',
-    Company: 'Company',
-  };
-
-  return map[entityType] ?? entityType.replace(/([A-Z])/g, ' $1').trim();
-}
+import Link from 'next/link';
+import {
+  formatAuditAction,
+  formatAuditItem,
+  formatAuditDetails,
+} from '@/modules/admin/domain/audit-format';
 
 // Clean timestamp: '12/9/2026, 1:14 PM' (no seconds, uppercase AM/PM)
 function formatTimestamp(date: Date): string {
@@ -79,57 +33,17 @@ function formatTimestamp(date: Date): string {
   return formatted.replace(/\b(am|pm)\b/i, (m) => m.toUpperCase());
 }
 
-// Clean formatting for changes with name resolution
-function formatDiff(diff: unknown, nameMap: Map<string, string>): string {
-  if (!diff || (typeof diff === 'object' && Object.keys(diff as object).length === 0)) {
-    return '-';
-  }
-  if (typeof diff === 'object' && diff !== null) {
-    const entries = Object.entries(diff as Record<string, unknown>);
-    return entries
-      .map(([k, v]) => {
-        let keyName = k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim().toLowerCase();
-        let valStr = '';
-
-        if (typeof v === 'string') {
-          // Resolve ID if possible
-          if (nameMap.has(v)) {
-            valStr = nameMap.get(v)!;
-          } else {
-            valStr = v.replace(/_/g, ' ');
-          }
-        } else if (typeof v === 'object' && v !== null) {
-          valStr = JSON.stringify(v);
-        } else {
-          valStr = String(v);
-        }
-
-        // Friendly key translations
-        if (keyName === 'user id' || keyName === 'userid') keyName = 'employee';
-        if (keyName === 'actor id' || keyName === 'actorid') keyName = 'by';
-        if (keyName === 'manager id' || keyName === 'managerid') keyName = 'manager';
-        if (keyName === 'scope id' || keyName === 'scopeid') keyName = 'scope';
-        if (keyName === 'role key' || keyName === 'rolekey') keyName = 'role';
-        if (keyName === 'project id' || keyName === 'projectid') keyName = 'project';
-        if (keyName === 'task id' || keyName === 'taskid') keyName = 'task';
-
-        return `${keyName}: ${valStr}`;
-      })
-      .join(', ');
-  }
-  return String(diff);
-}
-
 /** Every mutation in every module lands here, written inside the same transaction. */
 export default async function AuditPage({ searchParams }: { searchParams: Promise<{ module?: string }> }) {
   const principal = await requirePrincipal();
   if (!hasPermissionAnywhere(principal, 'admin.audit.read')) redirect('/dashboard');
 
   const params = await searchParams;
-  const [entries, allUsers, allProjects, allDepts, allRoles] = await Promise.all([
+  const [entries, allUsers, allProjects, allTasks, allDepts, allRoles] = await Promise.all([
     listAuditTrail(principal, { module: params.module }),
     prisma.user.findMany({ where: { companyId: principal.companyId }, select: { id: true, fullName: true } }),
     prisma.project.findMany({ where: { companyId: principal.companyId }, select: { id: true, name: true } }),
+    prisma.task.findMany({ where: { project: { companyId: principal.companyId } }, select: { id: true, title: true } }),
     prisma.department.findMany({ where: { companyId: principal.companyId }, select: { id: true, name: true } }),
     prisma.role.findMany({ select: { key: true, name: true } }),
   ]);
@@ -137,8 +51,12 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   const nameMap = new Map<string, string>();
   allUsers.forEach((u) => nameMap.set(u.id, formatName(u.fullName)));
   allProjects.forEach((p) => nameMap.set(p.id, p.name));
+  allTasks.forEach((t) => nameMap.set(t.id, t.title));
   allDepts.forEach((d) => nameMap.set(d.id, d.name));
   allRoles.forEach((r) => nameMap.set(r.key, r.name));
+
+  const existingProjectIds = new Set(allProjects.map((p) => p.id));
+  const existingTaskIds = new Set(allTasks.map((t) => t.id));
 
   return (
     <>
@@ -174,8 +92,30 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
               </thead>
               <tbody>
                 {entries.map((entry) => {
-                  const detailsText = formatDiff(entry.diff, nameMap);
+                  const detailsText = formatAuditDetails(
+                    {
+                      module: entry.module,
+                      action: entry.action,
+                      entityType: entry.entityType,
+                      diff: entry.diff,
+                    },
+                    nameMap
+                  );
                   const actorName = entry.actor ? formatName(entry.actor.fullName) : 'System';
+                  const item = formatAuditItem(
+                    {
+                      module: entry.module,
+                      action: entry.action,
+                      entityType: entry.entityType,
+                      entityId: entry.entityId,
+                    },
+                    nameMap
+                  );
+
+                  const canLinkItem =
+                    item.href &&
+                    ((entry.entityType === 'Project' && existingProjectIds.has(entry.entityId)) ||
+                      (entry.entityType === 'Task' && existingTaskIds.has(entry.entityId)));
 
                   return (
                     <tr key={entry.id}>
@@ -194,14 +134,20 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
                       </td>
                       <td className="whitespace-nowrap">
                         <span className="badge bg-surface-strong text-body font-medium">
-                          {formatAction(entry.module, entry.action)}
+                          {formatAuditAction(entry.module, entry.action)}
                         </span>
                       </td>
                       <td className="text-caption text-body font-medium">
-                        {formatItemType(entry.entityType)}
+                        {canLinkItem ? (
+                          <Link href={item.href!} className="text-primary hover:underline">
+                            {item.label}
+                          </Link>
+                        ) : (
+                          <span>{item.label}</span>
+                        )}
                       </td>
-                      <td className="text-caption text-muted">
-                        <span className="max-w-md block truncate" title={detailsText}>
+                      <td className="text-caption text-ink">
+                        <span className="max-w-xl block truncate hover:whitespace-normal" title={detailsText}>
                           {detailsText}
                         </span>
                       </td>

@@ -23,3 +23,30 @@ export function passwordIssues(plain: string): string[] {
   if (!/[0-9]/.test(plain)) issues.push('Include a digit.');
   return issues;
 }
+
+export function generateSecurePassword(length = 14): string {
+  const lowers = 'abcdefghijkmnopqrstuvwxyz';
+  const uppers = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const digits = '23456789';
+  const specials = '!@#$%&*';
+  const all = lowers + uppers + digits + specials;
+
+  const chars = [
+    lowers[Math.floor(Math.random() * lowers.length)]!,
+    uppers[Math.floor(Math.random() * uppers.length)]!,
+    digits[Math.floor(Math.random() * digits.length)]!,
+    specials[Math.floor(Math.random() * specials.length)]!,
+  ];
+
+  for (let i = chars.length; i < length; i++) {
+    chars.push(all[Math.floor(Math.random() * all.length)]!);
+  }
+
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chars[i], chars[j]] = [chars[j]!, chars[i]!];
+  }
+
+  return chars.join('');
+}
+

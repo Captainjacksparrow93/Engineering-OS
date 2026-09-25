@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requirePrincipal } from '@/core/auth/session';
-import { assignRole, createUser, setRolePermissions, setUserStatus } from '@/modules/admin/services/admin.service';
+import { assignRole, createUser, resetUserPassword, setRolePermissions, setUserStatus } from '@/modules/admin/services/admin.service';
 import { toState, value, type ActionState } from '@/core/utils/actions';
 import type { ScopeType } from '@prisma/client';
 
@@ -70,4 +70,18 @@ export async function setRolePermissionsAction(_prev: ActionState, form: FormDat
     () => setRolePermissions(principal, String(form.get('roleKey')), form.getAll('permissions').map(String)),
     ['/admin/roles'],
   );
+}
+
+export async function resetUserPasswordAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const userId = String(form.get('userId') ?? '');
+  const password = String(form.get('password') ?? '');
+
+  try {
+    const res = await resetUserPassword(principal, userId, password);
+    revalidatePath('/admin/users');
+    return { success: `Password updated for ${res.fullName}` };
+  } catch (error) {
+    return toState(error);
+  }
 }

@@ -154,6 +154,56 @@ export async function setUserStatus(principal: Principal, userId: string, status
   });
 }
 
+export async function resetUserPassword(
+  principal: Principal,
+  userId: string,
+  newPassword: string,
+) {
+  assertCan(principal, 'admin.user.password.reset');
+
+  const issues = passwordIssues(newPassword);
+  if (issues.length) throw new DomainError(issues.join(' '));
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, companyId: true, fullName: true, employeeCode: true, email: true },
+  });
+  if (!target || target.companyId !== principal.companyId) {
+    throw new DomainError('Target user not found.');
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  return prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    await tx.session.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'admin',
+        action: 'user.password_reset',
+        entityType: 'User',
+        entityId: userId,
+        diff: {
+          employeeCode: target.employeeCode,
+          fullName: target.fullName,
+        },
+      },
+      tx,
+    );
+
+    return { userId, fullName: target.fullName, employeeCode: target.employeeCode };
+  });
+}
+
 export async function assignRole(
   principal: Principal,
   input: { userId: string; roleKey: string; scopeType: ScopeType; scopeId?: string | null },
