@@ -91,15 +91,29 @@ Three requests came from the client over WhatsApp. This plan covers each one. Cl
 
 **Open question for the client:** does a service call get the checklist WBS, or is it commissioning/logs only? The default in this plan is **no checklist**. It jumps straight to commissioning assignment. Confirm before building.
 
-## 2. Add Dharmesh Thummer as Sales Head, view-only
+## 2. Make Dharmesh Thummar a view-only Sales Head
 
-**Today:** the `VIEWER` role (`permissions.ts:238`) has `pm.project.read`, `pm.task.read` and `pm.report.read`. That covers only projects in scope, so he would see almost nothing.
+**He already exists.** He is seeded in `prisma/seed.ts` (search `dharmesh.thummar@acsengitech.com`, "Dharmesh Bhartbhai Thummar"). On People, he is the manager Aakash Panchal reports to. He is **not** in `logins.csv`, so the CSV sync never touches his password. Do **not** create a new user, and do **not** change his password.
+
+**Today:** the `VIEWER` role (`permissions.ts`, `VIEWER:`) only covers projects he is a member of, so he would see almost nothing.
 
 **Approach:**
-1. Add a system role `SALES_HEAD` ("Sales Head", read-only) to `SYSTEM_ROLES` with these permissions: `pm.project.read`, `pm.project.read.all`, `pm.task.read`, `pm.resource.read`, `pm.report.read`. No `pm.oversight`, so he does not get flooded with notifications, and no write keys.
-2. Add a script `prisma/scripts/grant-sales-head.ts`, modelled on `grant-service-head.ts`. It upserts the role, creates the user if missing (name, designation "Sales Head", COMPANY scope), and sets his initial password. The admin passes it on and can reset it later (see #8). Do not add him to logins.csv.
-3. Get his email from the client. Do **not** add him to `prisma/data/logins.csv` (see the note below).
-4. Verify: log in as him. The dashboard and all projects should be visible, and every create/edit/delete button should be hidden or should return 403. Add a small RBAC test to confirm `SALES_HEAD` holds no mutating key.
+1. Add a system role `SALES_HEAD` ("Sales Head", read-only) to `SYSTEM_ROLES`, with these permissions: `pm.project.read`, `pm.project.read.all`, `pm.task.read`, `pm.resource.read`, `pm.report.read`.
+   - No `pm.oversight`, so he does not get flooded with notifications.
+   - No write keys.
+2. Add the script `prisma/scripts/grant-sales-head.ts`, modelled on `grant-service-head.ts`. It is idempotent:
+   - Upsert the role and its permissions.
+   - Find the user by email `dharmesh.thummar@acsengitech.com`. Fail loudly if he is not found; never create him.
+   - Remove any other COMPANY-scope role he holds, so that he is view-only, and log what was removed.
+   - Add the `SALES_HEAD` COMPANY-scope assignment.
+   - Leave his password, profile and reporting line untouched.
+
+   Run it on a restored copy of production first, then on production after the deploy.
+3. If he has never had a password handed to him, the Director sets one using the People drawer reset (#8). So #8 ships before this.
+4. Tests:
+   - Unit: `SALES_HEAD` holds no create, update, delete, assign, manage or approve key.
+   - Integration: a `SALES_HEAD` principal gets 403 from each mutating service and can list all projects.
+   - Browser: log in as him. The dashboard, Projects, Clients and Team load are visible, and there are no write buttons.
 
 ## 3. Delete dummy project "WO 123123" (client "gggg")
 
