@@ -1,9 +1,9 @@
 #!/bin/sh
 set -e
 
-echo "==> Synchronizing Prisma database schema..."
+echo "==> Deploying Prisma migrations..."
 if [ -f "node_modules/prisma/build/index.js" ]; then
-  node node_modules/prisma/build/index.js db push --skip-generate
+  node node_modules/prisma/build/index.js migrate deploy
 else
   echo "FATAL: prisma CLI not found in the image" >&2
   exit 1

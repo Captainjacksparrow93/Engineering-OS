@@ -1,15 +1,19 @@
-﻿name: Auto-Deploy to VPS
+name: Auto-Deploy to VPS
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
     branches:
       - main
+    types:
+      - completed
   workflow_dispatch:
 
 jobs:
   deploy:
     name: Auto-Update VPS Container
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
 
     steps:
       - name: SSH to VPS & Rebuild Containers
