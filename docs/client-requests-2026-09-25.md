@@ -362,6 +362,32 @@ All must pass. Paste the output into the summary.
 
 **Commit these as local commits only:** `fix(db): R1 baseline migrations`, `fix(rbac): R2 sales head one-off`, `fix(auth): R3/R4 password generator`, `fix(pm): R5 client lookup scope`. Then hand back to Claude for re-review and the production cut-over.
 
+## 12. Sales Head sees everything a Technical Head sees, read-only
+
+**Client, 2026-09-25:** Dharmesh "should see everything, same as Technical Head but no edit".
+
+**Live state (checked 2026-09-25):** `grant-sales-head.ts` has **not** been run on production yet. He still holds only `DEPARTMENT_HEAD` (DEPARTMENT scope), which is why he sees just the People menu. The `SALES_HEAD` role exists in production with its 5 read keys. Once the script runs, he gets Dashboard, Projects, Clients and Team load.
+
+**Gap:** Technical Head also sees **Site Commissioning** and **Checklists**. Both pages are gated on write keys (`pm.commissioning.manage` in `pm/commissioning/page.tsx`, and `pm.template.manage` in `pm/templates/page.tsx`), so a read-only role can never open them. Approvals, Requests, My work and Urgent task are action queues. They stay hidden for a view-only user, because there is nothing to act on.
+
+**Approach:**
+1. Add two keys in `permissions.ts`:
+   - `pm.commissioning.read` ("View site commissioning status and logs");
+   - `pm.template.read` ("View master checklist templates").
+
+   Grant them to SALES_HEAD, and also to TECHNICAL_HEAD, SERVICE_HEAD and DIRECTOR so nothing changes for them. SUPER_ADMIN gets them automatically through `ALL_PERMISSIONS`.
+2. Sidebar: Site Commissioning and Checklists require the `.read` key.
+3. Pages: gate on `read || manage`. Pass `canManage` to the client components and hide every action when it is false: assign engineer, close commissioning, approve or reject logs, and create, edit or delete templates.
+4. Services: listing and read functions assert the `.read` key (or accept manage), and every mutating service keeps asserting the write key. **The server is the real guard, not the hidden buttons.**
+5. Project and task pages: check that each write control (Handover Project, Put on hold, Add urgent task, Cancel, Delete, Add task, team panel edits, progress forms) is hidden when the viewer lacks the key. Any control that shows for SALES_HEAD is a bug.
+6. Add a sync script, `grant-read-permissions.ts`, that is additive and idempotent (upsert only), and put it in `entrypoint.sh` after `grant-password-reset.ts`.
+7. Tests:
+   - Unit: SALES_HEAD still holds no mutating key.
+   - Integration: SALES_HEAD can list commissioning and templates, and gets 403 on assign, approve, close, and template create, update and delete.
+   - Browser (the user checks): log in as Dharmesh and see Dashboard, Projects, Clients, Site Commissioning, Team load and Checklists, with no edit buttons anywhere.
+
+**Order:** do this next, as its own local commit, `feat(rbac): #12 read-only commissioning and checklists`.
+
 ## Order
 
 0. #0 A–C: CI gate, integration test setup, migrate deploy. **Nothing ships before this.**
