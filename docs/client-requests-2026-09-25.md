@@ -252,6 +252,34 @@ This is a data task, not a code change.
 4. Use the same `projectLabel(p)` helper proposed in #7, so the format is identical everywhere. If #7 stays parked, create the helper here.
 5. Verify in the browser pane on Tejas Rokade's portfolio.
 
+## For Antigravity: how to work this plan
+
+**Toolchain (required; use the tools, don't just mention them):**
+- **code-review-graph**: update the graph at the start (don't rebuild from scratch). Before changing any service, run `query_graph` (callers_of / importers_of), `get_impact_radius` and `get_affected_flows`, and put the results in your summary.
+- **token-savior**: `switch_project` to this repo first. Read code with `find_symbol`, `get_function_source` and `get_full_context` instead of dumping whole files.
+- **sequential-thinking**: use it to order the steps of each section, and for any bug you hit, before concluding.
+- **ponytail** (full): take the smallest change that works. Don't add abstractions the plan doesn't ask for.
+- **Matt Pocock skills**:
+  - `tdd`: write the failing test first for every service change, following the #0 test table.
+  - `diagnosing-bugs`: use it when something fails.
+  - `codebase-design`: use it when adding helpers such as `projectLabel`.
+- If a tool is missing or fails, say so in your summary. Never claim you used it.
+
+**Rules:**
+- **Local commits only. Never push.** A push to `main` deploys to the live site until #0 A is in place. The user relays each batch to Claude for review before anything is pushed.
+- One commit per plan section, with a message like `feat(pm): #6 clients menu`.
+- Line numbers in this plan go stale as soon as you edit. Search for the quoted code instead.
+- Before each commit, run `npm run typecheck && npm run lint && npm test && npm run build`. Also run `npm run test:int` once #0 B exists. All of them must pass.
+- Do not touch the parked items #4 and #7, or ERP, HRMS and Gate.
+
+**Already done: do not redo or revert:**
+- Multi-panel engineer assignment and direct management handover (`eaff6f6`).
+- `deleteProject` cleans up notifications linked to the project (`fd5b53d`).
+- The Add-client dialog fix for the nested form (`6b610a0`).
+- Test harness cleanup of notifications and events (`433f404`).
+
+**When done:** give the user a short summary per section. List the files changed, the tests added, the tool results (graph impact and so on), and anything skipped and why.
+
 ## Order
 
 0. #0 A–C: CI gate, integration test setup, migrate deploy. **Nothing ships before this.**
