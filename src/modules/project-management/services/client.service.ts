@@ -229,6 +229,7 @@ export async function getClientPortfolio(
 
   const client = await prisma.client.findFirst({
     where: {
+      companyId: principal.companyId,
       OR: [
         { id: clientId },
         { refNumber: clientId },
@@ -236,7 +237,7 @@ export async function getClientPortfolio(
     },
   });
 
-  if (!client || client.companyId !== principal.companyId) {
+  if (!client) {
     throw new NotFoundError('Client not found.');
   }
 
