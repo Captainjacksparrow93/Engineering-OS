@@ -77,12 +77,13 @@ async function main() {
     throw new Error('User dharmesh.thummar@acsengitech.com not found. Script will not create user.');
   }
 
-  // 5. Remove existing DEPARTMENT_HEAD or any other roles to ensure purely view-only
-  for (const assignment of dharmesh.roleAssignments) {
-    if (assignment.roleId !== role.id) {
-      await prisma.roleAssignment.delete({ where: { id: assignment.id } });
-      console.log(`   - [REMOVED] Removed previous role '${assignment.role.name}' (${assignment.role.key}) from ${dharmesh.fullName}.`);
-    }
+  // 5. Remove ONLY existing DEPARTMENT_HEAD role if it exists
+  const deptHeadAssignments = dharmesh.roleAssignments.filter(
+    (a) => a.role.key === 'DEPARTMENT_HEAD'
+  );
+  for (const assignment of deptHeadAssignments) {
+    await prisma.roleAssignment.delete({ where: { id: assignment.id } });
+    console.log(`   - [REMOVED] Removed previous role '${assignment.role.name}' (${assignment.role.key}) from ${dharmesh.fullName}.`);
   }
 
   // 6. Assign SALES_HEAD at GLOBAL scope
