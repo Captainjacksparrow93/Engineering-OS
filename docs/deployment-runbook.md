@@ -174,13 +174,6 @@ database first, then restore — the dump is complete, so nothing is lost.
 
 ## Notes for next time
 
-- **The migrations are applied by hand and are not recorded in `_prisma_migrations`.** The
-  schema will be correct, but the migration history stays incomplete — consistent with the
-  drift already there from `db push`. **Never run `prisma migrate dev` against the VPS:** it
-  would detect that drift and offer to reset the database.
-- **`entrypoint.sh` still prints "Notice: Seed check completed." whether the seed succeeded
-  or failed.** That is how the round-1 bug stayed invisible. Making that message honest is
-  still an open decision.
-- Consider gating the auto-deploy workflow behind `workflow_dispatch` only, so a push to
-  `main` stops being a production deploy. This release survives it, but any future change
-  needing a data migration hits the same chicken-and-egg.
+- **Migration baseline established (2026-09-25):** The legacy fragmented migration history has been archived to `prisma/migrations-archive/`, and a single baseline migration `20260925000000_baseline` matches the live production schema at `eaff6f6`.
+- **Strict migration policy:** From now on, every schema change needs a migration made with `prisma migrate dev --name <change>`. `entrypoint.sh` runs `prisma migrate deploy`. **`db push` is never used against production again.**
+- Auto-deploy runs only after CI passes on `main`. Migrations must be additive and rehearsed locally before deploy.
