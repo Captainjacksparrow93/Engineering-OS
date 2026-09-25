@@ -95,7 +95,7 @@ Three requests came from the client over WhatsApp. This plan covers each one. Cl
 
 **He already exists.** He is seeded in `prisma/seed.ts` (search `dharmesh.thummar@acsengitech.com`, "Dharmesh Bhartbhai Thummar"). On People, he is the manager Aakash Panchal reports to. He is **not** in `logins.csv`, so the CSV sync never touches his password. Do **not** create a new user, and do **not** change his password.
 
-**Today:** the `VIEWER` role (`permissions.ts`, `VIEWER:`) only covers projects he is a member of, so he would see almost nothing.
+**Today:** he is seeded with `DEPARTMENT_HEAD` on the SALES department. That role has write keys, so he is not view-only. The `VIEWER` role (`permissions.ts`, `VIEWER:`) only covers projects he is a member of, so he would see almost nothing.
 
 **Approach:**
 1. Add a system role `SALES_HEAD` ("Sales Head", read-only) to `SYSTEM_ROLES`, with these permissions: `pm.project.read`, `pm.project.read.all`, `pm.task.read`, `pm.resource.read`, `pm.report.read`.
@@ -104,11 +104,13 @@ Three requests came from the client over WhatsApp. This plan covers each one. Cl
 2. Add the script `prisma/scripts/grant-sales-head.ts`, modelled on `grant-service-head.ts`. It is idempotent:
    - Upsert the role and its permissions.
    - Find the user by email `dharmesh.thummar@acsengitech.com`. Fail loudly if he is not found; never create him.
-   - Remove any other COMPANY-scope role he holds, so that he is view-only, and log what was removed.
+   - Remove his current `DEPARTMENT_HEAD` assignment (DEPARTMENT scope, SALES), plus any other role he holds, so that he is purely view-only. Log what was removed.
    - Add the `SALES_HEAD` COMPANY-scope assignment.
    - Leave his password, profile and reporting line untouched.
 
-   Run it on a restored copy of production first, then on production after the deploy.
+   Also change his seed entry in `seed.ts` to `roles: [{ key: 'SALES_HEAD', scopeType: 'COMPANY' }]`, so that a fresh environment matches production. The seed is create-only, so this change alone does not affect production.
+
+   Run the script on a restored copy of production first, then on production after the deploy.
 3. If he has never had a password handed to him, the Director sets one using the People drawer reset (#8). So #8 ships before this.
 4. Tests:
    - Unit: `SALES_HEAD` holds no create, update, delete, assign, manage or approve key.
