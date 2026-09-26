@@ -554,8 +554,8 @@ export async function getProjectWorkspace(principal: Principal, projectId: strin
       progressPercent: projectProgress(tasks),
     },
     permissions: {
-      canCreateTask: can(principal, 'pm.task.create', { projectId, departmentId: project.departmentId }) || project.managerId === principal.userId,
-      canCreateAdhocTask: can(principal, 'pm.task.adhoc.create', { projectId, departmentId: project.departmentId }) || project.managerId === principal.userId,
+      canCreateTask: can(principal, 'pm.task.create', { projectId, departmentId: project.departmentId }),
+      canCreateAdhocTask: can(principal, 'pm.task.adhoc.create', { projectId, departmentId: project.departmentId }),
       canAssign: can(principal, 'pm.task.assign', { projectId, departmentId: project.departmentId }) || project.managerId === principal.userId,
       canManageDependencies:
         can(principal, 'pm.task.dependency.manage', { projectId, departmentId: project.departmentId }) || project.managerId === principal.userId,

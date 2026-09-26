@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@/core/db/prisma';
 import { loadPrincipal } from '@/core/rbac/principal';
-import { DomainError } from '@/core/rbac/errors';
-import { assignTask, listMyTasks } from './task.service';
+import { DomainError, ForbiddenError } from '@/core/rbac/errors';
+import { assignTask, listMyTasks, createTask } from './task.service';
 import { requestHandover, decideHandover } from './handover.service';
+import { getProjectWorkspace } from './project.service';
 import { allocateTeamForSteps, type SmartCandidate, type SmartStepRequirement } from '../domain/availability';
 
 describe('PM and Assistant PM Task Assignment (#4) Integration Tests', () => {
@@ -271,5 +272,69 @@ describe('PM and Assistant PM Task Assignment (#4) Integration Tests', () => {
     expect(allocations).toHaveLength(1);
     expect(allocations[0].assignedUserId).toBe('eng-1');
     expect(allocations[0].assignedUserId).not.toBe('pm-1');
+  });
+
+  it('7. (#4b) PM calling createTask (planned and ADHOC) on their own project gets ForbiddenError', async () => {
+    if (!isDbAvailable) return;
+
+    await expect(
+      createTask(dhrupinPrincipal, {
+        projectId: testProjectId,
+        title: 'Unauthorized Planned Task',
+        type: 'PROJECT',
+        priority: 'MEDIUM',
+        estimatedHours: 4,
+        requiredSkills: [],
+        dependsOn: [],
+      }),
+    ).rejects.toThrow(ForbiddenError);
+
+    await expect(
+      createTask(dhrupinPrincipal, {
+        projectId: testProjectId,
+        title: 'Unauthorized Adhoc Task',
+        type: 'ADHOC',
+        priority: 'MEDIUM',
+        estimatedHours: 4,
+        requiredSkills: [],
+        dependsOn: [],
+      }),
+    ).rejects.toThrow(ForbiddenError);
+  });
+
+  it('8. (#4b) Technical Head can create both planned and ADHOC tasks', async () => {
+    if (!isDbAvailable) return;
+
+    const plannedTask = await createTask(dilipPrincipal, {
+      projectId: testProjectId,
+      title: 'Authorized Planned Task',
+      type: 'PROJECT',
+      priority: 'MEDIUM',
+      estimatedHours: 4,
+      requiredSkills: [],
+      dependsOn: [],
+    });
+    expect(plannedTask.id).toBeDefined();
+
+    const adhocTask = await createTask(dilipPrincipal, {
+      projectId: testProjectId,
+      title: 'Authorized Adhoc Task',
+      type: 'ADHOC',
+      priority: 'MEDIUM',
+      estimatedHours: 4,
+      requiredSkills: [],
+      dependsOn: [],
+    });
+    expect(adhocTask.id).toBeDefined();
+  });
+
+  it('9. (#4b) Project workspace returns canCreateTask: false and canCreateAdhocTask: false for PM', async () => {
+    if (!isDbAvailable) return;
+
+    const ws = await getProjectWorkspace(dhrupinPrincipal, testProjectId);
+    expect(ws.permissions.canCreateTask).toBe(false);
+    expect(ws.permissions.canCreateAdhocTask).toBe(false);
+    expect(ws.permissions.canAssign).toBe(true);
+    expect(ws.permissions.canEditProject).toBe(true);
   });
 });
