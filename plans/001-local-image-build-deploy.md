@@ -27,6 +27,7 @@ What stays the same: `Dockerfile`, `entrypoint.sh`, `/api/health`, `scripts/back
 - No secrets in scripts. The VPS host/user come from env vars with the current defaults (`VPS_HOST=72.62.248.38`, `VPS_USER=root`, `VPS_DIR=/root/engos-docker`); SSH uses the owner's own key.
 - Scripts must work in Git Bash on Windows (use `ssh`, `scp`, `docker`, `git`, `gzip`; no GNU-only flags that Git Bash lacks).
 - Keep it boring: one script, no new dependencies, no registry.
+- VPS verified 2026-09-26 (read-only): Ubuntu 24.04.4 LTS, `x86_64`, Docker 29.3.1; key-based SSH from the owner's PC as `root` works. So `--platform linux/amd64` is correct.
 
 ## Tools & skills (implementer: follow these)
 - **code-review-graph:** does not cover `.yml`/`.sh` files (checked: 0 nodes for `scripts/rollback.sh`). Use text search instead: grep for `ghcr`, `APP_IMAGE`, `deployed-sha`, `previous-sha` to confirm no other references remain after your change.
