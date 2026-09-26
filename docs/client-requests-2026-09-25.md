@@ -167,7 +167,7 @@ This is a data task, not a code change.
 1. `core/rbac/permissions.ts:191,194` (`PROJECT_MANAGER`) and `:210,213` (`ASST_MANAGER`): remove `pm.task.create` and `pm.task.adhoc.create`.
 2. `services/access.ts:106,109` `MANAGER_IMPLIED`: remove both keys. Without this, the manager of a project still gets them on their own project.
 3. `services/project.service.ts:557-558`: remove the `|| project.managerId === principal.userId` fallback on `canCreateTask` and `canCreateAdhocTask`. It bypasses the permission check and would keep the buttons visible.
-4. **Live database:** role permissions are stored in `role_permissions`, and code changes don't touch them. Add `prisma/scripts/revoke-pm-task-create.ts`, following the existing `grant-*.ts` scripts, that deletes those two keys for `PROJECT_MANAGER` and `ASST_MANAGER`. It's a production data change: take a backup first, and the user approves the run.
+4. **Live database:** role permissions are stored in `core_role_permissions`, and code changes don't touch them. Add a migration (`prisma migrate dev --create-only --name revoke_pm_task_create`) that deletes those two keys for `PROJECT_MANAGER` and `ASST_MANAGER`, looking roles and permissions up by `key`. It runs once through `migrate deploy`, after the automatic pre-deploy backup (see `docs/deploy-pipeline-plan.md` §3). The user approves the release that carries it.
 
 **Follow-on effects:** the "Urgent task" sidebar item (`sidebar.tsx:114`) and `/pm/adhoc` (`adhoc/page.tsx:28`) hide or redirect by themselves once the permission is gone. Check that PMs still see and edit existing tasks. `pm.task.update` and `pm.task.assign` stay.
 
