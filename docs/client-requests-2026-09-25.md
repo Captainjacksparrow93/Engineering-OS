@@ -124,19 +124,57 @@ This is a data task, not a code change.
 - Then delete the dummy client "gggg" if it has no other projects. Check whether there is a client delete/deactivate path. If there is none, set `isActive=false` in Prisma Studio.
 - Before deleting, check prod for any other test projects (e.g. `workOrderNo` matching `^1231`, or clients with junk names) and list them for the client to confirm.
 
-## 4. Urgent tasks can be assigned to a PM — PARKED (client: skip urgent task for now)
+## 4. Tasks can be assigned to PMs and Assistant PMs (confirmed 2026-09-26)
 
-**Request:** "Also add PM for project task as well."
+**Request (clarified by the user):** the 4 people offered as PM in the new-project wizard (`PROJECT_MANAGER` / `ASST_MANAGER`) must also be assignable on tasks.
 
-**Assumption:** the "Add urgent task" form (`/pm/adhoc`) should also let you pick a Project Manager as the assignee, not only engineers. A service call raised from #1 should be able to go to a PM too. Confirm this with the client.
+**Rules:**
+- "PM" and "Assistant PM" are just two names for the same role. Both have exactly the same permissions, and each leads their own team (their subtree through `managerId`). Nothing in this change checks which of the two titles someone holds; `projectManagerPool` treats both the same.
+- PMs don't create projects or tasks. Directors and Technical Heads (`pm.oversight`) do, and they can assign to anyone, including all 4.
+- A PM or Assistant PM can reassign a task to anyone in any team, including themselves and the other PMs/Assistant PMs.
+  - **Same team** (the current owner and the target share a team root): the task moves immediately, with no approval.
+  - **Another PM's team**: this creates a request that a Technical Head or Director must approve. The task stays with its current owner until the request is approved.
+- Auto-assign stays engineers only.
 
-**Today:** candidates come from `suggestAssignees` (`availability.service.ts:195`), and `reassignTeamFor` (`services/access.ts`) narrows the list to the execution team. PMs are not offered.
+**Today:**
+- `isExecutionStaff` (`domain/availability.ts:292`) and `teamOf` (`services/access.ts:320`) drop anyone graded MANAGER or with "manager/asst" in their designation, so no picker offers these 4.
+- `requestHandover` and `requestPanelHandover` (`handover.service.ts:68`, `:1652`) only accept targets with the `SENIOR_ENGINEER` / `JUNIOR_ENGINEER` role, and reject `PROJECT_MANAGER`.
+- A PM reassignment is always direct, even across teams (`handover.service.ts:120`, the `isManagerOrLead` branch). The head-approval stage (`AWAITING_HEAD_APPROVAL`, approved through `decideHandover` stage 2 at `:716`, listed for heads in `listHandovers` at `:1432`) already exists, but is only reached through the two-stage flow.
 
 **Approach:**
-1. `suggestAssignees`: take an `includeManagers` option that adds users holding a PM or head role (COMPANY or project scope) to the candidate list. Rank them by free hours, like everyone else.
-2. `adhoc/page.tsx` and `adhoc-form.tsx`: add a "Project Managers" group or filter chip to the candidate list. By default, pre-select the project's own manager when a project is chosen.
-3. Service guard: the task-create path must accept a PM assignee. Check that no validation restricts assignees to engineers only.
-4. Test: create an urgent task assigned to the project's PM. It should appear in the PM's My Work and trigger a notification.
+1. Leave `isExecutionStaff` as it is. `handover.service.ts` also uses it as a manager-rights check, and `dashboard.service.ts:317` uses it to count free engineers.
+2. `access.ts`: add `projectManagerPool(companyId)`, using the same query as `getPMTeamData().managers`. Refactor `getPMTeamData` to call it, so the wizard and the task pickers list the same people.
+3. Handover target check (task and panel): accept a user who is either an engineer (as today) or in `projectManagerPool`. Other roles stay rejected.
+4. Handover routing when the requester is a PM or Assistant PM without `pm.oversight`:
+   - `isCross === false`: direct move, as today.
+   - `isCross === true`: create the `TaskHandover` with `status: 'AWAITING_HEAD_APPROVAL'`, skipping stage 1, and notify Technical Heads and Directors. Nothing moves until `decideHandover` stage 2 approves. Apply the same routing to `requestPanelHandover`.
+   - Oversight holders (Directors, Technical Heads) stay direct in every case.
+   - `teamRootOf` must treat a pool member as the root of their own team, so a PM moving work to themselves or to their own engineer counts as same-team.
+5. Pickers: the reassign list for PMs shows every engineer plus the pool. Mark people outside the requester's team "Needs Head approval", so the PM knows before submitting. `suggestAssignees` shows pool members in a "Project Managers" group, ranked by free hours. `applyHardRules` H4 stays, so auto-assign never picks them.
+6. Tests (integration suite):
+   - A Technical Head assigns a task to an Assistant PM: it moves immediately, shows in their My Work, notification sent.
+   - A PM reassigns to their own engineer or to themselves: it moves immediately.
+   - A PM reassigns to another PM's engineer, or to another PM/Assistant PM: a request is created in `AWAITING_HEAD_APPROVAL`, the owner is unchanged, and heads are notified. After a head approves, the task moves. After a head rejects, it stays.
+   - An engineer still can't hand over across teams.
+   - Auto-assign never selects a pool member.
+   - Existing handover tests stay green.
+
+## 4b. PMs and Assistant PMs can't create tasks (confirmed 2026-09-26)
+
+**Rule:** only Directors and Technical Heads create tasks, planned or urgent (adhoc). PMs and Assistant PMs keep read, update, assign, reassign and review.
+
+**A PM can create tasks today through 4 paths, and all 4 must close:**
+1. `core/rbac/permissions.ts:191,194` (`PROJECT_MANAGER`) and `:210,213` (`ASST_MANAGER`): remove `pm.task.create` and `pm.task.adhoc.create`.
+2. `services/access.ts:106,109` `MANAGER_IMPLIED`: remove both keys. Without this, the manager of a project still gets them on their own project.
+3. `services/project.service.ts:557-558`: remove the `|| project.managerId === principal.userId` fallback on `canCreateTask` and `canCreateAdhocTask`. It bypasses the permission check and would keep the buttons visible.
+4. **Live database:** role permissions are stored in `role_permissions`, and code changes don't touch them. Add `prisma/scripts/revoke-pm-task-create.ts`, following the existing `grant-*.ts` scripts, that deletes those two keys for `PROJECT_MANAGER` and `ASST_MANAGER`. It's a production data change: take a backup first, and the user approves the run.
+
+**Follow-on effects:** the "Urgent task" sidebar item (`sidebar.tsx:114`) and `/pm/adhoc` (`adhoc/page.tsx:28`) hide or redirect by themselves once the permission is gone. Check that PMs still see and edit existing tasks. `pm.task.update` and `pm.task.assign` stay.
+
+**Tests:**
+- A PM calling `createTask` (planned and ADHOC) on their own project gets `ForbiddenError`.
+- A Technical Head can still create both kinds.
+- The PM's project page returns `canCreateTask: false` and `canCreateAdhocTask: false`.
 
 ## 5. Timeline header labels overlap
 
@@ -286,7 +324,7 @@ This is a data task, not a code change.
 - One commit per plan section, with a message like `feat(pm): #6 clients menu`.
 - Line numbers in this plan go stale as soon as you edit. Search for the quoted code instead.
 - Before each commit, run `npm run typecheck && npm test && npm run build` (there is no lint script yet; #0 A adds one if wanted). Also run `npm run test:int` once #0 B exists. All of them must pass.
-- Do not touch the parked items #4 and #7, or ERP, HRMS and Gate.
+- Do not touch the parked item #7, or ERP, HRMS and Gate.
 
 **Already done: do not redo or revert:**
 - Multi-panel engineer assignment and direct management handover (`eaff6f6`).
@@ -399,7 +437,7 @@ All must pass. Paste the output into the summary.
 6. #6: Clients menu.
 7. #1: service call (confirm the open question first).
 
-Parked: #4 and #7 (urgent task).
+Parked: #7 (urgent task). #4 was un-parked on 2026-09-26 (PM and Assistant PM assignees).
 
 ## Side note
 
