@@ -124,4 +124,46 @@ describe('team isolation', () => {
     expect(yogiTeam.has('parth')).toBe(false);
     expect(yogiTeam.has('shivam')).toBe(false);
   });
+
+  it('formats group lead names with formatName and includes pool members in their own group', () => {
+    const peopleWithPool: OrgPerson[] = [
+      { id: 'dilip', managerId: null, hasOversight: true },
+      { id: 'munaf', managerId: 'dilip', hasOversight: false, isPoolMember: true },
+      { id: 'het', managerId: 'munaf', hasOversight: false },
+      { id: 'parth', managerId: 'dilip', hasOversight: false, isPoolMember: true },
+    ];
+
+    const assignable = [
+      { id: 'munaf', fullName: 'Munaf Anavarbhai Multani' },
+      { id: 'het', fullName: 'Het Patel' },
+      { id: 'parth', fullName: 'Parth Dasharathbhai Nagar' },
+    ];
+
+    const leadNames = new Map([
+      ['munaf', 'Munaf Anavarbhai Multani'],
+      ['parth', 'Parth Dasharathbhai Nagar'],
+    ]);
+
+    const groups = groupEngineersBySquad(assignable, peopleWithPool, 'munaf', false, leadNames);
+
+    // Formatted name used for leadName and label (no raw 3-part names)
+    expect(groups[0].leadId).toBe('munaf');
+    expect(groups[0].leadName).toBe('Munaf Multani');
+    expect(groups[0].label).toBe('Munaf Multani');
+    expect(groups[0].isOwnSquad).toBe(true);
+
+    // Other squad has formatted name + (needs approval)
+    expect(groups[1].leadId).toBe('parth');
+    expect(groups[1].leadName).toBe('Parth Nagar');
+    expect(groups[1].label).toBe('Parth Nagar (needs approval)');
+
+    // Pool member Munaf appears inside his own squad members
+    const munafSquad = groups.find((g) => g.leadId === 'munaf');
+    expect(munafSquad?.members.some((m) => m.id === 'munaf')).toBe(true);
+    expect(munafSquad?.members.some((m) => m.id === 'het')).toBe(true);
+
+    // Parth appears in his squad members
+    const parthSquad = groups.find((g) => g.leadId === 'parth');
+    expect(parthSquad?.members.some((m) => m.id === 'parth')).toBe(true);
+  });
 });

@@ -14,6 +14,7 @@ export interface OrgPerson {
 }
 
 export { isExecutionStaff } from './availability';
+import { formatName } from '@/core/utils/strings';
 
 export function teamRootOf(userId: string, people: OrgPerson[]): string {
   const byId = new Map(people.map((p) => [p.id, p]));
@@ -89,11 +90,12 @@ export function groupEngineersBySquad<T extends { id: string; fullName: string }
   const groups: SquadGroup<T>[] = [];
   for (const [leadId, members] of byLead.entries()) {
     const isOwn = leadId === currentSquadLeadId;
-    const rawLeadName = leadNameMap?.get(leadId) ?? 'Squad Lead';
-    const label = hasOversight || isOwn ? rawLeadName : `${rawLeadName} (needs approval)`;
+    const rawLeadName = leadNameMap?.get(leadId);
+    const leadName = rawLeadName ? formatName(rawLeadName) : 'Squad Lead';
+    const label = hasOversight || isOwn ? leadName : `${leadName} (needs approval)`;
     groups.push({
       leadId,
-      leadName: rawLeadName,
+      leadName,
       isOwnSquad: isOwn,
       label,
       members: [...members].sort((a, b) => a.fullName.localeCompare(b.fullName)),

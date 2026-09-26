@@ -6,6 +6,9 @@ import { assignTask, listMyTasks, createTask } from './task.service';
 import { requestHandover, decideHandover } from './handover.service';
 import { getProjectWorkspace } from './project.service';
 import { allocateTeamForSteps, type SmartCandidate, type SmartStepRequirement } from '../domain/availability';
+import { groupEngineersBySquad } from '../domain/teams';
+import { getOrgPeople } from './access';
+import { formatName } from '@/core/utils/strings';
 
 describe('PM and Assistant PM Task Assignment (#4) Integration Tests', () => {
   let dilipPrincipal: any; // Technical Head (ACS-0061)
@@ -416,5 +419,47 @@ describe('PM and Assistant PM Task Assignment (#4) Integration Tests', () => {
       where: { taskId: crossTaskId, status: 'ACTIVE', role: 'OWNER' },
     });
     expect(currentOwner?.userId).toBe(harshUser.id);
+  });
+
+  it('11. (#4c) Project workspace colleague list includes the project manager', async () => {
+    const project = await prisma.project.findUniqueOrThrow({
+      where: { id: testProjectId },
+      select: { managerId: true },
+    });
+
+    const colleagues = await prisma.user.findMany({
+      where: {
+        companyId: dilipPrincipal.companyId,
+        status: 'ACTIVE',
+        roleAssignments: {
+          some: {
+            role: {
+              key: {
+                in: [
+                  'SENIOR_ENGINEER',
+                  'JUNIOR_ENGINEER',
+                  'PM_BASE',
+                  'PROJECT_MANAGER',
+                  'ASST_MANAGER',
+                ],
+              },
+            },
+          },
+        },
+      },
+      select: { id: true, fullName: true },
+    });
+
+    // The project manager (Dhrupin) is present in colleagues
+    expect(colleagues.some((c) => c.id === project.managerId)).toBe(true);
+
+    const people = await getOrgPeople(dilipPrincipal.companyId);
+    const leadNameMap = new Map(people.map((p) => [p.id, p.fullName]));
+    const groups = groupEngineersBySquad(colleagues, people, project.managerId, false, leadNameMap);
+
+    const ownGroup = groups.find((g) => g.leadId === project.managerId);
+    expect(ownGroup).toBeDefined();
+    expect(ownGroup?.members.some((m) => m.id === project.managerId)).toBe(true);
+    expect(ownGroup?.leadName).toBe(formatName(leadNameMap.get(project.managerId)!));
   });
 });
