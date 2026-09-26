@@ -176,6 +176,42 @@ This is a data task, not a code change.
 - A Technical Head can still create both kinds.
 - The PM's project page returns `canCreateTask: false` and `canCreateAdhocTask: false`.
 
+## 4c. Assignee dropdowns: the project's PM is missing, and headings show full names (2026-09-26)
+
+**Found after the #4 deploy:** on a project managed by Munaf (Assistant PM), the grouped assignee dropdown shows "Munaf Anavarbhai Multani" as a group heading, but Munaf himself can't be selected.
+
+**Cause:**
+- `src/app/(shell)/pm/projects/[id]/page.tsx`, `colleagues` query: `id: { not: project.managerId }` removes the project's own manager. It predates #4, when PMs weren't assignable, and the #4 review missed it.
+- `groupEngineersBySquad` (`domain/teams.ts`) labels groups with the raw `fullName`, while the options use `formatName`.
+
+**Fix:**
+1. Remove `id: { not: project.managerId }` from the `colleagues` query only. Keep it on `eligibleManagers`, because project handover to another PM must still exclude the current PM. The PM then appears inside their own group.
+2. In `groupEngineersBySquad`, pass the lead name through `formatName` (`src/core/utils/strings.ts`) for both `leadName` and `label`.
+
+The same component serves the WBS assignee cell, the task-page assign control and the panel handover button.
+
+**Tests:**
+- `teams.test.ts`: the label uses `formatName`, and a pool member appears in their own group.
+- Integration: the project workspace colleague list includes the project's manager.
+
+## 4d. Progress update: one slider (2026-09-26)
+
+**Request:** replace the separate "New completion" presets (25/50/75/100) and the "Custom %" box with a single slider (`src/app/(shell)/pm/tasks/[id]/progress-form.tsx`).
+
+**Spec:**
+- A label row: "New completion" on the left, the value (`{percent}%`, large) on the right.
+- Native `<input type="range" name="percentComplete">` with **`min={0}` `max={100}` `step={5}`**. In `onChange`, clamp so it can't go below current progress: `Math.max(currentPercent, value)`.
+  - Don't use `min={currentPercent}`. A slider counts steps from `min`, so a task at 33% could only stop at 33…98 and never reach 100, and the 0–100 tick labels wouldn't line up with the track.
+- Mark the part below current progress as locked: a muted overlay over the left `currentPercent%`, or the hint "Can't go below {currentPercent}%".
+- Tick labels 0 / 25 / 50 / 75 / 100 under the track, positioned by percentage.
+- Initial value: `Math.min(100, Math.max(currentPercent, 25))`.
+- Accessible: `aria-label`, `aria-valuetext`. Keyboard arrows work, since the slider is native.
+- No service or validation changes. The server already rejects a lower value.
+
+**Status:** `70132de` implemented it with `min={currentPercent}`. Fix as above.
+
+**Check in the browser:** current progress of 0%, 33% and 90%. The thumb never goes below current, 100 is reachable, and the ticks line up. Desktop and 375px.
+
 ## 5. Timeline header labels overlap
 
 **Bug (screenshot, WO 123123):** in the project timeline header (`src/components/project-timeline.tsx:246-278`), all the labels are absolutely positioned on one 24px line:
