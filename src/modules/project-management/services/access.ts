@@ -316,23 +316,18 @@ export async function reassignTeamFor(principal: Principal): Promise<Set<string>
  * so the PM, assistant managers and heads are never offered as assignees.
  */
 export async function teamOf(companyId: string, userId: string): Promise<Set<string>> {
-  const people = await prisma.user.findMany({
-    where: { companyId, status: 'ACTIVE' },
-    select: {
-      id: true,
-      managerId: true,
-      grade: true,
-      designation: true,
-      roleAssignments: {
-        where: { role: { permissions: { some: { permission: { key: 'pm.oversight' } } } } },
-        select: { id: true },
+  const [people, orgPeople] = await Promise.all([
+    prisma.user.findMany({
+      where: { companyId, status: 'ACTIVE' },
+      select: {
+        id: true,
+        grade: true,
+        designation: true,
       },
-    },
-  });
-  const members = teamMemberIds(
-    userId,
-    people.map((p) => ({ id: p.id, managerId: p.managerId, hasOversight: p.roleAssignments.length > 0 })),
-  );
+    }),
+    getOrgPeople(companyId),
+  ]);
+  const members = teamMemberIds(userId, orgPeople);
   return new Set(people.filter((p) => members.has(p.id) && isExecutionStaff(p)).map((p) => p.id));
 }
 

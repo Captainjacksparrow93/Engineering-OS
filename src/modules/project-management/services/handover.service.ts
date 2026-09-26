@@ -124,7 +124,7 @@ export async function requestHandover(
   const fromSquadLeadId = teamRootOf(fromUserId, people);
   const isCross = toSquadLeadId !== fromSquadLeadId;
   const isManagerOrLead = !isExecutionStaff(principal) || canManage;
-  const hasOversight = can(principal, 'pm.oversight');
+  const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight');
   const isDirectMove = hasOversight || (isManagerOrLead && !isCross);
 
   if (isCross && isExecutionStaff(principal)) {
@@ -1729,7 +1729,7 @@ export async function requestPanelHandover(
     }
   }
 
-  const hasOversight = can(principal, 'pm.oversight');
+  const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight');
   const isDirectMove = hasOversight || (isManagerOrLead && !isCross);
 
   if (isDirectMove) {
@@ -1963,7 +1963,21 @@ export async function requestPanelHandover(
       throw new DomainError('No tasks could be reassigned (target may already own them).');
     }
 
-    if (isCross) {
+    if (isManagerOrLead && isCross) {
+      // Cross-team handover by PM / Asst PM: notify Technical Heads + Directors
+      const oversightIds = await oversightRecipients(principal.companyId, phaseTask.project.departmentId, principal.userId);
+      if (oversightIds.length > 0) {
+        await notify(
+          {
+            userIds: oversightIds,
+            title: `Cross-team panel handover requested: ${phaseTask.title} (${createdList.length} tasks)`,
+            body: `${formatName(principal.fullName)} requested to hand over ${createdList.length} tasks in "${phaseTask.title}" to ${formatName(target.fullName)}. Head approval required.`,
+            link: '/pm/approvals',
+          },
+          tx,
+        );
+      }
+    } else if (isCross) {
       // Cross-squad panel handover: receiving squad lead (PM2) and leadership notified
       const oversightIds = await oversightRecipients(principal.companyId, phaseTask.project.departmentId, principal.userId);
       const notifyUserIds = Array.from(

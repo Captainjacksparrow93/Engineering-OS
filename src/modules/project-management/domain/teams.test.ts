@@ -97,4 +97,31 @@ describe('team isolation', () => {
     expect(teamRootOf('dhrupin', peopleWithPool)).not.toBe(teamRootOf('harsh', peopleWithPool));
     expect(teamRootOf('dhrupin', peopleWithPool)).not.toBe(teamRootOf('paras', peopleWithPool));
   });
+
+  it('stops at pool members in teamMemberIds so an engineer squad never leaks into a parent PM squad', () => {
+    const peopleWithPool: OrgPerson[] = [
+      { id: 'satish', managerId: null, hasOversight: true },
+      { id: 'dilip', managerId: 'satish', hasOversight: true },
+      { id: 'parth', managerId: 'dilip', hasOversight: false, isPoolMember: true },
+      { id: 'shivam', managerId: 'parth', hasOversight: false },
+      { id: 'dhrupin', managerId: 'parth', hasOversight: false, isPoolMember: true },
+      { id: 'yogi', managerId: 'dhrupin', hasOversight: false },
+      { id: 'paras', managerId: 'dilip', hasOversight: false, isPoolMember: true },
+      { id: 'harsh', managerId: 'paras', hasOversight: false },
+    ];
+
+    // Parth's team members should include shivam, but stop at dhrupin (and thus exclude yogi)
+    const parthTeam = teamMemberIds('parth', peopleWithPool);
+    expect(parthTeam.has('parth')).toBe(true);
+    expect(parthTeam.has('shivam')).toBe(true);
+    expect(parthTeam.has('dhrupin')).toBe(false);
+    expect(parthTeam.has('yogi')).toBe(false);
+
+    // Yogi / Dhrupin team should be dhrupin and yogi only, excluding parth
+    const yogiTeam = teamMemberIds('yogi', peopleWithPool);
+    expect(yogiTeam.has('dhrupin')).toBe(true);
+    expect(yogiTeam.has('yogi')).toBe(true);
+    expect(yogiTeam.has('parth')).toBe(false);
+    expect(yogiTeam.has('shivam')).toBe(false);
+  });
 });

@@ -244,7 +244,7 @@ export async function handoverCandidates(principal: Principal, taskId: string) {
       priority: true,
       requiredSkills: true,
       projectId: true,
-      assignments: { where: { status: 'ACTIVE' }, select: { userId: true } },
+      assignments: { where: { status: 'ACTIVE' }, select: { userId: true, role: true } },
     },
   });
 
@@ -385,7 +385,9 @@ export async function handoverCandidates(principal: Principal, taskId: string) {
   });
 
   const people = await getOrgPeople(principal.companyId);
-  const requesterRoot = teamRootOf(principal.userId, people);
+  const owner = task.assignments.find((a) => a.role === 'OWNER') ?? task.assignments[0];
+  const fromUserId = owner?.userId ?? principal.userId;
+  const ownerRoot = teamRootOf(fromUserId, people);
   const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight');
 
   return ranked
@@ -396,7 +398,7 @@ export async function handoverCandidates(principal: Principal, taskId: string) {
       return b.score - a.score;
     })
     .map((candidate) => {
-      const isCross = teamRootOf(candidate.workload.person.id, people) !== requesterRoot;
+      const isCross = teamRootOf(candidate.workload.person.id, people) !== ownerRoot;
       const needsApproval = !hasOversight && isCross;
       return {
         ...candidate,
@@ -412,7 +414,7 @@ export async function peersForHandover(principal: Principal, taskId: string) {
 
   const task = await prisma.task.findUniqueOrThrow({
     where: { id: taskId },
-    select: { projectId: true, assignments: { where: { status: 'ACTIVE' }, select: { userId: true } } },
+    select: { projectId: true, assignments: { where: { status: 'ACTIVE' }, select: { userId: true, role: true } } },
   });
   const held = task.assignments.map((a) => a.userId);
   const team = await reassignTeamFor(principal);
@@ -455,11 +457,13 @@ export async function peersForHandover(principal: Principal, taskId: string) {
   });
 
   const people = await getOrgPeople(principal.companyId);
-  const requesterRoot = teamRootOf(principal.userId, people);
+  const owner = task.assignments.find((a) => a.role === 'OWNER') ?? task.assignments[0];
+  const fromUserId = owner?.userId ?? principal.userId;
+  const ownerRoot = teamRootOf(fromUserId, people);
   const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight');
 
   return users.map((u) => {
-    const isCross = teamRootOf(u.id, people) !== requesterRoot;
+    const isCross = teamRootOf(u.id, people) !== ownerRoot;
     return {
       ...u,
       needsApproval: !hasOversight && isCross,

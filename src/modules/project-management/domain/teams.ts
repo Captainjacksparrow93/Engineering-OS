@@ -37,6 +37,7 @@ export function teamRootOf(userId: string, people: OrgPerson[]): string {
 
 /** Everyone in the same team as `userId`: the team root and all their direct/indirect reports. */
 export function teamMemberIds(userId: string, people: OrgPerson[]): Set<string> {
+  const byId = new Map(people.map((p) => [p.id, p]));
   const root = teamRootOf(userId, people);
   const reportsByManager = new Map<string, string[]>();
   for (const person of people) {
@@ -48,10 +49,13 @@ export function teamMemberIds(userId: string, people: OrgPerson[]): Set<string> 
   const members = new Set<string>([root]);
   const queue = [root];
   while (queue.length) {
-    for (const report of reportsByManager.get(queue.shift()!) ?? []) {
-      if (members.has(report)) continue;
-      members.add(report);
-      queue.push(report);
+    const current = queue.shift()!;
+    for (const reportId of reportsByManager.get(current) ?? []) {
+      if (members.has(reportId)) continue;
+      const report = byId.get(reportId);
+      if (report?.hasOversight || report?.isPoolMember) continue;
+      members.add(reportId);
+      queue.push(reportId);
     }
   }
   return members;
