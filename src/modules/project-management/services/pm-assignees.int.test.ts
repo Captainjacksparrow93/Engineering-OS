@@ -33,10 +33,24 @@ describe('PM and Assistant PM Task Assignment (#4) Integration Tests', () => {
     parasPrincipal = await loadPrincipal(parasUser.id);
     yogiPrincipal = await loadPrincipal(yogiUser.id);
 
-    // Create a test project and tasks
+    // Look up TECH department for Dilip's company
+    const techDept = await prisma.department.findUnique({
+      where: {
+        companyId_code: {
+          companyId: dilipPrincipal.companyId,
+          code: 'TECH',
+        },
+      },
+    });
+    if (!techDept) {
+      throw new Error(`TECH department missing from seed for company ${dilipPrincipal.companyId}`);
+    }
+
+    // Create a test project connected to the TECH department and tasks
     const proj = await prisma.project.create({
       data: {
         company: { connect: { id: dilipPrincipal.companyId } },
+        departmentId: techDept.id,
         code: `TEST-PM-${Date.now()}`,
         name: 'PM Assignee Test Project',
         clientName: 'Test Client',
@@ -67,15 +81,60 @@ describe('PM and Assistant PM Task Assignment (#4) Integration Tests', () => {
       },
     });
     crossTaskId = task2.id;
+
+    // Give each test task an active OWNER assignment in beforeAll
+    await prisma.taskAssignment.createMany({
+      data: [
+        {
+          taskId: testTaskId,
+          userId: yogiPrincipal.userId,
+          role: 'OWNER',
+          allocatedHours: 8,
+          assignedById: dilipPrincipal.userId,
+        },
+        {
+          taskId: crossTaskId,
+          userId: yogiPrincipal.userId,
+          role: 'OWNER',
+          allocatedHours: 8,
+          assignedById: dilipPrincipal.userId,
+        },
+      ],
+    });
   });
 
   afterAll(async () => {
     if (testProjectId) {
+      const tasks = await prisma.task.findMany({
+        where: { projectId: testProjectId },
+        select: { id: true },
+      });
+      const taskIds = tasks.map((t) => t.id);
+
+      await prisma.notification.deleteMany({
+        where: {
+          OR: [
+            { link: { contains: testProjectId } },
+            ...taskIds.map((id) => ({ link: { contains: id } })),
+            {
+              userId: {
+                in: [
+                  dilipPrincipal?.userId,
+                  dhrupinPrincipal?.userId,
+                  parasPrincipal?.userId,
+                  yogiPrincipal?.userId,
+                ].filter(Boolean),
+              },
+              link: '/pm/approvals',
+            },
+          ],
+        },
+      });
+
       await prisma.taskHandover.deleteMany({ where: { task: { projectId: testProjectId } } });
       await prisma.taskAssignment.deleteMany({ where: { task: { projectId: testProjectId } } });
       await prisma.task.deleteMany({ where: { projectId: testProjectId } });
       await prisma.projectMember.deleteMany({ where: { projectId: testProjectId } });
-      await prisma.notification.deleteMany({ where: { link: { contains: testProjectId } } });
       await prisma.project.delete({ where: { id: testProjectId } }).catch(() => {});
     }
   });
@@ -140,6 +199,17 @@ describe('PM and Assistant PM Task Assignment (#4) Integration Tests', () => {
   });
 
   it('3. PM reassigns to another PM: created in AWAITING_HEAD_APPROVAL, owner unchanged, moves after head approves', async () => {
+    // Reset crossTaskId owner to Yogi
+    await assignTask(dilipPrincipal, crossTaskId, {
+      userId: yogiPrincipal.userId,
+      role: 'OWNER',
+    });
+
+    // Clear previous approval notifications for Dilip so assertion is isolated
+    await prisma.notification.deleteMany({
+      where: { userId: dilipPrincipal.userId, link: '/pm/approvals' },
+    });
+
     // Currently owned by Yogi (Dhrupin's team). Dhrupin reassigns to Paras (another PM).
     const handover = await requestHandover(dhrupinPrincipal, {
       taskId: crossTaskId,
@@ -196,6 +266,12 @@ describe('PM and Assistant PM Task Assignment (#4) Integration Tests', () => {
   });
 
   it('5. Engineer cannot hand over across teams', async () => {
+    // Reset crossTaskId owner to Yogi
+    await assignTask(dilipPrincipal, crossTaskId, {
+      userId: yogiPrincipal.userId,
+      role: 'OWNER',
+    });
+
     const harshUser = await prisma.user.findFirst({ where: { employeeCode: 'ACS-0064' } });
     if (!harshUser) throw new Error('Harsh user (ACS-0064) missing from seed');
 

@@ -123,11 +123,13 @@ export async function requestHandover(
   const toSquadLeadId = teamRootOf(input.toUserId, people);
   const fromSquadLeadId = teamRootOf(fromUserId, people);
   const isCross = toSquadLeadId !== fromSquadLeadId;
-  const isManagerOrLead = !isExecutionStaff(principal) || canManage;
+  const isPoolRequester =
+    principal.roleKeys.includes('PROJECT_MANAGER') || principal.roleKeys.includes('ASST_MANAGER');
+  const isManagerOrLead = isPoolRequester || !isExecutionStaff(principal) || canManage;
   const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight');
   const isDirectMove = hasOversight || (isManagerOrLead && !isCross);
 
-  if (isCross && isExecutionStaff(principal)) {
+  if (isCross && !isManagerOrLead && !hasOversight) {
     throw new DomainError('Engineers cannot hand over tasks outside their squad.');
   }
 
@@ -1666,7 +1668,9 @@ export async function requestPanelHandover(
       departmentId: phaseTask.project.departmentId,
     });
 
-  const isManagerOrLead = !isExecutionStaff(principal) || canManage;
+  const isPoolRequester =
+    principal.roleKeys.includes('PROJECT_MANAGER') || principal.roleKeys.includes('ASST_MANAGER');
+  const isManagerOrLead = isPoolRequester || !isExecutionStaff(principal) || canManage;
 
   const eligibleTasks = phaseTask.children.filter((t) => {
     const owner = t.assignments.find((a) => a.role === 'OWNER');
@@ -1717,19 +1721,19 @@ export async function requestPanelHandover(
   const fromSquadRoot = teamRootOf(firstOwner, people);
   const toSquadRoot = teamRootOf(target.id, people);
   const isCross = fromSquadRoot !== toSquadRoot;
+  const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight');
 
-  if (isCross && isExecutionStaff(principal)) {
+  if (isCross && !isManagerOrLead && !hasOversight) {
     throw new DomainError('Engineers cannot hand over tasks across squads. Ask your project manager.');
   }
 
-  if (!isCross && isExecutionStaff(principal)) {
+  if (!isCross && !isManagerOrLead && !hasOversight) {
     const team = await reassignTeamFor(principal);
     if (team && !team.has(target.id)) {
       throw new DomainError(OUTSIDE_TEAM_MESSAGE);
     }
   }
 
-  const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight');
   const isDirectMove = hasOversight || (isManagerOrLead && !isCross);
 
   if (isDirectMove) {

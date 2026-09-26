@@ -307,6 +307,7 @@ export async function projectManagerPool(companyId: string) {
  */
 export async function reassignTeamFor(principal: Principal): Promise<Set<string> | null> {
   if (hasPermissionAnywhere(principal, 'pm.oversight')) return null;
+  if (principal.roleKeys.includes('PROJECT_MANAGER') || principal.roleKeys.includes('ASST_MANAGER')) return null;
   if (!isExecutionStaff(principal)) return null;
   return teamOf(principal.companyId, principal.userId);
 }
