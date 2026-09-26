@@ -5,3 +5,4 @@ Status: TODO → IN PROGRESS → DONE → REVIEWED (then moved to done/)
 
 | # | Plan | Status | Notes |
 |---|---|---|---|
+| 001 | [Build image locally, ship to VPS](001-local-image-build-deploy.md) | TODO | Replaces GHCR build + auto-deploy; owner runs `scripts/deploy.sh` |
