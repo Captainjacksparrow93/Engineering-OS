@@ -117,28 +117,42 @@ npm run typecheck && npm test && npm run build && npm run test:int
 
 **Schema changes:** `npx prisma migrate dev --name <change>`, then commit the folder. **Never `prisma db push`** against a shared or production DB. Permission grants and revokes are hand-written SQL migrations (`migrate dev --create-only`), not new scripts. Example: `20260926150000_revoke_pm_task_create`.
 
-## 6. How it's deployed (current reality)
+## 6. How it's deployed
 
-**Pushing to `main` is the deploy.** There is no manual approval step.
+**Pushing to `main` is the deploy.** There is no manual approval step. The full design is in [docs/deploy-pipeline-plan.md](docs/deploy-pipeline-plan.md).
 
-1. `.github/workflows/ci.yml` runs on every push and PR to `main`: `npm ci` → `prisma validate` → migrate and seed a throwaway Postgres → typecheck → unit tests → integration tests → `next build`.
-2. If CI passes on `main`, `.github/workflows/deploy.yml` SSHes to the VPS (secret `VPS_SSH_KEY`) and runs:
-   `git pull origin main` → `docker compose up -d --build --remove-orphans` → `docker image prune -f`.
-   **The image is built on the VPS** (it takes several minutes). The old container keeps serving until the new one is ready.
-3. The new container runs `entrypoint.sh`:
-   - `prisma migrate deploy`. This is fatal if it fails, so the container won't start on a bad migration.
-   - `prisma/seed.ts`, plus the `grant-*.ts` scripts and `set-passwords-from-csv.ts`. These aren't fatal: failures are only logged.
+1. **CI** (`.github/workflows/ci.yml`) runs on every push and PR to `main`: `npm ci` → `prisma validate` → migrate and seed a throwaway Postgres → typecheck → unit tests → integration tests → `next build`.
+2. **Publish** (a job in `ci.yml`, on push to `main` only): builds the Docker image once and pushes it to GHCR as `ghcr.io/n8nmonk-wq/engineering-os:<commit sha>` and `:latest`. The package is private.
+3. **Deploy** (`.github/workflows/deploy.yml`, runs after CI passes): SSHes to the VPS (secret `VPS_SSH_KEY`), then:
+   1. `git pull`, for the compose file and scripts only. **Nothing is built on the VPS.**
+   2. `./scripts/backup.sh`. The deploy stops if the backup fails.
+   3. Save the running sha to `.previous-sha`.
+   4. `docker compose pull app`, then `up -d --no-build app` with `APP_IMAGE=…:<sha>`.
+   5. Write `.deployed-sha`.
+   6. Wait up to 3 minutes for the container to be healthy. If it isn't, the run goes red and prints the logs. There is no automatic rollback.
+4. **Container start** (`entrypoint.sh`):
+   - `prisma migrate deploy`. This is fatal if it fails.
+   - `seed.ts`, the legacy `grant-*.ts` scripts and `set-passwords-from-csv.ts`. These aren't fatal: failures are only logged.
    - Then the Next.js server starts.
-4. Docker's healthcheck calls `/api/health`, which checks the DB and that no migration is left unfinished.
+   - The healthcheck calls `/api/health`, which checks the DB and that no migration is left unfinished.
 
-**Planned improvement (not built yet):** build the image once in CI, push it to GHCR, pull it on the VPS, take an automatic backup before migrating, add a health gate and one-command rollback. See [docs/deploy-pipeline-plan.md](docs/deploy-pipeline-plan.md).
+**One-time setup this relies on** (the owner does this, and it's done once):
+- The GHCR package is private, and the repo has access to it.
+- The VPS runs `docker login ghcr.io` with a token that has only `read:packages`.
 
-### Release checklist (do this every time until the pipeline plan lands)
+Until this setup is done, the pull step fails, the run goes red, and the old container keeps serving.
+
+**Rollback:** on the VPS, run `./scripts/rollback.sh`. It redeploys the image in `.previous-sha`.
+- If the bad release ran a migration, restore the backup first (`scripts/restore.sh`), with owner approval.
+- There's no previous sha until the second deploy on the new pipeline.
+- Caveat: running `docker compose up` by hand without `APP_IMAGE` uses `:latest`, which undoes a rollback. Always pass `APP_IMAGE=ghcr.io/n8nmonk-wq/engineering-os:$(cat .deployed-sha)`.
+
+### Release checklist
 1. All local checks are green (§5) and the work has been reviewed.
-2. On the VPS: `cd /root/engos-docker && ./scripts/backup.sh`, then `gunzip -t` the file.
-3. Copy the backup off the VPS: `scp root@72.62.248.38:/root/engos-docker/backups/<file> <local folder>`.
-4. `git push origin main`, then watch GitHub Actions and `docker compose logs -f app`.
-5. Smoke test on prod: log in, then open the dashboard, a project, a task, People and Audit, and use the screens the change touched.
+2. `git push origin main`. The backup, image pull, migrations and health gate run automatically.
+3. Copy the new backup off the VPS: `scp root@72.62.248.38:/root/engos-docker/backups/<latest>.sql.gz <local folder>`.
+4. Smoke test on prod: log in, then open the dashboard, a project, a task, People and Audit, and use the screens the change touched.
+5. Before a migration that changes existing rows, rehearse it on a restored backup first ([docs/migration-rehearsal-plan.md](docs/migration-rehearsal-plan.md)).
 
 The older [docs/deployment-runbook.md](docs/deployment-runbook.md) covers the one-off September 2026 cut-over and is historical.
 
@@ -148,12 +162,12 @@ The older [docs/deployment-runbook.md](docs/deployment-runbook.md) covers the on
 |---|---|
 | Status | `docker compose ps` |
 | App logs | `docker compose logs -f --tail 200 app` |
-| Deployed commit | `git log --oneline -1` |
+| Deployed commit | `cat .deployed-sha` |
 | Applied migrations | `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT migration_name, finished_at FROM _prisma_migrations ORDER BY started_at"'` |
 | DB shell | `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'` |
 | Backup | `./scripts/backup.sh` → `backups/backup_<timestamp>.sql.gz` (keeps 14 days) |
 | Restore | `./scripts/restore.sh <file>`. Stop the app first; the owner must approve. |
-| Roll back code | `git revert <commit>` locally, then push (this redeploys). If a migration ran, restore the backup first. |
+| Roll back code | `./scripts/rollback.sh` (previous image, in seconds). If a migration ran, restore the backup first. |
 | Restart the app only | `docker compose restart app` |
 
 **Gap:** there's **no scheduled nightly backup** on the VPS today (no cron entry). Backups happen only when someone runs `backup.sh`. Recommended: a cron job for `backup.sh`, plus a copy off the box.
@@ -169,7 +183,7 @@ From `AGENTS.md` and `CLAUDE.md`, which remain the source of truth:
 - **Way of working so far:** Claude (Claude Code) writes plans in `docs/` and reviews commits. Antigravity (Gemini) implements. The owner relays between them and pushes.
 
 ## 9. Known debt and open items
-- **Deploy pipeline** plan not implemented yet ([docs/deploy-pipeline-plan.md](docs/deploy-pipeline-plan.md)).
+- **Deploy pipeline** is implemented (`72d56b2`), but it needs the one-time GHCR setup in §6 before it can run.
 - **No automatic nightly backup** (§7).
 - **Password handling:** `prisma/data/logins.csv` and `set-passwords-from-csv.ts` still run at startup. The retirement plan is in [docs/client-requests-2026-09-25.md](docs/client-requests-2026-09-25.md) §0 E. `seed.ts` still has a default-password fallback.
 - **4 legacy `grant-*.ts` scripts** run at every start. They're idempotent. New permission changes go in migrations instead.
