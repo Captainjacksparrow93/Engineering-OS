@@ -19,6 +19,11 @@ prisma/*.db
 *Vertex*.json
 *vertex*.json
 
+# Cloud credentials: never commit
+*key*.json
+*.credentials.json
+secrets/
+
 # Agent session state
 .claude/
 
