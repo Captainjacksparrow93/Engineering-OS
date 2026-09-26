@@ -1,5 +1,7 @@
 # Engineering OS: rules for coding agents
 
+Read [PROJECT.md](PROJECT.md) for the stack, hosting and deploy overview.
+
 ## The app is LIVE in production
 
 Real employees of ACS Engitech use it every day at the VPS (`72.62.248.38`, `/root/engos-docker`). Treat every change as a production change.

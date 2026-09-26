@@ -1,5 +1,7 @@
 # Engineering OS
 
+> **Taking over this project? Read [PROJECT.md](PROJECT.md) first.** It covers the stack, hosting, deployment and working rules.
+
 One platform for a control-panel manufacturing company — projects, people and plant —
 built so that every function of the business eventually lives in it under a single
 access model.
