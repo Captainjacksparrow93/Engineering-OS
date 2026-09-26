@@ -4,11 +4,11 @@ import { useActionState, useState } from 'react';
 import { logProgressAction, type ActionState } from '@/app/actions/pm';
 import { FormMessage, SubmitButton } from '@/components/form';
 
-const PRESETS = [25, 50, 75, 100];
+const TICKS = [0, 25, 50, 75, 100];
 
 export function ProgressForm({ taskId, currentPercent }: { taskId: string; currentPercent: number }) {
   const [state, action] = useActionState<ActionState, FormData>(logProgressAction, {});
-  const [percent, setPercent] = useState(Math.max(currentPercent, 25));
+  const [percent, setPercent] = useState(Math.min(100, Math.max(currentPercent, 25)));
 
   return (
     <section className="card border-hairline">
@@ -18,48 +18,42 @@ export function ProgressForm({ taskId, currentPercent }: { taskId: string; curre
       </header>
       <form action={action} className="card-body space-y-4">
         <input type="hidden" name="taskId" value={taskId} />
-        <input type="hidden" name="percentComplete" value={percent} />
 
         <div className="field">
-          <label className="label">
-            New completion: <span className="font-semibold text-ink">{percent}%</span>
+          <label htmlFor="percentComplete" className="label flex items-baseline justify-between mb-xs cursor-pointer">
+            <span>New completion</span>
+            <span className="text-display-sm font-semibold text-ink normal-case tracking-normal">{percent}%</span>
           </label>
-          <div className="grid grid-cols-4 gap-2 mt-1">
-            {PRESETS.map((val) => {
-              const isDisabled = val < currentPercent;
-              const isSelected = percent === val;
-              return (
-                <button
-                  key={val}
-                  type="button"
-                  disabled={isDisabled}
-                  onClick={() => setPercent(val)}
-                  className={`btn btn-sm py-2 transition-colors ${
-                    isSelected
-                      ? 'bg-ink text-canvas font-semibold'
-                      : isDisabled
-                        ? 'opacity-40 cursor-not-allowed bg-canvas-soft text-muted'
-                        : 'bg-surface hover:bg-canvas-soft border border-hairline text-ink'
-                  }`}
-                >
-                  {val}%
-                </button>
-              );
-            })}
+
+          <input
+            id="percentComplete"
+            type="range"
+            name="percentComplete"
+            min={currentPercent}
+            max={100}
+            step={5}
+            value={percent}
+            onChange={(e) => setPercent(Number(e.target.value))}
+            className="w-full accent-ink cursor-pointer"
+            aria-label="New completion"
+            aria-valuetext={`${percent}%`}
+          />
+
+          <div className="relative mt-1 h-4 text-caption text-muted select-none" aria-hidden="true">
+            {TICKS.map((val) => (
+              <span
+                key={val}
+                style={{ left: `${val}%` }}
+                className={`absolute ${
+                  val === 0 ? 'translate-x-0' : val === 100 ? '-translate-x-full' : '-translate-x-1/2'
+                }`}
+              >
+                {val}
+              </span>
+            ))}
           </div>
-          <div className="mt-2.5 flex items-center gap-2">
-            <span className="text-caption text-muted">Custom %:</span>
-            <input
-              type="number"
-              min={currentPercent}
-              max={100}
-              step={1}
-              value={percent}
-              onChange={(e) => setPercent(Math.min(100, Math.max(currentPercent, Number(e.target.value) || currentPercent)))}
-              className="input text-xs w-24 py-1"
-            />
-          </div>
-          <p className="hint mt-1 text-caption text-muted">Progress cannot be reduced. If 100% is submitted, task moves to waiting for approval.</p>
+
+          <p className="hint mt-2 text-caption text-muted">Progress cannot be reduced. If 100% is submitted, task moves to waiting for approval.</p>
         </div>
 
         <div className="field">
