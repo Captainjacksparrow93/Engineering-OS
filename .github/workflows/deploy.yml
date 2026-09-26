@@ -16,7 +16,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
 
     steps:
-      - name: SSH to VPS & Rebuild Containers
+      - name: SSH to VPS & Deploy Image
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST || '72.62.248.38' }}
@@ -25,17 +25,18 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           script: |
             set -e
-            echo "==> Navigating to app directory..."
             cd /root/engos-docker
-
-            echo "==> Pulling latest changes from GitHub main..."
             git pull origin main
-
-            echo "==> Rebuilding and restarting containers..."
-            docker compose up -d --build --remove-orphans
-
-            echo "==> Pruning unused dangling images..."
-            docker image prune -f
-
-            echo "==> Active container status:"
-            docker compose ps
+            ./scripts/backup.sh
+            SHA=${{ github.event.workflow_run.head_sha || github.sha }}
+            cat .deployed-sha 2>/dev/null > .previous-sha || true
+            export APP_IMAGE=ghcr.io/n8nmonk-wq/engineering-os:$SHA
+            docker compose pull app
+            docker compose up -d --no-build app
+            echo "$SHA" > .deployed-sha
+            for i in $(seq 1 36); do
+              s=$(docker inspect -f '{{.State.Health.Status}}' engos_app)
+              [ "$s" = healthy ] && echo "==> healthy" && exit 0
+              sleep 5
+            done
+            docker compose logs --tail 150 app; exit 1

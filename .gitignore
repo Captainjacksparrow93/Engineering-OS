@@ -26,3 +26,8 @@ prisma/*.db
 *.sql.bak
 vps-snapshot.sql
 backups/
+
+# Deployment state
+.deployed-sha
+.previous-sha
+
