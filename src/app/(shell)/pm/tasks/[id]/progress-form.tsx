@@ -25,19 +25,28 @@ export function ProgressForm({ taskId, currentPercent }: { taskId: string; curre
             <span className="text-display-sm font-semibold text-ink normal-case tracking-normal">{percent}%</span>
           </label>
 
-          <input
-            id="percentComplete"
-            type="range"
-            name="percentComplete"
-            min={currentPercent}
-            max={100}
-            step={5}
-            value={percent}
-            onChange={(e) => setPercent(Number(e.target.value))}
-            className="w-full accent-ink cursor-pointer"
-            aria-label="New completion"
-            aria-valuetext={`${percent}%`}
-          />
+          <div className="relative">
+            {currentPercent > 0 ? (
+              <div
+                className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 rounded-l bg-muted/20 pointer-events-none z-0"
+                style={{ width: `${currentPercent}%` }}
+                aria-hidden="true"
+              />
+            ) : null}
+            <input
+              id="percentComplete"
+              type="range"
+              name="percentComplete"
+              min={0}
+              max={100}
+              step={5}
+              value={percent}
+              onChange={(e) => setPercent(Math.max(currentPercent, Number(e.target.value)))}
+              className="w-full accent-ink cursor-pointer relative z-10 bg-transparent"
+              aria-label="New completion"
+              aria-valuetext={`${percent}%`}
+            />
+          </div>
 
           <div className="relative mt-1 h-4 text-caption text-muted select-none" aria-hidden="true">
             {TICKS.map((val) => (
@@ -53,7 +62,9 @@ export function ProgressForm({ taskId, currentPercent }: { taskId: string; curre
             ))}
           </div>
 
-          <p className="hint mt-2 text-caption text-muted">Progress cannot be reduced. If 100% is submitted, task moves to waiting for approval.</p>
+          <p className="hint mt-2 text-caption text-muted">
+            {currentPercent > 0 ? `Can't go below ${currentPercent}%. ` : ''}Progress cannot be reduced. If 100% is submitted, task moves to waiting for approval.
+          </p>
         </div>
 
         <div className="field">
