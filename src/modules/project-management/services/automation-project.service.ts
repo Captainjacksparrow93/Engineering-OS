@@ -6,6 +6,7 @@ import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
 import { addDays, addWorkingDays, startOfDay, workingDaysBetween } from '@/core/utils/dates';
 import { planLaneByHours } from '../domain/scheduling';
+import { projectManagerPool } from './access';
 import { recomputeTaskDerivedState } from './task.service';
 import { nextClientProjectCode } from './project.service';
 import { getClientById } from './client.service';
@@ -99,16 +100,7 @@ export async function getDescendantUserIds(companyId: string, managerId: string)
 
 export async function getPMTeamData(companyId: string) {
   // Find PMs: eligible active users holding PROJECT_MANAGER or ASST_MANAGER role in TECH department
-  const managers = await prisma.user.findMany({
-    where: {
-      companyId,
-      status: 'ACTIVE',
-      department: { code: { in: ['TECH'] } },
-      roleAssignments: { some: { role: { key: { in: ['PROJECT_MANAGER', 'ASST_MANAGER'] } } } },
-    },
-    select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true },
-    orderBy: { fullName: 'asc' },
-  });
+  const managers = await projectManagerPool(companyId);
 
   // Fetch all active company users once to build direct report hierarchy
   const activeCompanyUsers = await prisma.user.findMany({

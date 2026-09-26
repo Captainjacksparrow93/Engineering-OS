@@ -151,6 +151,8 @@ export interface AssignmentSuggestion {
   matchedSkills: string[];
   missingSkills: string[];
   reasons: string[];
+  group?: string;
+  needsApproval?: boolean;
 }
 
 /**

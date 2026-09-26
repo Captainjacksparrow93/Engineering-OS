@@ -40,7 +40,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           where: {
             companyId: principal.companyId,
             status: 'ACTIVE',
-            roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER', 'PM_BASE'] } } } },
+            roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER', 'PM_BASE', 'PROJECT_MANAGER', 'ASST_MANAGER'] } } } },
           },
           select: { id: true, fullName: true, designation: true },
           orderBy: { fullName: 'asc' },
@@ -299,8 +299,14 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                 freeHours: c.workload.freeHours,
                 status: c.workload.status,
                 matchedSkills: c.matchedSkills,
+                needsApproval: c.needsApproval,
               }))}
-              fallbackPeers={peers.map((p) => ({ id: p.id, fullName: p.fullName, designation: p.designation }))}
+              fallbackPeers={peers.map((p) => ({
+                id: p.id,
+                fullName: p.fullName,
+                designation: p.designation,
+                needsApproval: p.needsApproval,
+              }))}
             />
           ) : null}
 

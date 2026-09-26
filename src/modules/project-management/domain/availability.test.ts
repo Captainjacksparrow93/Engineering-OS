@@ -261,6 +261,29 @@ describe('Smart Team Allocation Engine', () => {
     expect(applyHardRules(onLeaveSenior, step)).toBe(false);
   });
 
+  it('rejects PMs and Assistant Managers from auto-assignment via H4', () => {
+    const pmCandidate = {
+      ...seniorCandidate,
+      grade: 'MANAGER',
+      designation: 'Project Manager',
+    };
+    const asstManagerCandidate = {
+      ...seniorCandidate,
+      designation: 'Asst. Manager',
+    };
+    const step = {
+      id: 'step-1',
+      stepNumber: 1,
+      name: 'IO List',
+      recommendedSeniority: 'JUNIOR',
+      estimatedHours: 8,
+      ...stepDates,
+    };
+
+    expect(applyHardRules(pmCandidate, step)).toBe(false);
+    expect(applyHardRules(asstManagerCandidate, step)).toBe(false);
+  });
+
   it('consumes capacity sequentially and distributes load across squad', () => {
     const candidates = [
       { ...seniorCandidate, id: 'sr-1', employeeCode: 'EMP-A', freeHours: 16 },

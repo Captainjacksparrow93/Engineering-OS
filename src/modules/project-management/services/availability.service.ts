@@ -5,7 +5,8 @@ import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
 import { ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { addDays, startOfDay } from '@/core/utils/dates';
-import { assertTaskVisible, reassignTeamFor } from './access';
+import { assertTaskVisible, getOrgPeople, projectManagerPool, reassignTeamFor } from './access';
+import { teamRootOf } from '../domain/teams';
 import {
   computeWorkload,
   rankCandidates,
@@ -201,14 +202,36 @@ export async function suggestAssignees(
 ): Promise<AssignmentSuggestion[]> {
   const workloads = await getWorkloads(principal, query);
   const filtered = workloads.filter((w) => !(query.excludeUserIds ?? []).includes(w.person.id));
-  return rankCandidates(filtered, {
+  const ranked = rankCandidates(filtered, {
     requiredSkills: query.skills,
     requiredHours: query.requiredHours,
     priority: query.priority,
   });
+
+  const pool = await projectManagerPool(principal.companyId);
+  const poolIds = new Set(pool.map((p) => p.id));
+
+  const engineers: AssignmentSuggestion[] = [];
+  const pmPool: AssignmentSuggestion[] = [];
+
+  for (const item of ranked) {
+    if (poolIds.has(item.workload.person.id)) {
+      pmPool.push({
+        ...item,
+        group: 'Project Managers',
+      });
+    } else {
+      engineers.push(item);
+    }
+  }
+
+  // Pool members in "Project Managers" group ranked by free hours
+  pmPool.sort((a, b) => b.workload.freeHours - a.workload.freeHours);
+
+  return [...engineers, ...pmPool];
 }
 
-/** Eligible engineers for reassign: active SENIOR_ENGINEER or JUNIOR_ENGINEER roles only. */
+/** Eligible assignees for reassign: active engineers OR project manager pool members. */
 export async function handoverCandidates(principal: Principal, taskId: string) {
   await assertTaskVisible(principal, taskId);
 
@@ -227,25 +250,28 @@ export async function handoverCandidates(principal: Principal, taskId: string) {
 
   const excludeUserIds = task.assignments.map((a) => a.userId);
   const team = await reassignTeamFor(principal);
+  const pool = await projectManagerPool(principal.companyId);
+  const poolIds = pool.map((p) => p.id);
 
-  // Query strictly active engineering team members (SENIOR_ENGINEER / JUNIOR_ENGINEER)
-  // Exclude PMs (PM_BASE, PROJECT_MANAGER), Technical Heads, Directors, Super Admins
-  const engineers = await prisma.user.findMany({
+  const eligibleUsers = await prisma.user.findMany({
     where: {
       companyId: principal.companyId,
       status: 'ACTIVE',
-      roleAssignments: {
-        some: {
-          role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } },
-        },
-      },
-      NOT: {
-        roleAssignments: {
-          some: {
-            role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER'] } },
+      OR: [
+        {
+          roleAssignments: {
+            some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } } },
+          },
+          NOT: {
+            roleAssignments: {
+              some: { role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER', 'ASST_MANAGER'] } } },
+            },
           },
         },
-      },
+        {
+          id: { in: poolIds },
+        },
+      ],
       id: team ? { notIn: excludeUserIds, in: [...team] } : { notIn: excludeUserIds },
     },
     select: {
@@ -263,7 +289,7 @@ export async function handoverCandidates(principal: Principal, taskId: string) {
     orderBy: { fullName: 'asc' },
   });
 
-  const userIds = engineers.map((e) => e.id);
+  const userIds = eligibleUsers.map((e) => e.id);
   if (userIds.length === 0) return [];
 
   const window = defaultWindow();
@@ -331,7 +357,7 @@ export async function handoverCandidates(principal: Principal, taskId: string) {
     leavesByUser.set(l.userId, list);
   }
 
-  const workloads = engineers.map((p) =>
+  const workloads = eligibleUsers.map((p) =>
     computeWorkload(
       {
         id: p.id,
@@ -358,16 +384,29 @@ export async function handoverCandidates(principal: Principal, taskId: string) {
     priority: task.priority,
   });
 
-  // Order by lowest current load first (highest freeHours)
-  return ranked.sort((a, b) => {
-    if (a.workload.freeHours !== b.workload.freeHours) {
-      return b.workload.freeHours - a.workload.freeHours;
-    }
-    return b.score - a.score;
-  });
+  const people = await getOrgPeople(principal.companyId);
+  const requesterRoot = teamRootOf(principal.userId, people);
+  const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight');
+
+  return ranked
+    .sort((a, b) => {
+      if (a.workload.freeHours !== b.workload.freeHours) {
+        return b.workload.freeHours - a.workload.freeHours;
+      }
+      return b.score - a.score;
+    })
+    .map((candidate) => {
+      const isCross = teamRootOf(candidate.workload.person.id, people) !== requesterRoot;
+      const needsApproval = !hasOversight && isCross;
+      return {
+        ...candidate,
+        needsApproval,
+        reasons: needsApproval ? [...candidate.reasons, 'Needs Head approval'] : candidate.reasons,
+      };
+    });
 }
 
-/** Fallback list of eligible engineers. */
+/** Fallback list of eligible assignees. */
 export async function peersForHandover(principal: Principal, taskId: string) {
   await assertTaskVisible(principal, taskId);
 
@@ -377,23 +416,28 @@ export async function peersForHandover(principal: Principal, taskId: string) {
   });
   const held = task.assignments.map((a) => a.userId);
   const team = await reassignTeamFor(principal);
+  const pool = await projectManagerPool(principal.companyId);
+  const poolIds = pool.map((p) => p.id);
 
-  return prisma.user.findMany({
+  const users = await prisma.user.findMany({
     where: {
       companyId: principal.companyId,
       status: 'ACTIVE',
-      roleAssignments: {
-        some: {
-          role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } },
-        },
-      },
-      NOT: {
-        roleAssignments: {
-          some: {
-            role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER'] } },
+      OR: [
+        {
+          roleAssignments: {
+            some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } } },
+          },
+          NOT: {
+            roleAssignments: {
+              some: { role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER', 'ASST_MANAGER'] } } },
+            },
           },
         },
-      },
+        {
+          id: { in: poolIds },
+        },
+      ],
       id: team ? { notIn: held, in: [...team] } : { notIn: held },
     },
     select: {
@@ -408,5 +452,17 @@ export async function peersForHandover(principal: Principal, taskId: string) {
     },
     orderBy: { fullName: 'asc' },
     take: 100,
+  });
+
+  const people = await getOrgPeople(principal.companyId);
+  const requesterRoot = teamRootOf(principal.userId, people);
+  const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight');
+
+  return users.map((u) => {
+    const isCross = teamRootOf(u.id, people) !== requesterRoot;
+    return {
+      ...u,
+      needsApproval: !hasOversight && isCross,
+    };
   });
 }

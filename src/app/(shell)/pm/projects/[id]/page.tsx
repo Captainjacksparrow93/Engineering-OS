@@ -57,7 +57,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             companyId: principal.companyId,
             status: 'ACTIVE',
             id: { not: project.managerId },
-            roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER', 'PM_BASE'] } } } },
+            roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER', 'PM_BASE', 'PROJECT_MANAGER', 'ASST_MANAGER'] } } } },
           },
           select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true, skills: true },
           orderBy: { fullName: 'asc' },

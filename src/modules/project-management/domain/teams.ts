@@ -10,6 +10,7 @@ export interface OrgPerson {
   id: string;
   managerId: string | null;
   hasOversight: boolean;
+  isPoolMember?: boolean;
 }
 
 export { isExecutionStaff } from './availability';
@@ -18,12 +19,17 @@ export function teamRootOf(userId: string, people: OrgPerson[]): string {
   const byId = new Map(people.map((p) => [p.id, p]));
   const seen = new Set<string>();
   let current = userId;
+
+  // A pool member is always the root of their own team
+  if (byId.get(current)?.isPoolMember) return current;
+
   while (!seen.has(current)) {
     seen.add(current);
     const managerId = byId.get(current)?.managerId;
     if (!managerId) return current;
     const manager = byId.get(managerId);
     if (!manager || manager.hasOversight) return current;
+    if (manager.isPoolMember) return managerId;
     current = managerId;
   }
   return current; // reporting loop: treat the first repeated person as the root

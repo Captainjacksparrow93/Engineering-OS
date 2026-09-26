@@ -79,4 +79,22 @@ describe('team isolation', () => {
     const oversightGroups = groupEngineersBySquad(engineers, seededPeople, 'dilip', true, leadNames);
     expect(oversightGroups.every((g) => !g.label.includes('(needs approval)'))).toBe(true);
   });
+
+  it('treats a pool member as root of their own team, even if reporting to another manager', () => {
+    const peopleWithPool: OrgPerson[] = [
+      { id: 'satish', managerId: null, hasOversight: true },
+      { id: 'dilip', managerId: 'satish', hasOversight: true },
+      { id: 'parth', managerId: 'dilip', hasOversight: false, isPoolMember: true },
+      { id: 'dhrupin', managerId: 'parth', hasOversight: false, isPoolMember: true },
+      { id: 'yogi', managerId: 'dhrupin', hasOversight: false },
+      { id: 'paras', managerId: 'dilip', hasOversight: false, isPoolMember: true },
+      { id: 'harsh', managerId: 'paras', hasOversight: false },
+    ];
+
+    expect(teamRootOf('dhrupin', peopleWithPool)).toBe('dhrupin');
+    expect(teamRootOf('yogi', peopleWithPool)).toBe('dhrupin');
+    expect(teamRootOf('dhrupin', peopleWithPool)).toBe(teamRootOf('yogi', peopleWithPool));
+    expect(teamRootOf('dhrupin', peopleWithPool)).not.toBe(teamRootOf('harsh', peopleWithPool));
+    expect(teamRootOf('dhrupin', peopleWithPool)).not.toBe(teamRootOf('paras', peopleWithPool));
+  });
 });

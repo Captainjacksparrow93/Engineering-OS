@@ -287,11 +287,29 @@ export async function oversightRecipients(
 }
 
 /**
+ * Active project managers and assistant managers in the TECH department.
+ * These people lead project teams and can be assigned as project managers or on tasks.
+ */
+export async function projectManagerPool(companyId: string) {
+  return prisma.user.findMany({
+    where: {
+      companyId,
+      status: 'ACTIVE',
+      department: { code: { in: ['TECH'] } },
+      roleAssignments: { some: { role: { key: { in: ['PROJECT_MANAGER', 'ASST_MANAGER'] } } } },
+    },
+    select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true },
+    orderBy: { fullName: 'asc' },
+  });
+}
+
+/**
  * Who `principal` may reassign or assign work to: everyone in their own PM's team.
- * Returns null when unrestricted (Directors and Technical Heads, who hold pm.oversight).
+ * Returns null when unrestricted (Directors, Technical Heads, or PMs/Assistant PMs who can reassign across teams).
  */
 export async function reassignTeamFor(principal: Principal): Promise<Set<string> | null> {
   if (hasPermissionAnywhere(principal, 'pm.oversight')) return null;
+  if (!isExecutionStaff(principal)) return null;
   return teamOf(principal.companyId, principal.userId);
 }
 
@@ -323,23 +341,28 @@ export async function teamOf(companyId: string, userId: string): Promise<Set<str
 export const OUTSIDE_TEAM_MESSAGE = 'You can only reassign to engineers in your own team.';
 
 export async function getOrgPeople(companyId: string): Promise<(OrgPerson & { fullName: string })[]> {
-  const people = await prisma.user.findMany({
-    where: { companyId, status: 'ACTIVE' },
-    select: {
-      id: true,
-      fullName: true,
-      managerId: true,
-      roleAssignments: {
-        where: { role: { permissions: { some: { permission: { key: 'pm.oversight' } } } } },
-        select: { id: true },
+  const [people, pool] = await Promise.all([
+    prisma.user.findMany({
+      where: { companyId, status: 'ACTIVE' },
+      select: {
+        id: true,
+        fullName: true,
+        managerId: true,
+        roleAssignments: {
+          where: { role: { permissions: { some: { permission: { key: 'pm.oversight' } } } } },
+          select: { id: true },
+        },
       },
-    },
-  });
+    }),
+    projectManagerPool(companyId),
+  ]);
+  const poolIds = new Set(pool.map((p) => p.id));
   return people.map((p) => ({
     id: p.id,
     fullName: p.fullName,
     managerId: p.managerId,
     hasOversight: p.roleAssignments.length > 0,
+    isPoolMember: poolIds.has(p.id),
   }));
 }
 

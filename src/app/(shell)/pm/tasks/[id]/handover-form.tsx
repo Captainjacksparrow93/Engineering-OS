@@ -14,6 +14,7 @@ interface Candidate {
   freeHours: number;
   status: string;
   matchedSkills: string[];
+  needsApproval?: boolean;
 }
 
 export function HandoverForm({
@@ -25,7 +26,7 @@ export function HandoverForm({
   taskId: string;
   remainingPercent: number;
   candidates: Candidate[];
-  fallbackPeers: Array<{ id: string; fullName: string; designation: string | null }>;
+  fallbackPeers: Array<{ id: string; fullName: string; designation: string | null; needsApproval?: boolean }>;
 }) {
   const [state, action] = useActionState<ActionState, FormData>(requestHandoverAction, {});
   const [selected, setSelected] = useState('');
@@ -62,8 +63,13 @@ export function HandoverForm({
                         className="accent-ink"
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-body-sm font-medium text-ink">
-                          {formatName(candidate.fullName)}
+                        <span className="flex items-center gap-1.5 truncate text-body-sm font-medium text-ink">
+                          <span className="truncate">{formatName(candidate.fullName)}</span>
+                          {candidate.needsApproval ? (
+                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                              Needs Head approval
+                            </span>
+                          ) : null}
                         </span>
                         <span className="block truncate text-caption text-muted">
                           {candidate.designation ?? 'Engineer'} · {freeDays} {freeDays === 1 ? 'day' : 'days'} free ({candidate.freeHours}h)
@@ -84,7 +90,7 @@ export function HandoverForm({
               <option value="" disabled>Select an engineer</option>
               {fallbackPeers.map((peer) => (
                 <option key={peer.id} value={peer.id}>
-                  {formatName(peer.fullName)}{peer.designation ? ` - ${peer.designation}` : ''}
+                  {formatName(peer.fullName)}{peer.designation ? ` - ${peer.designation}` : ''}{peer.needsApproval ? ' (Needs Head approval)' : ''}
                 </option>
               ))}
             </select>

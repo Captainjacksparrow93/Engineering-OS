@@ -8,7 +8,7 @@ import { publish } from '@/core/events/bus';
 import { EVENTS } from '@/core/events/catalog';
 import { notify } from '@/core/notifications/notify';
 import { formatName } from '@/core/utils/strings';
-import { assertTaskPermission, getOrgPeople, OUTSIDE_TEAM_MESSAGE, oversightRecipients, projectVisibilityWhere, reassignTeamFor } from './access';
+import { assertTaskPermission, getOrgPeople, OUTSIDE_TEAM_MESSAGE, oversightRecipients, projectManagerPool, projectVisibilityWhere, reassignTeamFor } from './access';
 import { teamRootOf } from '../domain/teams';
 import { isExecutionStaff } from '../domain/availability';
 
@@ -63,28 +63,36 @@ export async function requestHandover(
     throw new DomainError('Task is already assigned to this engineer.');
   }
 
-  // Step 4.2: Target must be an active engineer holding SENIOR_ENGINEER or JUNIOR_ENGINEER
-  // and not PM_BASE, TECHNICAL_HEAD, DIRECTOR, SUPER_ADMIN, PROJECT_MANAGER
-  const target = await prisma.user.findFirst({
-    where: {
-      id: input.toUserId,
-      companyId: principal.companyId,
-      status: 'ACTIVE',
-      roleAssignments: {
-        some: {
-          role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } },
-        },
-      },
-      NOT: {
+  // Step 4.2: Target must be an active engineer or in projectManagerPool
+  const pool = await projectManagerPool(principal.companyId);
+  const isPoolMember = pool.some((p) => p.id === input.toUserId);
+
+  let target: { id: string; fullName: string } | null = null;
+  if (isPoolMember) {
+    const p = pool.find((pm) => pm.id === input.toUserId)!;
+    target = { id: p.id, fullName: p.fullName };
+  } else {
+    target = await prisma.user.findFirst({
+      where: {
+        id: input.toUserId,
+        companyId: principal.companyId,
+        status: 'ACTIVE',
         roleAssignments: {
           some: {
-            role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER'] } },
+            role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } },
+          },
+        },
+        NOT: {
+          roleAssignments: {
+            some: {
+              role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER', 'ASST_MANAGER'] } },
+            },
           },
         },
       },
-    },
-    select: { id: true, fullName: true },
-  });
+      select: { id: true, fullName: true },
+    });
+  }
   if (!target) {
     throw new DomainError('Reassignment target must be an active engineering team member.');
   }
@@ -116,9 +124,15 @@ export async function requestHandover(
   const fromSquadLeadId = teamRootOf(fromUserId, people);
   const isCross = toSquadLeadId !== fromSquadLeadId;
   const isManagerOrLead = !isExecutionStaff(principal) || canManage;
+  const hasOversight = can(principal, 'pm.oversight');
+  const isDirectMove = hasOversight || (isManagerOrLead && !isCross);
+
+  if (isCross && isExecutionStaff(principal)) {
+    throw new DomainError('Engineers cannot hand over tasks outside their squad.');
+  }
 
   return prisma.$transaction(async (tx) => {
-    if (isManagerOrLead) {
+    if (isDirectMove) {
       // Direct assignment by Director, Head, or PM: moves work immediately, no request menu items
       await tx.taskAssignment.updateMany({
         where: { taskId: input.taskId, status: 'ACTIVE', role: 'OWNER' },
@@ -203,6 +217,7 @@ export async function requestHandover(
       return newAssignment;
     }
 
+    const status = isManagerOrLead ? 'AWAITING_HEAD_APPROVAL' : 'PENDING';
     const created = await tx.taskHandover.create({
       data: {
         taskId: input.taskId,
@@ -212,7 +227,7 @@ export async function requestHandover(
         reason: input.reason.trim(),
         remainingPercent,
         remainingHours,
-        status: 'PENDING',
+        status,
       },
     });
 
@@ -231,6 +246,7 @@ export async function requestHandover(
           remainingHours,
           reason: input.reason,
           crossSquad: isCross,
+          status,
         },
       },
       tx,
@@ -254,7 +270,21 @@ export async function requestHandover(
       tx,
     );
 
-    if (isCross) {
+    if (isManagerOrLead) {
+      // Cross-team handover by PM / Asst PM: notify Technical Heads + Directors
+      const oversightIds = await oversightRecipients(principal.companyId, task.project.departmentId, principal.userId);
+      if (oversightIds.length > 0) {
+        await notify(
+          {
+            userIds: oversightIds,
+            title: `Cross-team handover requested: ${task.title}`,
+            body: `${formatName(principal.fullName)} requested to reassign "${task.title}" to ${formatName(target.fullName)}. Head approval required.`,
+            link: '/pm/approvals',
+          },
+          tx,
+        );
+      }
+    } else if (isCross) {
       // Cross-squad: PM2 (receiving squad lead) approval is required
       if (toSquadLeadId && toSquadLeadId !== principal.userId) {
         await notify(
@@ -1649,26 +1679,35 @@ export async function requestPanelHandover(
     throw new DomainError('No remaining incomplete tasks found to hand over in this panel.');
   }
 
-  const target = await prisma.user.findFirst({
-    where: {
-      id: input.toUserId,
-      companyId: principal.companyId,
-      status: 'ACTIVE',
-      roleAssignments: {
-        some: {
-          role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } },
-        },
-      },
-      NOT: {
+  const pool = await projectManagerPool(principal.companyId);
+  const isPoolMember = pool.some((p) => p.id === input.toUserId);
+
+  let target: { id: string; fullName: string } | null = null;
+  if (isPoolMember) {
+    const p = pool.find((pm) => pm.id === input.toUserId)!;
+    target = { id: p.id, fullName: p.fullName };
+  } else {
+    target = await prisma.user.findFirst({
+      where: {
+        id: input.toUserId,
+        companyId: principal.companyId,
+        status: 'ACTIVE',
         roleAssignments: {
           some: {
-            role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER'] } },
+            role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER'] } },
+          },
+        },
+        NOT: {
+          roleAssignments: {
+            some: {
+              role: { key: { in: ['PM_BASE', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'DIRECTOR', 'SUPER_ADMIN', 'PROJECT_MANAGER', 'ASST_MANAGER'] } },
+            },
           },
         },
       },
-    },
-    select: { id: true, fullName: true },
-  });
+      select: { id: true, fullName: true },
+    });
+  }
   if (!target) {
     throw new DomainError('Reassignment target must be an active engineering team member.');
   }
@@ -1690,7 +1729,10 @@ export async function requestPanelHandover(
     }
   }
 
-  if (isManagerOrLead) {
+  const hasOversight = can(principal, 'pm.oversight');
+  const isDirectMove = hasOversight || (isManagerOrLead && !isCross);
+
+  if (isDirectMove) {
     return prisma.$transaction(async (tx) => {
       const movedTasks = [];
       const now = new Date();
@@ -1861,6 +1903,7 @@ export async function requestPanelHandover(
       const allocated = owner.allocatedHours ?? task.estimatedHours;
       const remainingHours = Math.round(allocated * (remainingPercent / 100) * 10) / 10;
 
+      const status = isManagerOrLead ? 'AWAITING_HEAD_APPROVAL' : 'PENDING';
       const created = await tx.taskHandover.create({
         data: {
           taskId: task.id,
@@ -1870,7 +1913,7 @@ export async function requestPanelHandover(
           reason: input.reason.trim(),
           remainingPercent,
           remainingHours,
-          status: 'PENDING',
+          status,
         },
       });
       createdList.push(created);
@@ -1891,6 +1934,7 @@ export async function requestPanelHandover(
             remainingHours,
             reason: input.reason,
             crossSquad: isCross,
+            status,
           },
         },
         tx,
