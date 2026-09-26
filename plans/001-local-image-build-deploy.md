@@ -19,7 +19,7 @@ What stays the same: `Dockerfile`, `entrypoint.sh`, `/api/health`, `scripts/back
 - `docker-compose.yml` — `app.image` default `${APP_IMAGE:-ghcr.io/n8nmonk-wq/engineering-os:latest}` → `${APP_IMAGE:-engineering-os:current}`.
 - `scripts/deploy.sh` — new (runs on the owner's PC).
 - `scripts/rollback.sh` — stop pulling from GHCR; use the local image `engineering-os:<previous sha>`.
-- Blast radius: these are YAML and shell files, which code-review-graph does not index (`file_summary scripts/rollback.sh` → 0 nodes), so there is no graph output. Repo text search for `ghcr|APP_IMAGE|rollback.sh|deploy.yml|.deployed-sha` finds: `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`, `docker-compose.yml`, `scripts/rollback.sh`, `.gitignore` (keep `.deployed-sha`/`.previous-sha` ignored), plus docs `PROJECT.md`, `docs/deployment-runbook.md`, `docs/deploy-pipeline-plan.md`, `docs/client-requests-2026-09-25.md`, `docs/follow-up-plan-gemini.md`. No application code (TypeScript) is affected.
+- Blast radius: these are YAML and shell files, which code-review-graph does not index (`file_summary scripts/rollback.sh` → 0 nodes), so there is no graph output. Repo text search for `ghcr|APP_IMAGE|rollback.sh|deploy.yml|.deployed-sha` finds: `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`, `docker-compose.yml`, `scripts/rollback.sh`, `.gitignore` (keep `.deployed-sha`/`.previous-sha` ignored), plus docs `PROJECT.md`, `docs/archive/deployment-runbook.md`, `docs/archive/deploy-pipeline-plan.md`, `docs/client-requests-2026-09-25.md`, `docs/archive/follow-up-plan-gemini.md`. No application code (TypeScript) is affected.
 
 ## Constraints
 - The app is LIVE. Commit locally only; never push to `main`. **Do not run `scripts/deploy.sh` or anything against the VPS** — the owner runs the first deploy.
@@ -74,4 +74,4 @@ What stays the same: `Dockerfile`, `entrypoint.sh`, `/api/health`, `scripts/back
 <commits, deviations from plan, test pass/fail counts, tools used, open questions>
 
 ## Review (Claude)
-<verdict, follow-ups; Claude updates PROJECT.md §6 and marks docs/deployment-runbook.md / docs/deploy-pipeline-plan.md as superseded>
+<verdict, follow-ups; Claude updates PROJECT.md §6 and marks docs/archive/deployment-runbook.md / docs/archive/deploy-pipeline-plan.md as superseded>

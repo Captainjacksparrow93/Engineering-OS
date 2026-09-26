@@ -79,7 +79,7 @@ Both fixes are applied in the working tree and verified (typecheck, 94/94 tests,
 **Rule going forward: never hardcode a client reference number anywhere, and never derive
 one from a row count. Always allocate from the maximum existing value for that company.**
 
-### Resolved — now Task 0 in `docs/follow-up-plan-gemini.md`
+### Resolved — now Task 0 in `docs/archive/follow-up-plan-gemini.md`
 
 `entrypoint.sh` prints the same reassuring "Notice: Seed check completed." whether the seed
 succeeded or failed. That is how this bug would have reached production invisibly, and it

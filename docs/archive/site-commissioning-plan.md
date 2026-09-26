@@ -251,7 +251,7 @@ a dashboard or get reported as overdue forever.
 ## Migration
 
 Schema change ⇒ a hand-written migration, applied with `psql`.
-**Read `docs/deployment-runbook.md` first.** This project does not run
+**Read `docs/archive/deployment-runbook.md` first.** This project does not run
 `prisma migrate deploy`; migrations are applied by hand before the code ships, which makes
 the container's `db push` a no-op.
 

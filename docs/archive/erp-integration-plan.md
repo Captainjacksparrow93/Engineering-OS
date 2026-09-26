@@ -4,7 +4,7 @@
 >
 > ERP is on hold (Sept 2026). This is a record of thinking, not a work order. Do not start
 > it and do not offer it as the next task. Same for HRMS and Gate Entry. See
-> `docs/erp-spike-plan.md` for the full note.
+> `docs/archive/erp-spike-plan.md` for the full note.
 
 > **CONDITIONAL — this is Path A, and the path has not been chosen yet.**
 > This document assumes Engineering OS stays on Next.js and integrates ERPNext over its
@@ -12,7 +12,7 @@
 > data, not live**, which removes the main argument for keeping the current stack and makes
 > rebuilding Engineering OS as Frappe apps (Path B) a serious contender.
 >
-> **Run `docs/erp-spike-plan.md` first.** If it recommends Path B, most of this document is
+> **Run `docs/archive/erp-spike-plan.md` first.** If it recommends Path B, most of this document is
 > superseded — though the boundary table, the `pm_clients` collision and the capacity
 > constraint still apply under either path.
 

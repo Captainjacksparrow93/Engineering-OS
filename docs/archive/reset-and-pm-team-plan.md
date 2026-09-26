@@ -180,7 +180,7 @@ wrong and must be fixed.** Add it to the permission list.
 `pm.oversight` holders; everyone else is confined to their own squad. Without it, Rajani's
 "team" resolves to just herself, so **every assignment she attempts is rejected as outside
 her team** — and she would not qualify as a head approver in the two-stage handover flow
-(`docs/handover-rework-plan.md` Phase 3), nor receive oversight notifications. That directly
+(`docs/archive/handover-rework-plan.md` Phase 3), nor receive oversight notifications. That directly
 contradicts the confirmed rule *"head can reassign without approval"*.
 
 **Why it is safe.** `teamRootOf` walks **up a person's own manager chain** and stops at the
@@ -226,7 +226,7 @@ His own record is out of scope.
 
 **On dual reporting:** the chart shows the four squad leads under *"Dlip / Rajani"*.
 `managerId` holds one, so the **project** line is used — Dilip. Rajani's authority comes from
-the `SERVICE_HEAD` role instead. Per §4 of `docs/org-and-lifecycle-redesign.md`.
+the `SERVICE_HEAD` role instead. Per §4 of `docs/archive/org-and-lifecycle-redesign.md`.
 
 ### 3c. Designation
 
@@ -264,7 +264,7 @@ printing every change:
 2. **Remove their `SENIOR_ENGINEER` assignment.** They are squad leads, not assignable
    engineers. Parth and Paras hold no engineer role, and these two should match. Without
    this they appear **both** as a squad-lead group heading *and* inside another group in the
-   grouped picker (`docs/handover-rework-plan.md` Phase 5), and remain selectable as
+   grouped picker (`docs/archive/handover-rework-plan.md` Phase 5), and remain selectable as
    assignees on the project page — whose `colleagues` query filters on role only, with no
    designation exclusion.
 
@@ -275,7 +275,7 @@ Do **not** add `PM_BASE`: `ASST_MANAGER` already includes `pm.resource.read`,
 `pm.report.read` and `pm.handover.decide`, so it would be redundant.
 
 > **Scope caveat:** `GLOBAL` is used for consistency with the existing PMs, which is exactly
-> the flaw `docs/rbac-audit.md` Finding 1 raises — every PM currently has manager rights on
+> the flaw `docs/archive/rbac-audit.md` Finding 1 raises — every PM currently has manager rights on
 > every project. Do not fix that here for two people; fix all four together in Task 7.
 
 **Verify:** the project wizard offers **four** owners (Parth, Paras, Munaf, Dhrupin); each

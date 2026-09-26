@@ -12,8 +12,8 @@
 > settled: Frappe HR already covers attendance, leave and payroll, so building it natively
 > risks being thrown away.
 >
-> Take work only from `docs/follow-up-plan-gemini.md` and
-> `docs/site-commissioning-plan.md`. If both are empty, **ask rather than picking something
+> Take work only from `docs/archive/follow-up-plan-gemini.md` and
+> `docs/archive/site-commissioning-plan.md`. If both are empty, **ask rather than picking something
 > from here.**
 
 **Branch:** `feat/erp-spike`
@@ -28,7 +28,7 @@ The user wants ERPNext fully integrated, plus HRMS and Gate modules, in one syst
 are two ways to get there and they are not small variations of each other:
 
 **Path A — keep Engineering OS on Next.js, integrate ERPNext over its API.**
-Already drafted in `docs/erp-integration-plan.md`. Keeps the PM module as built. Costs a
+Already drafted in `docs/archive/erp-integration-plan.md`. Keeps the PM module as built. Costs a
 permanent integration layer: webhooks, client mirroring, two identity systems, failure
 handling. HRMS and Gate must still be built from scratch.
 

@@ -1,9 +1,9 @@
 # Handover & assignment rework — implementation plan
 
-Implements the movement-of-work rules in `docs/org-and-lifecycle-redesign.md` §4b.
+Implements the movement-of-work rules in `docs/archive/org-and-lifecycle-redesign.md` §4b.
 **All rules there are confirmed by the user. Read §4b first; this document is the how.**
 
-> **This supersedes Task 9** in `docs/follow-up-plan-gemini.md`. Task 9's "direct reassign
+> **This supersedes Task 9** in `docs/archive/follow-up-plan-gemini.md`. Task 9's "direct reassign
 > for managers" is Phase 2 below. Do not implement Task 9 separately — but **do** apply its
 > Fix 1 (stop discarding server-action results) as Phase 0, because without it every failure
 > below is invisible.
@@ -88,7 +88,7 @@ with the `User` relation for `headApprovedById` (`onDelete: SetNull`) and back-r
 
 **Migration:** additive — one enum value, three nullable columns per table. Safe under
 `--single-transaction` on PostgreSQL 16 (the new enum value is not *used* in the same
-transaction). Follow `docs/deployment-runbook.md`: migrations are applied by hand with
+transaction). Follow `docs/archive/deployment-runbook.md`: migrations are applied by hand with
 `psql` **before** the code ships.
 
 ---
@@ -242,7 +242,7 @@ UI must hide what a role cannot do *and* the service must reject it — never on
 
 ## Verify
 
-Run as each role; the seeded squads are in `docs/org-and-lifecycle-redesign.md` §3b.
+Run as each role; the seeded squads are in `docs/archive/org-and-lifecycle-redesign.md` §3b.
 
 1. **PM1 → own engineer**: assigns immediately, no request, engineer notified.
 2. **PM1 → PM2's engineer**: no immediate change; request appears for PM2, heads and

@@ -72,7 +72,7 @@ Once it is running, keep it. It is the right place for:
 
 - **Creating a test project end to end** — four squad leads, a fresh client, PLC × 2,
   per-panel engineers — before the handover rework is built on top
-- **Verifying the handover rework** (`docs/handover-rework-plan.md`), which needs several
+- **Verifying the handover rework** (`docs/archive/handover-rework-plan.md`), which needs several
   roles, two squads and a migration. Testing that on production would be reckless
 - **Rehearsing migrations**, as done for the September release
 

@@ -17,7 +17,7 @@ Hand this to Gemini (or any agent) as the next work order. The September update 
 
 ## 🔥 Task 9 — Reassigning a step silently does nothing (LIVE)
 
-> **SUPERSEDED by `docs/handover-rework-plan.md`.** Fix 2 below (direct reassign for
+> **SUPERSEDED by `docs/archive/handover-rework-plan.md`.** Fix 2 below (direct reassign for
 > managers) is Phase 2 of that plan and must not be built separately — the rules changed:
 > managers act directly only **inside their own squad**, and crossing squads now raises a
 > two-approval request instead of being rejected.
@@ -102,25 +102,25 @@ still works as before.
 
 ---
 
-## ▶ CURRENT WORK — `docs/ui-verification-plan.md`
+## ▶ CURRENT WORK — `docs/archive/ui-verification-plan.md`
 
 UI verification of the handover rework, plus hunting the nested-form bug class. **Read its
 "ALREADY DONE" section first.** The service layer is already proven by
 `prisma/scripts/verify-handover-rework.ts` (51 assertions); what is unverified is the
 interface.
 
-### ✅ DONE — `docs/handover-rework-plan.md`
+### ✅ DONE — `docs/archive/handover-rework-plan.md`
 
 The two-approval cross-squad handover rework. **Read its "Before you start" section first** —
 the database is now empty, so you must create test data before verifying anything, and the
 squad fixtures are listed there.
 
 Work through the phases in order. Phase 0 is tiny and makes the rest debuggable. Phase 1
-needs a migration — read `docs/deployment-runbook.md` before writing it.
+needs a migration — read `docs/archive/deployment-runbook.md` before writing it.
 
 Commit, **do not push**.
 
-### ✅ DONE — `docs/reset-and-pm-team-plan.md`
+### ✅ DONE — `docs/archive/reset-and-pm-team-plan.md`
 
 All of it, live on production: project seeds disabled, all 16 projects wiped (with their
 tasks, assignments, logs and 444 dead notifications), all clients deleted and client seeding
@@ -135,7 +135,7 @@ script.
 
 ## 🔥 DO THIS FIRST — live breakage on production
 
-`docs/site-commissioning-plan.md` → **HOTFIX** section at the top.
+`docs/archive/site-commissioning-plan.md` → **HOTFIX** section at the top.
 
 **Technical Head gets "Something went wrong" on both `/pm/approvals` and
 `/pm/commissioning`.** The permissions are granted correctly; the bug is that
@@ -149,12 +149,12 @@ as a workaround.**
 
 ---
 
-**Jump the queue for this one:** `docs/site-commissioning-plan.md` **Part B2** — the director
+**Jump the queue for this one:** `docs/archive/site-commissioning-plan.md` **Part B2** — the director
 cannot see or act on pending handovers anywhere in the app, confirmed live on production.
 Oversight queries are scoped to projects you personally manage, and the director manages
 none. Small fix, no schema change, and work is currently stuck because of it.
 
-**Then:** the rest of `docs/site-commissioning-plan.md` — the client's dashboard tiles and
+**Then:** the rest of `docs/archive/site-commissioning-plan.md` — the client's dashboard tiles and
 the new Site Commissioning module. That depends on Task 2 (the Hold tile reads 0 without
 it), so finish this queue first.
 
@@ -163,11 +163,11 @@ Tasks 1, 3, 4 and 6 are **done** — see the ✅ markers. Do not redo them.
 ## Out of scope — do not start these, do not propose them
 
 **ERP / ERPNext, HRMS and Gate Entry are PLANNING ONLY.** They are not being implemented.
-`docs/erp-spike-plan.md` and `docs/erp-integration-plan.md` are records of thinking, not
+`docs/archive/erp-spike-plan.md` and `docs/archive/erp-integration-plan.md` are records of thinking, not
 work orders, and the `COMING_SOON` entries in `src/core/modules/registry.ts` are a product
 roadmap, not a backlog.
 
-Take work **only** from this document and `docs/site-commissioning-plan.md`. When both are
+Take work **only** from this document and `docs/archive/site-commissioning-plan.md`. When both are
 finished, **ask what is next** rather than picking something from a parked plan.
 
 ## Rules
@@ -179,7 +179,7 @@ finished, **ask what is next** rather than picking something from a parked plan.
   freely, but **do not push** — the user decides when things ship.
 - **Any task needing a schema change also needs a migration**, and migrations on this
   project are applied **by hand with `psql`**, not `prisma migrate deploy`. Read
-  `docs/deployment-runbook.md` before writing one, and **never run `prisma migrate dev`
+  `docs/archive/deployment-runbook.md` before writing one, and **never run `prisma migrate dev`
   against the VPS** — the schema has drifted from the migration history and it would offer
   to reset the database.
 
@@ -221,7 +221,7 @@ schema is applied by hand beforehand, so it is a no-op by design.
   keys** — removing them reintroduces the bug.
 - **September 2026 release is DEPLOYED** to the VPS (commit `911d58d`). Migrations applied
   by hand via `psql`; `db push` reports in sync; 13 projects, 16 clients, 0 orphans.
-  `docs/deployment-runbook.md` records the procedure. **Pushing to `main` auto-deploys** via
+  `docs/archive/deployment-runbook.md` records the procedure. **Pushing to `main` auto-deploys** via
   `.github/workflows/deploy.yml` — assume any commit ships.
 
 ---
@@ -424,7 +424,7 @@ ESLint is actually installed and configured. Use `npm run typecheck` and `npm ru
 
 ## Task 7 — RBAC remediation (priority: high, BLOCKED on user approval)
 
-`docs/rbac-audit.md` documents five findings. The headline one: `PROJECT_MANAGER` is
+`docs/archive/rbac-audit.md` documents five findings. The headline one: `PROJECT_MANAGER` is
 seeded at `GLOBAL` scope (`prisma/seed.ts:957`, `:1078`) although `schema.prisma`
 explicitly designs it as `PROJECT`-scoped — so **every PM currently has manager rights on
 every project in the company.** `ASST_MANAGER`, added in September, inherits the same flaw.
@@ -530,7 +530,7 @@ The September release is **live on the VPS** (commit `911d58d`). Verified after 
 4. Because of (3), the migration SQL cannot arrive via `git pull` — it must be `scp`'d to the
    VPS separately, *before* pushing.
 
-`docs/deployment-runbook.md` has the exact sequence, the verification queries and the
+`docs/archive/deployment-runbook.md` has the exact sequence, the verification queries and the
 rollback. **Follow it for any future change that touches the schema.** Take a `pg_dump`
 first, every time.
 

@@ -240,7 +240,7 @@ Change: include users holding an `ASST_MANAGER` role in the manager list. Requir
 `SENIORITY_ORDER` in the wizard already has an `ASST_MANAGER` entry — it was anticipated.
 
 ### 7c. Role hierarchy audit (written deliverable)
-Findings so far, to be confirmed and written up as `docs/rbac-audit.md`:
+Findings so far, to be confirmed and written up as `docs/archive/rbac-audit.md`:
 
 1. **`PROJECT_MANAGER` is seeded at `GLOBAL` scope** (`prisma/seed.ts:957`, `:1078`) —
    but `schema.prisma` documents it as PROJECT-scoped ("a Project Manager role granted at

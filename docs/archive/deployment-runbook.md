@@ -3,7 +3,7 @@
 > [!NOTE]
 > **HISTORICAL NOTICE (September 2026):**
 > This runbook is historical and documents the one-off September 2026 cut-over.
-> For current releases, deployments are automated via CI/CD (GHCR image build, pull-based deploy with automated pre-deploy backup, health checks, and fast rollback). See [docs/deploy-pipeline-plan.md](deploy-pipeline-plan.md) section "Release, after this lands".
+> For current releases, deployments are automated via CI/CD (GHCR image build, pull-based deploy with automated pre-deploy backup, health checks, and fast rollback). See [docs/archive/deploy-pipeline-plan.md](deploy-pipeline-plan.md) section "Release, after this lands".
 
 **Status:** rehearsal round 2 passed on restored production data. Cleared to deploy.
 **Expected downtime:** about 5–10 minutes, deliberate.

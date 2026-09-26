@@ -54,7 +54,7 @@ Fix the same way: the inner element becomes a `<div>`, the submit becomes
 
 ## Task B — UI verification pass (priority: high)
 
-Run the local environment (`docs/local-testing-plan.md`) against restored production data and
+Run the local environment (`docs/archive/local-testing-plan.md`) against restored production data and
 walk these. **Report what you see, with the dev server console alongside — a clean screen is
 not proof when the failure mode is silence.**
 

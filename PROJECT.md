@@ -99,15 +99,27 @@ Optional: `VERTEX_AI_SERVICE_ACCOUNT_JSON` / `GOOGLE_APPLICATION_CREDENTIALS`. T
 
 ## 5. Local development
 
-Full guide: [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md).
+Next.js runs natively (hot reload); only Postgres runs in Docker (container `engos_local_db`, port 5432).
+
+**Prerequisites:** Node.js 20 or 22 LTS, Docker Desktop (running), Git.
+
 ```bash
 npm install
 docker compose -f docker-compose.local.yml up -d db
 cp .env.example .env        # DATABASE_URL=postgresql://engos:engos_local_password@localhost:5432/engineering_os?schema=public
 npx prisma migrate deploy
-npm run db:seed
-npm run dev
+npm run db:seed             # optional: npm run db:seed:demo for demo projects (local only)
+npm run dev                 # http://localhost:3000
 ```
+Seeds are create-only: they add what's missing and never overwrite data changed in the app. Seeded accounts start with the password in `SEED_PASSWORD`.
+
+**Local database tools** (never against the live server):
+
+| Task | Command |
+|---|---|
+| Browse data | `npx prisma studio` (port 5555) |
+| Wipe and rebuild the local DB | `npm run db:reset:dev` |
+| Stop the local DB | `docker compose -f docker-compose.local.yml stop db` |
 
 **Checks before every commit** (all must pass):
 ```bash
@@ -119,7 +131,7 @@ npm run typecheck && npm test && npm run build && npm run test:int
 
 ## 6. How it's deployed
 
-**Pushing to `main` is the deploy.** There is no manual approval step. The full design is in [docs/deploy-pipeline-plan.md](docs/deploy-pipeline-plan.md).
+**Pushing to `main` is the deploy.** There is no manual approval step. The full design is in [docs/archive/deploy-pipeline-plan.md](docs/archive/deploy-pipeline-plan.md).
 
 1. **CI** (`.github/workflows/ci.yml`) runs on every push and PR to `main`: `npm ci` → `prisma validate` → migrate and seed a throwaway Postgres → typecheck → unit tests → integration tests → `next build`.
 2. **Publish** (a job in `ci.yml`, on push to `main` only): builds the Docker image once and pushes it to GHCR as `ghcr.io/n8nmonk-wq/engineering-os:<commit sha>` and `:latest`. The package is private.
@@ -154,7 +166,7 @@ Until this setup is done, the pull step fails, the run goes red, and the old con
 4. Smoke test on prod: log in, then open the dashboard, a project, a task, People and Audit, and use the screens the change touched.
 5. Before a migration that changes existing rows, rehearse it on a restored backup first ([docs/migration-rehearsal-plan.md](docs/migration-rehearsal-plan.md)).
 
-The older [docs/deployment-runbook.md](docs/deployment-runbook.md) covers the one-off September 2026 cut-over and is historical.
+The older [docs/archive/deployment-runbook.md](docs/archive/deployment-runbook.md) covers the one-off September 2026 cut-over and is historical.
 
 ## 7. Operations cheat-sheet (on the VPS, in `/root/engos-docker`)
 
@@ -196,14 +208,13 @@ From `AGENTS.md` and `CLAUDE.md`, which remain the source of truth:
 | Doc | What it's for |
 |---|---|
 | [AGENTS.md](AGENTS.md) / [CLAUDE.md](CLAUDE.md) | rules for coding agents |
-| [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md) | detailed local setup |
+| [plans/INDEX.md](plans/INDEX.md) | current plans (Claude writes, Antigravity implements) |
 | [docs/architecture.md](docs/architecture.md) | design reasoning, data model notes, security posture |
-| [docs/rbac.md](docs/rbac.md), [docs/rbac-audit.md](docs/rbac-audit.md) | permission model and audit |
+| [docs/rbac.md](docs/rbac.md) | permission model |
 | [docs/project-management.md](docs/project-management.md) | what the PM module does |
 | [docs/api.md](docs/api.md) | REST API |
 | [docs/design-system.md](docs/design-system.md) | UI tokens and components |
 | [docs/client-requests-2026-09-25.md](docs/client-requests-2026-09-25.md) | current client change list and status of each item |
-| [docs/deploy-pipeline-plan.md](docs/deploy-pipeline-plan.md) | planned deploy improvements |
 | [docs/migration-rehearsal-plan.md](docs/migration-rehearsal-plan.md) | how to rehearse a risky migration on a restored backup |
 | [docs/roadmap.md](docs/roadmap.md) | future modules (parked) |
-| other `docs/*-plan.md` | past feature plans, kept as history |
+| [docs/archive/](docs/archive/) | finished and superseded plans, runbooks and parked ERP plans, kept as history |

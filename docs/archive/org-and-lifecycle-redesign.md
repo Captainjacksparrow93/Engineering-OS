@@ -415,5 +415,5 @@ Question 7 is the largest and may deserve its own round.
 6. Re-verify commissioning access under whatever Q1 decides
 
 **Steps 2–4 are data changes against live production**, so they go through
-`docs/deployment-runbook.md` with a `pg_dump` first — not a seed rewrite. `prisma/seed.ts`
+`docs/archive/deployment-runbook.md` with a `pg_dump` first — not a seed rewrite. `prisma/seed.ts`
 is create-only and will not update existing rows.

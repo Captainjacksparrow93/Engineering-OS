@@ -167,7 +167,7 @@ This is a data task, not a code change.
 1. `core/rbac/permissions.ts:191,194` (`PROJECT_MANAGER`) and `:210,213` (`ASST_MANAGER`): remove `pm.task.create` and `pm.task.adhoc.create`.
 2. `services/access.ts:106,109` `MANAGER_IMPLIED`: remove both keys. Without this, the manager of a project still gets them on their own project.
 3. `services/project.service.ts:557-558`: remove the `|| project.managerId === principal.userId` fallback on `canCreateTask` and `canCreateAdhocTask`. It bypasses the permission check and would keep the buttons visible.
-4. **Live database:** role permissions are stored in `core_role_permissions`, and code changes don't touch them. Add a migration (`prisma migrate dev --create-only --name revoke_pm_task_create`) that deletes those two keys for `PROJECT_MANAGER` and `ASST_MANAGER`, looking roles and permissions up by `key`. It runs once through `migrate deploy`, after the automatic pre-deploy backup (see `docs/deploy-pipeline-plan.md` §3). The user approves the release that carries it.
+4. **Live database:** role permissions are stored in `core_role_permissions`, and code changes don't touch them. Add a migration (`prisma migrate dev --create-only --name revoke_pm_task_create`) that deletes those two keys for `PROJECT_MANAGER` and `ASST_MANAGER`, looking roles and permissions up by `key`. It runs once through `migrate deploy`, after the automatic pre-deploy backup (see `docs/archive/deploy-pipeline-plan.md` §3). The user approves the release that carries it.
 
 **Follow-on effects:** the "Urgent task" sidebar item (`sidebar.tsx:114`) and `/pm/adhoc` (`adhoc/page.tsx:28`) hide or redirect by themselves once the permission is gone. Check that PMs still see and edit existing tasks. `pm.task.update` and `pm.task.assign` stay.
 
@@ -399,7 +399,7 @@ The same component serves the WBS assignee cell, the task-page assign control an
    5. Then push. The entrypoint's `migrate deploy` applies only the service-call migration, which is additive (a new enum, a new column with a default, and dropping `NOT NULL`).
 
    Rollback: restore the dump, then redeploy `eaff6f6`.
-6. Add this to `docs/deployment-runbook.md`: from now on, every schema change needs a migration made with `prisma migrate dev`. `db push` is never used against production again.
+6. Add this to `docs/archive/deployment-runbook.md`: from now on, every schema change needs a migration made with `prisma migrate dev`. `db push` is never used against production again.
 
 ### R2 (blocker): the Sales Head grant must not run on every start
 
