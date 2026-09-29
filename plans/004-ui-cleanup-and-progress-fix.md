@@ -179,4 +179,32 @@ Client requests of 2026-09-29 (items 4, 5, 6, 7, 8, 10) plus a progress bug foun
   - Graph query note: `importers_of` returned not found for `project-label.ts`, `audit-format.ts`, and `project-timeline.tsx`; searched via text search as noted in plan.
 
 ## Review (Claude)
-<verdict, follow-ups>
+**2026-09-29 — reviewed `d0553b3`. Verdict: good work; one follow-up before REVIEWED.**
+
+**Checked**
+- Steps 1–6 match the plan.
+  - `projectStepStats` + `activeLeafTasks` in `portfolio.ts` is the single rule, used by `listProjects` and `getProjectWorkspace`.
+  - Title and breadcrumb show the project code; the WO appears once in the subtitle.
+  - The timeline header is hidden on the project page; the dashboard uses "code · name".
+  - Card, Live projects table, single-border tiles (fixed in `director-dashboard.tsx` only, as asked).
+  - The filler strings are removed and listed in notes.
+  - Audit `{from, to}` → "Status: In review → Completed"; Item labels name the task or project.
+- Graph (Claude):
+  - callers of `projectStepStats` → `listProjects`, `getProjectWorkspace`.
+  - callers of `projectProgress` → 8, including `getClientPortfolio`, `getDashboard`, `getEngineerPortfolio` and the tests.
+  - `activeLeafTasks` now also drops `type: 'PHASE'` rows. This only changes a `PHASE` row with no children (previously counted as a step), which matches the timeline. Accepted.
+- Tests (Claude, local): typecheck OK; unit 12/12 files; integration 8/8 files (includes the new `project-progress-consistency.int.test.ts`); build OK.
+- Not checked: visual check on production data (waiting on the owner's local copy).
+
+**Follow-ups (implementer)**
+- [ ] **F1 (must): the timeline still disagrees when a project has urgent/ad-hoc tasks.**
+  - In `getProjectTimeline`, when a project has panels, steps are collected only per panel (`leafTasks.filter((t) => t.parentId === phase.id)`).
+  - Tasks with no panel (`parentId` null, e.g. "Add urgent task", whose form sends no `parentId`) are dropped from `totalSteps` and from the chart. The list, workspace and dashboard do count them, so WO 6924 with one urgent task would read 28/31 on the card and "28 of 30" on the timeline.
+  - Fix:
+    - take the timeline totals from the same `activeLeafTasks` rule;
+    - show panel-less steps in one extra lane (e.g. "Other tasks"), only when there are any;
+    - add a panel-less ad-hoc task to `project-progress-consistency.int.test.ts` so the test covers it.
+- [ ] **F2 (minor): audit leftovers.**
+  - (a) Plain string values in the Details fallback still use the old branch, so an enum shows as "IN PROGRESS" and an unknown ID shows raw. Route strings through `formatSingleValue` as well.
+  - (b) `admin/audit/page.tsx` builds its own "code · WO" project label. Reuse `projectLabel` so there is one format.
+  - (c) The file header comment of `audit-format.ts` was deleted; restore it.
