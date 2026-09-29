@@ -89,4 +89,29 @@ What stays the same: `Dockerfile`, `entrypoint.sh`, `/api/health`, `scripts/back
   - Shell scripts saved with LF line endings and executable mode (+x).
 
 ## Review (Claude)
-<verdict, follow-ups; Claude updates PROJECT.md §6 and marks docs/archive/deployment-runbook.md / docs/archive/deploy-pipeline-plan.md as superseded>
+**2026-09-29 — reviewed `f0c0caf`. Verdict: nearly there; two follow-ups before REVIEWED.**
+
+**Checked**
+- Diff matches steps 1–5:
+  - `publish` job removed; `deploy.yml` deleted.
+  - Compose default is `engineering-os:current`.
+  - `deploy.sh` runs in the planned order: clean/pushed check → build → ship → pull → backup → `.previous-sha` → swap → `.deployed-sha` → health → prune → copy backup.
+  - `rollback.sh` needs no registry and refuses clearly.
+- Constraints respected: `Dockerfile`, `entrypoint.sh`, `backup.sh`, `restore.sh` and the `db` service are untouched; no secrets; env defaults as specified.
+- `bash -n` on both scripts: OK.
+- `git grep -i ghcr` outside `docs/` and `plans/`: only `PROJECT.md`, now rewritten (below).
+- Tests (Claude): `npm run typecheck` pass; `npm test` 126/126 pass. `test:int` and `build` not re-run (Docker Desktop stopped); the diff has no TypeScript, and the implementer reported 31/31 and a green build.
+- code-review-graph: not applicable (YAML/shell are not indexed, as the plan says).
+- Implementer honestly reported that `sequential-thinking` was unavailable in their environment.
+- VPS read-only check (2026-09-29):
+  - Clean tree at `06cdd68`.
+  - `.deployed-sha` = `06cdd68…`; no `.previous-sha`.
+  - Only `ghcr.io/n8nmonk-wq/engineering-os:06cdd68…` is loaded.
+  - `scripts/rollback.sh` is `-rw-r--r--` (not executable).
+
+**Follow-ups (implementer)**
+- [ ] **F1 (must): `rollback.sh` is not executable in git.** It is committed as `100644`; the notes say +x, but this repo has `core.fileMode=false` on Windows, so the chmod never reached git. On the VPS, `./scripts/rollback.sh`, which is also the command `deploy.sh` prints, fails with "Permission denied" exactly when a rollback is needed. Fix: `git update-index --chmod=+x scripts/rollback.sh` and commit. Verify with `git ls-files -s scripts/` showing `100755` for `deploy.sh` and `rollback.sh`.
+- [ ] **F2 (should): the backup is only copied off the VPS when the deploy succeeds.** If the health check fails, the remote script exits non-zero, `set -e` stops `deploy.sh` locally, and step 5 (scp of the newest backup) never runs. That is the one case where the off-box copy matters most. Fix: run the remote block without aborting (capture its exit code), always fetch the newest backup, then exit with the remote exit code. Acceptance: with the remote block forced to fail (e.g. a bad `VPS_DIR` after the backup line, tested only against a local or throwaway host, **never the VPS**), the script still reaches the backup-fetch step before exiting non-zero. If no safe host is available, reason it through with `bash -n` plus a code read and say so in notes.
+
+**Claude, done in this review**
+- `PROJECT.md` §6 rewritten for the local-build deploy, including the one-line first-deploy re-tag that makes rollback work from the first deploy. The debt line in §9 is updated, and the two archive docs are labelled historical.

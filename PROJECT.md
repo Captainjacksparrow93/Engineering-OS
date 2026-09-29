@@ -131,42 +131,46 @@ npm run typecheck && npm test && npm run build && npm run test:int
 
 ## 6. How it's deployed
 
-**Pushing to `main` is the deploy.** There is no manual approval step. The full design is in [docs/archive/deploy-pipeline-plan.md](docs/archive/deploy-pipeline-plan.md).
+**Pushing to `main` does not deploy.** CI only runs tests. The owner deploys by running one script on their own PC, and the image is built there. GitHub and the VPS never build or publish images, and there is no registry. Plan: [plans/001-local-image-build-deploy.md](plans/001-local-image-build-deploy.md).
 
 1. **CI** (`.github/workflows/ci.yml`) runs on every push and PR to `main`: `npm ci` → `prisma validate` → migrate and seed a throwaway Postgres → typecheck → unit tests → integration tests → `next build`.
-2. **Publish** (a job in `ci.yml`, on push to `main` only): builds the Docker image once and pushes it to GHCR as `ghcr.io/n8nmonk-wq/engineering-os:<commit sha>` and `:latest`. The package is private.
-3. **Deploy** (`.github/workflows/deploy.yml`, runs after CI passes): SSHes to the VPS (secret `VPS_SSH_KEY`), then:
-   1. `git pull`, for the compose file and scripts only. **Nothing is built on the VPS.**
-   2. `./scripts/backup.sh`. The deploy stops if the backup fails.
-   3. Save the running sha to `.previous-sha`.
-   4. `docker compose pull app`, then `up -d --no-build app` with `APP_IMAGE=…:<sha>`.
-   5. Write `.deployed-sha`.
-   6. Wait up to 3 minutes for the container to be healthy. If it isn't, the run goes red and prints the logs. There is no automatic rollback.
-4. **Container start** (`entrypoint.sh`):
+2. **Deploy:** from Git Bash in the repo, run `scripts/deploy.sh`. The host defaults are `VPS_HOST=72.62.248.38`, `VPS_USER=root` and `VPS_DIR=/root/engos-docker`; SSH uses the owner's key. The script:
+   1. Refuses to run unless the working tree is clean and `HEAD` equals `origin/main`.
+   2. Builds `engineering-os:<sha>` for `linux/amd64` locally.
+   3. Streams the image to the VPS (`docker save | gzip | ssh … docker load`).
+   4. On the VPS:
+      - `git pull` (compose file and scripts only; nothing is built there).
+      - `./scripts/backup.sh`. The deploy stops if the backup fails.
+      - Saves the running sha to `.previous-sha`.
+      - Tags `engineering-os:current`, then runs `up -d --no-build app` with `APP_IMAGE=engineering-os:<sha>`.
+      - Writes `.deployed-sha`.
+      - Waits up to 3 minutes for the container to be healthy. If it isn't, it prints the logs and fails. There is no automatic rollback.
+      - Removes old `engineering-os:*` images except current, new and previous.
+   5. Copies the newest backup to `backups/` on the PC. That folder is git-ignored.
+3. **Container start** (`entrypoint.sh`):
    - `prisma migrate deploy`. This is fatal if it fails.
-   - `seed.ts`, the legacy `grant-*.ts` scripts and `set-passwords-from-csv.ts`. These aren't fatal: failures are only logged.
+   - Seed and the legacy `grant-*.ts` scripts. These aren't fatal: failures are only logged.
    - Then the Next.js server starts.
    - The healthcheck calls `/api/health`, which checks the DB and that no migration is left unfinished.
 
-**One-time setup this relies on** (the owner does this, and it's done once):
-- The GHCR package is private, and the repo has access to it.
-- The VPS runs `docker login ghcr.io` with a token that has only `read:packages`.
-
-Until this setup is done, the pull step fails, the run goes red, and the old container keeps serving.
-
-**Rollback:** on the VPS, run `./scripts/rollback.sh`. It redeploys the image in `.previous-sha`.
+**Rollback:** on the VPS, run `./scripts/rollback.sh`. It re-tags and starts the image named in `.previous-sha`, which is already loaded on the VPS, so nothing is downloaded.
 - If the bad release ran a migration, restore the backup first (`scripts/restore.sh`), with owner approval.
-- There's no previous sha until the second deploy on the new pipeline.
-- Caveat: running `docker compose up` by hand without `APP_IMAGE` uses `:latest`, which undoes a rollback. Always pass `APP_IMAGE=ghcr.io/n8nmonk-wq/engineering-os:$(cat .deployed-sha)`.
+- Running `docker compose up` by hand without `APP_IMAGE` uses `engineering-os:current`, which the deploy and rollback scripts keep pointed at the live image.
+
+**First deploy on this pipeline:** the VPS runs `ghcr.io/n8nmonk-wq/engineering-os:06cdd68fc4c9861c7a811da33ab0ea0e27fbd429` (checked read-only 2026-09-29; no `.previous-sha` yet). So that rollback works from the first deploy, the owner first runs this on the VPS:
+```bash
+docker tag ghcr.io/n8nmonk-wq/engineering-os:06cdd68fc4c9861c7a811da33ab0ea0e27fbd429 engineering-os:06cdd68fc4c9861c7a811da33ab0ea0e27fbd429
+```
+After a successful deploy, the old GHCR image can be removed, along with `docker logout ghcr.io` on the VPS and the `VPS_SSH_KEY` secret and GHCR package on GitHub.
 
 ### Release checklist
 1. All local checks are green (§5) and the work has been reviewed.
-2. `git push origin main`. The backup, image pull, migrations and health gate run automatically.
-3. Copy the new backup off the VPS: `scp root@72.62.248.38:/root/engos-docker/backups/<latest>.sql.gz <local folder>`.
-4. Smoke test on prod: log in, then open the dashboard, a project, a task, People and Audit, and use the screens the change touched.
-5. Before a migration that changes existing rows, rehearse it on a restored backup first ([docs/migration-rehearsal-plan.md](docs/migration-rehearsal-plan.md)).
+2. `git push origin main` and wait for CI to go green. Nothing deploys yet.
+3. Before a migration that changes existing rows, rehearse it on a restored backup first ([docs/migration-rehearsal-plan.md](docs/migration-rehearsal-plan.md)).
+4. Run `scripts/deploy.sh`. Keep the backup it copies to `backups/`.
+5. Smoke test on prod: log in, then open the dashboard, a project, a task, People and Audit, and use the screens the change touched.
 
-The older [docs/archive/deployment-runbook.md](docs/archive/deployment-runbook.md) covers the one-off September 2026 cut-over and is historical.
+The older [docs/archive/deployment-runbook.md](docs/archive/deployment-runbook.md) and [docs/archive/deploy-pipeline-plan.md](docs/archive/deploy-pipeline-plan.md) describe earlier deploy methods and are historical.
 
 ## 7. Operations cheat-sheet (on the VPS, in `/root/engos-docker`)
 
@@ -195,7 +199,7 @@ From `AGENTS.md` and `CLAUDE.md`, which remain the source of truth:
 - **Way of working so far:** Claude (Claude Code) writes plans in `docs/` and reviews commits. Antigravity (Gemini) implements. The owner relays between them and pushes.
 
 ## 9. Known debt and open items
-- **Deploy pipeline** is implemented (`72d56b2`), but it needs the one-time GHCR setup in §6 before it can run.
+- **Deploy** is manual via `scripts/deploy.sh` (plan 001). The first run needs the one-line re-tag in §6 so that rollback works.
 - **No automatic nightly backup** (§7).
 - **Password handling:** `prisma/data/logins.csv` and `set-passwords-from-csv.ts` still run at startup. The retirement plan is in [docs/client-requests-2026-09-25.md](docs/client-requests-2026-09-25.md) §0 E. `seed.ts` still has a default-password fallback.
 - **4 legacy `grant-*.ts` scripts** run at every start. They're idempotent. New permission changes go in migrations instead.
