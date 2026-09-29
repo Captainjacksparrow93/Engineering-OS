@@ -51,7 +51,7 @@ export async function requestHandover(
       projectId: task.projectId,
       departmentId: task.project.departmentId,
     }) ||
-    can(principal, 'pm.project.read.all');
+    isDirectorUser(principal);
 
   if (!isHolder && !canManage) {
     throw new ForbiddenError('You can only request reassignment for your own tasks or tasks in projects you manage.');
