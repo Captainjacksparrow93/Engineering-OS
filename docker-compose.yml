@@ -33,7 +33,7 @@ services:
 
   app:
     container_name: engos_app
-    image: ${APP_IMAGE:-ghcr.io/n8nmonk-wq/engineering-os:latest}
+    image: ${APP_IMAGE:-engineering-os:current}
     build:
       context: .
       dockerfile: Dockerfile

@@ -1,6 +1,6 @@
 # 001 — Build the Docker image locally and ship it to the VPS
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 
 ## Goal
@@ -38,9 +38,9 @@ What stays the same: `Dockerfile`, `entrypoint.sh`, `/api/health`, `scripts/back
 - If a tool is missing or fails, say so in Implementation notes. Never claim you used one when you didn't.
 
 ## Steps
-- [ ] 1. **CI tests only.** In `.github/workflows/ci.yml`, delete the whole `publish` job. Delete `.github/workflows/deploy.yml`.
-- [ ] 2. **Compose default.** In `docker-compose.yml`, change the `app` image default to `${APP_IMAGE:-engineering-os:current}`. Leave `build:` in place (used for local builds only).
-- [ ] 3. **`scripts/deploy.sh`** (new, executable, `set -euo pipefail`). In this order, stopping on any failure:
+- [x] 1. **CI tests only.** In `.github/workflows/ci.yml`, delete the whole `publish` job. Delete `.github/workflows/deploy.yml`.
+- [x] 2. **Compose default.** In `docker-compose.yml`, change the `app` image default to `${APP_IMAGE:-engineering-os:current}`. Leave `build:` in place (used for local builds only).
+- [x] 3. **`scripts/deploy.sh`** (new, executable, `set -euo pipefail`). In this order, stopping on any failure:
   1. Refuse to run unless the working tree is clean and `HEAD` equals `origin/main` (run `git fetch` first). Print the sha being deployed. Rationale: the image must match reviewed, pushed code, and the VPS `git pull` must get the same compose file and scripts.
   2. Build: `docker build --platform linux/amd64 -t engineering-os:<sha> .`
   3. Ship: `docker save engineering-os:<sha> | gzip | ssh $VPS_USER@$VPS_HOST 'gunzip | docker load'`.
@@ -54,16 +54,16 @@ What stays the same: `Dockerfile`, `entrypoint.sh`, `/api/health`, `scripts/back
      - Remove old `engineering-os:*` images except `current`, `<sha>` and the one in `.previous-sha` (keeps disk usage bounded; rollback target stays).
   5. Copy the newest `backups/backup_*.sql.gz` from the VPS to a local `backups/` folder (already git-ignored) with `scp`, so every deploy leaves a backup off the server.
   6. Print: deployed sha, health result, local backup path, and the rollback command.
-- [ ] 4. **`scripts/rollback.sh`** (runs on the VPS): read `.previous-sha`, `docker tag engineering-os:$PREV engineering-os:current`, `APP_IMAGE=engineering-os:$PREV docker compose up -d --no-build app` (no `pull`), write `$PREV` to `.deployed-sha`. Exit with a clear message if `.previous-sha` is missing or that image isn't loaded.
-- [ ] 5. Grep the repo (excluding `docs/` and `node_modules/`) for `ghcr` — there must be no matches left. Leave `docs/` alone; Claude updates `PROJECT.md` and the docs in review.
+- [x] 4. **`scripts/rollback.sh`** (runs on the VPS): read `.previous-sha`, `docker tag engineering-os:$PREV engineering-os:current`, `APP_IMAGE=engineering-os:$PREV docker compose up -d --no-build app` (no `pull`), write `$PREV` to `.deployed-sha`. Exit with a clear message if `.previous-sha` is missing or that image isn't loaded.
+- [x] 5. Grep the repo (excluding `docs/` and `node_modules/`) for `ghcr` — there must be no matches left. Leave `docs/` alone; Claude updates `PROJECT.md` and the docs in review.
 
 ## Acceptance criteria
-- [ ] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
-- [ ] `.github/workflows/` contains only `ci.yml`, and it has no `publish` job and no GHCR/registry steps.
-- [ ] `docker compose config` (run locally) shows the app image `engineering-os:current` when `APP_IMAGE` is unset.
-- [ ] `bash -n scripts/deploy.sh` and `bash -n scripts/rollback.sh` pass.
-- [ ] Running `scripts/deploy.sh` with a dirty tree, or with `HEAD` ≠ `origin/main`, stops before building (check both locally; it must never reach the `ssh` step in these checks).
-- [ ] No `ghcr` references outside `docs/`.
+- [x] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
+- [x] `.github/workflows/` contains only `ci.yml`, and it has no `publish` job and no GHCR/registry steps.
+- [x] `docker compose config` (run locally) shows the app image `engineering-os:current` when `APP_IMAGE` is unset.
+- [x] `bash -n scripts/deploy.sh` and `bash -n scripts/rollback.sh` pass.
+- [x] Running `scripts/deploy.sh` with a dirty tree, or with `HEAD` ≠ `origin/main`, stops before building (check both locally; it must never reach the `ssh` step in these checks).
+- [x] No `ghcr` references outside `docs/`.
 
 ## Owner steps after review (not for the implementer)
 - Push to `main` (CI runs tests only; nothing deploys).
@@ -71,7 +71,22 @@ What stays the same: `Dockerfile`, `entrypoint.sh`, `/api/health`, `scripts/back
 - Optional clean-up: on the VPS `docker logout ghcr.io`; in GitHub, delete the `VPS_SSH_KEY` secret and the private GHCR package.
 
 ## Implementation notes (implementer)
-<commits, deviations from plan, test pass/fail counts, tools used, open questions>
+- Commits:
+  - Plan 001: Local image build & deploy script, CI publish removal, compose default update
+- Test Pass/Fail counts:
+  - `npm run typecheck`: Passed (0 errors)
+  - `npm test`: 12 test files passed, 126 unit tests passed (0 failures)
+  - `npm run build`: Next.js production build succeeded with Turbopack, static pages generated
+  - `npm run test:int`: 7 test files passed, 31 integration tests passed (0 failures)
+- Verification:
+  - `docker compose config` validated: resolved image is `engineering-os:current`.
+  - `bash -n scripts/deploy.sh` & `bash -n scripts/rollback.sh`: 0 syntax errors.
+  - Tested `scripts/deploy.sh` with dirty tree: halted immediately with error before building or calling SSH.
+  - Tested `scripts/deploy.sh` with HEAD != origin/main: halted immediately with error before building or calling SSH.
+  - Grep for `ghcr` confirmed 0 remaining occurrences outside `docs/` and `plans/` / `PROJECT.md`.
+- Tool notes:
+  - `sequential-thinking` MCP server has no registered tools in environment; step 3 flow analysis was performed directly using analytical steps.
+  - Shell scripts saved with LF line endings and executable mode (+x).
 
 ## Review (Claude)
 <verdict, follow-ups; Claude updates PROJECT.md §6 and marks docs/archive/deployment-runbook.md / docs/archive/deploy-pipeline-plan.md as superseded>

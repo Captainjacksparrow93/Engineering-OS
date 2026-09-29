@@ -5,7 +5,7 @@ Status: TODO → IN PROGRESS → DONE → REVIEWED (then moved to done/)
 
 | # | Plan | Status | Notes |
 |---|---|---|---|
-| 001 | [Build image locally, ship to VPS](001-local-image-build-deploy.md) | TODO | Replaces GHCR build + auto-deploy; owner runs `scripts/deploy.sh` |
+| 001 | [Build image locally, ship to VPS](001-local-image-build-deploy.md) | DONE | Replaces GHCR build + auto-deploy; owner runs `scripts/deploy.sh` |
 | 002 | [Retire the plain-text password CSV](002-retire-logins-csv.md) | TODO | Deletes `logins.csv` + startup script that reverts passwords |
 | 003 | [Remove finished one-off data scripts](003-remove-one-off-scripts.md) | TODO | Deletes wipe/update/verify scripts; keeps `grant-*.ts` |
 | 004 | [UI cleanup + progress fix](004-ui-cleanup-and-progress-fix.md) | TODO | Project code on screen, fewer WO repeats, flat tiles, plain audit text, one progress number |
