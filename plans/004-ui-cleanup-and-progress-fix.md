@@ -99,6 +99,7 @@ Client requests of 2026-09-29 (items 4, 5, 6, 7, 8, 10) plus a progress bug foun
 - [ ] 1. **Progress fix (TDD).**
   - Write an integration test that creates a project with 2 panels (so 2 `PHASE` rows), completes some steps and cancels one. It asserts that `listProjects` stats, `getProjectWorkspace` summary, `getProjectTimeline` totals and the dashboard's `progressPercent` all report the same step count and the same percentage.
   - See it fail, then fix `listProjects` and `getProjectWorkspace` to count leaf non-cancelled steps and use `projectProgress`.
+  - Tests are required only for steps 1 and 6 (logic). Steps 2–5 are display-only; cover them with typecheck, build and the UI check in the acceptance criteria.
 - [ ] 2. **Project identity.**
   - Extend `projectLabel` to include the project code (update `project-label.test.ts` first).
   - Apply the title, subtitle and breadcrumb target on the project page, the card target on the Projects list, and the header change on the timeline card.

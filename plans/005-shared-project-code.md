@@ -71,7 +71,7 @@ Existing projects keep their codes.
 - If a tool is missing or fails, say so in Implementation notes. Never claim you used one when you didn't.
 
 ## Steps
-- [ ] 1. **Test first:** integration test that creates two WORK_ORDER projects with the same explicit code and different WOs. Both succeed; a second project with an already-used **WO** still fails; blank code still auto-generates the next number for that client. See it fail.
+- [ ] 1. **Test first:** integration test that creates two WORK_ORDER projects with the same explicit code and different WOs. Both succeed; a second project with an already-used **WO** still fails; blank code still auto-generates the next number for that client; a PM (no `pm.project.create`) creating a project with an existing code is still refused. See it fail.
 - [ ] 2. Schema + migration; read the generated SQL.
 - [ ] 3. Remove the two duplicate-code guards. Step 1 goes green.
 - [ ] 4. Wizard: pick-or-type code field with the selected client's codes; blank = auto.

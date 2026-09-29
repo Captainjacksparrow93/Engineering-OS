@@ -60,7 +60,7 @@ The existing rule stays unchanged: after creation, a PM moving work to another P
 - If a tool is missing or fails, say so in Implementation notes. Never claim you used one when you didn't.
 
 ## Steps
-- [ ] 1. **Test first:** integration test where a Director creates a project for PM A with a panel assigned to an engineer from PM B's team. It succeeds and the engineer becomes a project member. An inactive user or a user from another company is still rejected. See it fail on the team guard.
+- [ ] 1. **Test first:** integration test where a Director creates a project for PM A with a panel assigned to an engineer from PM B's team. It succeeds and the engineer becomes a project member. An inactive user or a user from another company is still rejected. A PM (no `pm.project.create`) calling `createAutomationProject` is still refused. See it fail on the team guard.
 - [ ] 2. Remove the server guard. Test goes green.
 - [ ] 3. Wizard: grouped picker, own team first and marked, for every panel type.
 - [ ] 4. Full suite; record counts.
