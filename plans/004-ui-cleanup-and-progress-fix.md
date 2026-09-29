@@ -197,14 +197,16 @@ Client requests of 2026-09-29 (items 4, 5, 6, 7, 8, 10) plus a progress bug foun
 - Not checked: visual check on production data (waiting on the owner's local copy).
 
 **Follow-ups (implementer)**
-- [ ] **F1 (must): the timeline still disagrees when a project has urgent/ad-hoc tasks.**
+- [x] **F1 (must): the timeline still disagrees when a project has urgent/ad-hoc tasks.**
   - In `getProjectTimeline`, when a project has panels, steps are collected only per panel (`leafTasks.filter((t) => t.parentId === phase.id)`).
   - Tasks with no panel (`parentId` null, e.g. "Add urgent task", whose form sends no `parentId`) are dropped from `totalSteps` and from the chart. The list, workspace and dashboard do count them, so WO 6924 with one urgent task would read 28/31 on the card and "28 of 30" on the timeline.
   - Fix:
     - take the timeline totals from the same `activeLeafTasks` rule;
     - show panel-less steps in one extra lane (e.g. "Other tasks"), only when there are any;
     - add a panel-less ad-hoc task to `project-progress-consistency.int.test.ts` so the test covers it.
-- [ ] **F2 (minor): audit leftovers.**
+  - *Resolved:* `getProjectTimeline` now uses `activeLeafTasks` and appends an "Other tasks" lane when panel-less leaf tasks exist. `project-progress-consistency.int.test.ts` updated and passes.
+- [x] **F2 (minor): audit leftovers.**
   - (a) Plain string values in the Details fallback still use the old branch, so an enum shows as "IN PROGRESS" and an unknown ID shows raw. Route strings through `formatSingleValue` as well.
   - (b) `admin/audit/page.tsx` builds its own "code · WO" project label. Reuse `projectLabel` so there is one format.
   - (c) The file header comment of `audit-format.ts` was deleted; restore it.
+  - *Resolved:* All fallback values route through `formatSingleValue`, `admin/audit/page.tsx` reuses `projectLabel`, and header comment is restored.

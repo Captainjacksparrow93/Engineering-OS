@@ -1,3 +1,10 @@
+/**
+ * Formatting helpers for the platform audit trail.
+ *
+ * Provides human-readable sentences for known actions, clean entity labels,
+ * and robust fallback key-value formatting without leaking sensitive data or nulls.
+ */
+
 import { formatDate } from '@/core/utils/dates';
 
 function formatSingleValue(val: unknown, nameMap: Map<string, string>): string {
@@ -17,6 +24,10 @@ function formatSingleValue(val: unknown, nameMap: Map<string, string>): string {
     if (/^[A-Z][A-Z0-9_]+$/.test(val)) {
       const lower = val.replace(/_/g, ' ').toLowerCase();
       return lower.charAt(0).toUpperCase() + lower.slice(1);
+    }
+    // Unknown cuid or uuid ID
+    if (/^c[a-z0-9]{20,}$/i.test(val) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
+      return 'Unknown';
     }
     return val.replace(/_/g, ' ');
   }
@@ -216,19 +227,7 @@ export function formatAuditDetails(
       continue;
     }
 
-    let valStr = '';
-
-    if (typeof v === 'string') {
-      if (nameMap.has(v)) {
-        valStr = nameMap.get(v)!;
-      } else {
-        valStr = v.replace(/_/g, ' ');
-      }
-    } else if (typeof v === 'object') {
-      valStr = formatSingleValue(v, nameMap);
-    } else {
-      valStr = String(v);
-    }
+    const valStr = formatSingleValue(v, nameMap);
 
     if (keyName === 'user id' || keyName === 'userid') keyName = 'employee';
     if (keyName === 'actor id' || keyName === 'actorid') keyName = 'by';

@@ -157,20 +157,35 @@ describe('Project Progress and Step Count Consistency (#004 Step 1)', () => {
       ],
     });
 
+    // Create an ad-hoc/urgent task without parent (no panel)
+    await prisma.task.create({
+      data: {
+        projectId: project.id,
+        code: 'ADHOC-1',
+        title: 'Urgent Site Valve Support',
+        type: 'ADHOC',
+        status: 'IN_PROGRESS',
+        percentComplete: 20,
+        estimatedHours: 10,
+        createdById: principal.userId,
+      },
+    });
+
     // Fetch all tasks directly to compute expected ground truth using domain projectProgress
     const allDbTasks = await prisma.task.findMany({ where: { projectId: project.id } });
     const expectedProgress = projectProgress(allDbTasks);
 
-    // Total tasks in DB = 8 (2 phase + 6 children)
-    // Leaf non-cancelled tasks = 5
+    // Total tasks in DB = 9 (2 phase + 6 phase children + 1 adhoc)
+    // Leaf non-cancelled tasks = 6 (5 in panels + 1 panel-less adhoc)
     // Completed leaf tasks = 2
-    const expectedTotalSteps = 5;
+    const expectedTotalSteps = 6;
     const expectedCompletedSteps = 2;
 
     // 1. Check getProjectTimeline
     const timeline = await getProjectTimeline(principal, project.id);
     expect(timeline.totalSteps).toBe(expectedTotalSteps);
     expect(timeline.completedSteps).toBe(expectedCompletedSteps);
+    expect(timeline.lanes.some((l) => l.name === 'Other tasks')).toBe(true);
 
     // 2. Check getProjectWorkspace summary
     const workspace = await getProjectWorkspace(principal, project.id);

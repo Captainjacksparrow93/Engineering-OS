@@ -196,7 +196,20 @@ describe('Audit Formatting (#10)', () => {
       expect(formatted).not.toContain('empty');
       expect(formatted).toContain('to: Agastya Patel');
       expect(formatted).toContain('from: Hitesh');
-      expect(formatted).toContain('role: OWNER');
+      expect(formatted).toContain('role: Owner');
+    });
+
+    it('formats plain string enums in sentence case and unknown cuid/uuid as Unknown', () => {
+      const diff = {
+        status: 'IN_PROGRESS',
+        unknownUser: 'cly1234567890123456789012',
+      };
+      const formatted = formatAuditDetails(
+        { module: 'pm', action: 'task.updated', entityType: 'Task', diff },
+        nameMap
+      );
+      expect(formatted).toContain('status: In progress');
+      expect(formatted).toContain('unknown user: Unknown');
     });
   });
 });

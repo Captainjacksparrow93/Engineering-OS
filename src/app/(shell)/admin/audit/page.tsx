@@ -18,6 +18,7 @@ import {
   formatAuditItem,
   formatAuditDetails,
 } from '@/modules/admin/domain/audit-format';
+import { projectLabel } from '@/modules/project-management/domain/project-label';
 
 // Clean timestamp: '12/9/2026, 1:14 PM' (no seconds, uppercase AM/PM)
 function formatTimestamp(date: Date): string {
@@ -61,27 +62,11 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   const nameMap = new Map<string, string>();
   allUsers.forEach((u) => nameMap.set(u.id, formatName(u.fullName)));
   allProjects.forEach((p) => {
-    const parts: string[] = [];
-    if (p.code) parts.push(p.code);
-    if (p.workOrderNo) {
-      parts.push(`WO ${p.workOrderNo}`);
-    } else if (!p.code && p.name) {
-      parts.push(p.name);
-    }
-    const label = parts.length > 0 ? parts.join(' · ') : p.name;
-    nameMap.set(p.id, label);
+    nameMap.set(p.id, projectLabel(p));
   });
   allTasks.forEach((t) => {
-    let taskLabel = t.title;
-    if (t.project) {
-      const projRef = t.project.workOrderNo
-        ? `WO ${t.project.workOrderNo}`
-        : (t.project.code ?? t.project.name);
-      if (projRef) {
-        taskLabel = `${t.title} · ${projRef}`;
-      }
-    }
-    nameMap.set(t.id, taskLabel);
+    const projRef = t.project ? projectLabel(t.project) : null;
+    nameMap.set(t.id, projRef ? `${t.title} · ${projRef}` : t.title);
   });
   allDepts.forEach((d) => nameMap.set(d.id, d.name));
   allRoles.forEach((r) => nameMap.set(r.key, r.name));
