@@ -1,6 +1,6 @@
 # 003 — Remove finished one-off data scripts
 
-**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** REVIEWED   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 
 ## Goal
@@ -64,4 +64,15 @@ Keep (still run on every start by `entrypoint.sh`): `grant-commissioning-permiss
   - Text search: 0 occurrences of the removed script names outside `docs/` and `plans/`.
 
 ## Review (Claude)
-<verdict, follow-ups; Claude updates docs/client-requests-2026-09-25.md line 16 if needed>
+**2026-09-29 — reviewed `2844b6d`. Verdict: REVIEWED.**
+
+**Checked**
+- Exactly the four files deleted; nothing else under `prisma/`, `src/` or `entrypoint.sh` touched.
+- `prisma/scripts/` now holds only the five `grant-*.ts` files.
+- `git grep` for the three script names outside `docs/` and `plans/`: 0 matches.
+- The implementer pasted the graph results: `not_found` for three files, 0 importers for `verify-handover-rework.ts`. That is consistent; standalone scripts have no importers.
+- Tests (Claude, local): typecheck OK; unit 12/12 files pass; integration 7/7 files pass; build OK.
+
+**Correction to this plan (Claude's error):** the Goal says all five `grant-*.ts` scripts run on every start. In fact `entrypoint.sh` runs only three: commissioning, password-reset and read-permissions. `grant-sales-head.ts` and `grant-service-head.ts` are not run by anything, so they look like finished one-offs too. Leave them for now; they can go in a later clean-up once the owner confirms the Sales Head / Service Head grants exist in production.
+
+**Docs:** `docs/client-requests-2026-09-25.md:16` is a dated snapshot of the 2026-09-25 state; left unchanged on purpose.
