@@ -59,6 +59,7 @@ The implementer may be any AI and may never read `AGENTS.md`. So every plan file
 - The exact test commands, and the instruction to paste pass/fail counts into Implementation notes.
 - The live-production rules that apply (no push, migrations only, no VPS/prod data).
 Name real symbols and files, not placeholders. A plan that says "use the graph" without saying on what has failed.
+Keep the tool wording light (user decision 2026-09-29): say *what* to check and with which tool (e.g. "callers of `listProjects`", "blast radius of `project.service.ts`", "read `updateProject`"), not exact tool function names, parameters or call syntax. The shared wording lives in `plans/TEMPLATE.md`.
 
 ## Requirements First
 - When the user asks for a change or feature: first explain back in plain words what you understood (what changes, what doesn't, open questions/assumptions). Do NOT write a plan until the user says go.

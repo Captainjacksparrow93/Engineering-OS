@@ -16,27 +16,10 @@
 - <plan-specific constraints>
 
 ## Tools & skills (implementer: follow these)
-- **Session setup (do these first, in order):**
-  1. `mcp__token-savior__switch_project` with `name: "Project management"` (a path-based switch can land on the parent `Downloads` folder).
-  2. `mcp__code-review-graph__build_or_update_graph_tool` (incremental, default args). Confirm `head_matches_build: true` in the result.
-  3. Load skills with the Skill tool: `ponytail` (full), then the others listed under **Skills** below.
-- **How to call the graph:** `mcp__code-review-graph__query_graph_tool` with `pattern` (`callers_of` / `importers_of` / `tests_for`) and `target`.
-  - Plain function names work, e.g. `target: "<functionName>"`.
-  - File targets and some symbols return *not found* with relative paths. Retry with the qualified form `C:\Users\Dhruv-Home\Downloads\projects\ACS\Project management\<path>::<symbol>`. If that still fails, use a text search and write "graph not_found → text search" in Implementation notes.
-  - `mcp__code-review-graph__get_impact_radius_tool` takes `changed_files` (repo-relative paths) and `detail_level: "minimal"`.
-  - `mcp__code-review-graph__get_affected_flows_tool` takes the same `changed_files`.
-- **How to read code:**
-  - `mcp__token-savior__get_function_source` with `name` (or `names`, up to 10).
-  - `mcp__token-savior__find_symbol` to locate.
-  - `mcp__token-savior__get_full_context` with `depth: 1` when you need dependents.
-  - Never `cat` or Read a whole file over 300 lines; search for the quoted string and read that range.
-- **sequential-thinking:** `mcp__sequential-thinking__sequentialthinking`. Paste its final conclusion (one or two lines) into Implementation notes for the step that requires it.
-- **Paste back:** for every graph call, a one-line result (count plus names) in Implementation notes, so the reviewer can compare with **Affected code** above.
-- **Navigate with code-review-graph, don't read whole files:**
-  - `query_graph_tool` callers_of `<symbol>` / importers_of `<module>`
-  - `get_impact_radius_tool` on `<symbol>` before changing it
-  - `get_affected_flows_tool` if touching <flow>
-- **Read code with Token Savior:** `find_symbol` `<symbol>`, `get_function_source` `<function>`, `get_full_context` `<file>`.
+- **Setup:** point Token Savior at this project and update the code-review-graph; load `ponytail` (full) and the skills below.
+- **Look before you change:** use the graph for callers and blast radius, and Token Savior to read code by symbol rather than whole files. If the graph can't find something, use text search and say so in notes.
+- **Check first (graph):** callers of `<symbol>`; importers of `<module>`; blast radius of `<file>`; affected flows for `<flow>` if user-facing.
+- **Read (Token Savior):** `<function>`, `<symbol>`.
 - **sequential-thinking:** <required for step N — reason / not needed>.
 - **Skills:** `ponytail` (full, always) · `tdd` (tests first) · `review-delta` (before DONE)<· `ux-writing` / `impeccable` if UI>.
 - **Tests:** `npm run typecheck && npm test && npm run build` and `npm run test:int` — run the full suite and paste pass/fail counts into Implementation notes.

@@ -54,7 +54,7 @@ Client request 2026-09-29, item 9. Directors and Heads can correct a project's d
 
 **Blast radius** (code-review-graph, 2026-09-29, graph at `65066d3`):
 - `callers_of updateProject`: only `src/app/api/pm/projects/[id]/route.ts`.
-- `get_impact_radius_tool` on `client.service.ts`, `src/app/actions/pm.ts` and the project API route: "high", 131 files within 2 hops, key entities `handleSelectProject`, `handleAssign`, `handleCloseCommissioning`, `handleRelease`, `handleQuickStatus`. `actions/pm.ts` is a hub; only new exports are added there.
+- blast radius of `client.service.ts`, `src/app/actions/pm.ts` and the project API route: "high", 131 files within 2 hops, key entities `handleSelectProject`, `handleAssign`, `handleCloseCommissioning`, `handleRelease`, `handleQuickStatus`. `actions/pm.ts` is a hub; only new exports are added there.
 - Run `callers_of createClient`, `getClientById`, `listClients` and `importers_of client.service.ts` before editing; record the results.
 
 ## Constraints
@@ -66,24 +66,10 @@ Client request 2026-09-29, item 9. Directors and Heads can correct a project's d
 - UI copy per `ux-writing`, form layout per `impeccable`.
 
 ## Tools & skills (implementer: follow these)
-- **Session setup (do these first, in order):**
-  1. `mcp__token-savior__switch_project` with `name: "Project management"` (a path-based switch can land on the parent `Downloads` folder).
-  2. `mcp__code-review-graph__build_or_update_graph_tool` (incremental, default args). Confirm `head_matches_build: true` in the result.
-  3. Load skills with the Skill tool: `ponytail` (full), then the others listed under **Skills** below.
-- **How to call the graph:** `mcp__code-review-graph__query_graph_tool` with `pattern` (`callers_of` / `importers_of` / `tests_for`) and `target`.
-  - Plain function names work, e.g. `target: "listProjects"`.
-  - File targets and some symbols return *not found* with relative paths. Retry with the qualified form `C:\Users\Dhruv-Home\Downloads\projects\ACS\Project management\<path>::<symbol>`. If that still fails, use a text search and write "graph not_found → text search" in Implementation notes.
-  - `mcp__code-review-graph__get_impact_radius_tool` takes `changed_files` (repo-relative paths) and `detail_level: "minimal"`.
-  - `mcp__code-review-graph__get_affected_flows_tool` takes the same `changed_files`.
-- **How to read code:**
-  - `mcp__token-savior__get_function_source` with `name` (or `names`, up to 10).
-  - `mcp__token-savior__find_symbol` to locate.
-  - `mcp__token-savior__get_full_context` with `depth: 1` when you need dependents.
-  - Never `cat` or Read a whole file over 300 lines; search for the quoted string and read that range.
-- **sequential-thinking:** `mcp__sequential-thinking__sequentialthinking`. Paste its final conclusion (one or two lines) into Implementation notes for the step that requires it.
-- **Paste back:** for every graph call, a one-line result (count plus names) in Implementation notes, so the reviewer can compare with **Affected code** above.
-- **code-review-graph:** `query_graph_tool` `callers_of` `updateProject`, `createClient`, `getClientById`; `importers_of` `src/modules/project-management/services/client.service.ts`; `get_impact_radius_tool` on `project.service.ts` and `client.service.ts`; `get_affected_flows_tool` on the project page.
-- **Token Savior:** `get_function_source` `updateProject`, `createClient`, `createProject`, `assertCan`; `find_symbol` `updateProjectSchema`, `createClientAction`.
+- **Setup:** point Token Savior at this project and update the code-review-graph; load `ponytail` (full) and the skills below.
+- **Look before you change:** use the graph for callers and blast radius, and Token Savior to read code by symbol rather than whole files. If the graph can't find something, use text search and say so in notes.
+- **Check first (graph):** callers of `updateProject`, `createClient`, `getClientById`; importers of `src/modules/project-management/services/client.service.ts`; blast radius of `project.service.ts` and `client.service.ts`; affected flows for the project page.
+- **Read (Token Savior):** `updateProject`, `createClient`, `createProject`, `assertCan`; find `updateProjectSchema`, `createClientAction`.
 - **sequential-thinking:** required for step 2 (the order of validation and writes inside one transaction: project row, `PHASE` rows, audit).
 - **Skills:** `ponytail` (full) · `tdd` · `impeccable` + `ux-writing` · `review-delta` (before DONE).
 - **Tests:** `npm run typecheck && npm test && npm run build` and `npm run test:int`. Run the full suite and paste pass/fail counts into Implementation notes.
