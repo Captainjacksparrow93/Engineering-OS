@@ -12,13 +12,11 @@ fi
 echo "==> Synchronizing system roles, permissions and seed data..."
 if [ -f "node_modules/tsx/dist/cli.mjs" ]; then
   node node_modules/tsx/dist/cli.mjs prisma/seed.ts || echo "ERROR: Main seed failed — see exception above" >&2
-  node node_modules/tsx/dist/cli.mjs prisma/scripts/set-passwords-from-csv.ts || echo "ERROR: Password sync failed — see exception above" >&2
   node node_modules/tsx/dist/cli.mjs prisma/scripts/grant-commissioning-permissions.ts || echo "ERROR: Commissioning permission sync failed — see exception above" >&2
   node node_modules/tsx/dist/cli.mjs prisma/scripts/grant-password-reset.ts || echo "ERROR: Password reset permission sync failed — see exception above" >&2
   node node_modules/tsx/dist/cli.mjs prisma/scripts/grant-read-permissions.ts || echo "ERROR: Read permission sync failed — see exception above" >&2
 elif command -v npx >/dev/null 2>&1; then
   npx prisma db seed || echo "ERROR: Main seed failed — see exception above" >&2
-  npx tsx prisma/scripts/set-passwords-from-csv.ts || echo "ERROR: Password sync failed — see exception above" >&2
   npx tsx prisma/scripts/grant-commissioning-permissions.ts || echo "ERROR: Commissioning permission sync failed — see exception above" >&2
   npx tsx prisma/scripts/grant-password-reset.ts || echo "ERROR: Password reset permission sync failed — see exception above" >&2
   npx tsx prisma/scripts/grant-read-permissions.ts || echo "ERROR: Read permission sync failed — see exception above" >&2

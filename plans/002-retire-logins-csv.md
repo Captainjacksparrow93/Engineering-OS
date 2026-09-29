@@ -1,6 +1,6 @@
 # 002 — Retire the plain-text password CSV
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 
 ## Goal
@@ -31,22 +31,36 @@ The owner confirmed (2026-09-26) all passwords now live in the database, so the 
 - If a tool is missing or fails, say so in Implementation notes. Never claim you used one when you didn't.
 
 ## Steps
-- [ ] 1. Delete `prisma/data/logins.csv` and `prisma/scripts/set-passwords-from-csv.ts` (`git rm`).
-- [ ] 2. In `entrypoint.sh`, remove both `set-passwords-from-csv.ts` lines. Check with `sh -n entrypoint.sh`.
-- [ ] 3. Run the search and the full test suite; record results.
+- [x] 1. Delete `prisma/data/logins.csv` and `prisma/scripts/set-passwords-from-csv.ts` (`git rm`).
+- [x] 2. In `entrypoint.sh`, remove both `set-passwords-from-csv.ts` lines. Check with `sh -n entrypoint.sh`.
+- [x] 3. Run the search and the full test suite; record results.
 
 ## Acceptance criteria
-- [ ] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
-- [ ] `git ls-files prisma/data` no longer lists `logins.csv`.
-- [ ] `entrypoint.sh` has no reference to `set-passwords-from-csv`; `sh -n entrypoint.sh` passes.
-- [ ] No references to `logins.csv` / `set-passwords-from-csv` outside `AGENTS.md`, `PROJECT.md` and `docs/`.
+- [x] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
+- [x] `git ls-files prisma/data` no longer lists `logins.csv`.
+- [x] `entrypoint.sh` has no reference to `set-passwords-from-csv`; `sh -n entrypoint.sh` passes.
+- [x] No references to `logins.csv` / `set-passwords-from-csv` outside `AGENTS.md`, `PROJECT.md` and `docs/`.
 
 ## Owner steps after review (not for the implementer)
 - Deploy as usual. After this deploy, passwords changed in the app stay changed.
 - The old passwords are still readable in git history by anyone with repo access. Ask everyone to change their password in the app after the deploy (before the deploy it would be reverted).
 
 ## Implementation notes (implementer)
-<commits, deviations from plan, test pass/fail counts, tools used, open questions>
+- Commits:
+  - Plan 002: Retire plain-text password CSV and startup reset script
+- Tool output:
+  - `code-review-graph` (`query_graph_tool` with pattern `importers_of`, target `prisma/scripts/set-passwords-from-csv.ts`):
+    `{"status":"ok","pattern":"importers_of","target":"prisma/scripts/set-passwords-from-csv.ts","summary":"Found 0 result(s) for importers_of('prisma/scripts/set-passwords-from-csv.ts')","result_count":0,"results":[]}`
+- Test Pass/Fail counts:
+  - `npm run typecheck`: Passed (0 errors)
+  - `npm test`: 12 test files passed, 126 unit tests passed (0 failures)
+  - `npm run build`: Next.js production build succeeded with Turbopack, static pages generated
+  - `npm run test:int`: 7 test files passed, 31 integration tests passed (0 failures)
+- Verification:
+  - `git ls-files prisma/data`: returned empty (logins.csv removed).
+  - `sh -n entrypoint.sh`: Passed syntax check cleanly.
+  - Text search: No references to `logins.csv` or `set-passwords-from-csv` outside `AGENTS.md`, `PROJECT.md`, `plans/` and `docs/`.
+  - LF line endings preserved on `entrypoint.sh`.
 
 ## Review (Claude)
 <verdict, follow-ups; Claude updates AGENTS.md line 13 and PROJECT.md line 188>
