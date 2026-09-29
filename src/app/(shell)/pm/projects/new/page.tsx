@@ -28,7 +28,6 @@ export default async function NewProjectPage() {
     <>
       <PageHeader
         title="New project"
-        subtitle="Configure order details, select automation scope (PLC/SCADA/HMI), assign the Project Manager, and auto-assign team capacity."
         breadcrumb={[{ label: 'Projects', href: '/pm/projects' }, { label: 'New project' }]}
       />
 

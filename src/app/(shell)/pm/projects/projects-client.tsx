@@ -11,6 +11,7 @@ interface ProjectListItem {
   id: string;
   code: string;
   name: string;
+  workOrderNo?: string | null;
   clientName: string;
   status: string;
   priority: string;
@@ -132,8 +133,10 @@ export function ProjectsClient({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-title-sm font-semibold text-ink">{project.name}</p>
-                    <p className="text-caption text-muted">{project.clientName}</p>
+                    <p className="text-title-sm font-semibold text-ink">{project.code || project.name}</p>
+                    <p className="text-caption text-muted">
+                      {project.workOrderNo ? `WO ${project.workOrderNo} · ` : ''}{project.clientName}
+                    </p>
                   </div>
                   <StatusBadge status={project.status} />
                 </div>

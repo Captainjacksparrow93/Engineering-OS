@@ -47,9 +47,22 @@ export function daysLate(forecast: Date, targetEndDate: Date | string, today: Da
 export interface ProgressTask {
   id?: string;
   parentId?: string | null;
+  type?: string;
   status: string;
   percentComplete: number;
   estimatedHours?: number;
+  actualHours?: number;
+  plannedEnd?: Date | string | null;
+  isBlocked?: boolean;
+}
+
+/**
+ * Filter tasks to active (non-cancelled) leaf tasks.
+ * Excludes parent tasks and PHASE container nodes.
+ */
+export function activeLeafTasks<T extends { id?: string; parentId?: string | null; type?: string; status: string }>(tasks: T[]): T[] {
+  const parentIds = new Set(tasks.map((t) => t.parentId).filter(Boolean) as string[]);
+  return tasks.filter((t) => t.status !== 'CANCELLED' && t.type !== 'PHASE' && (!t.id || !parentIds.has(t.id)));
 }
 
 /**
@@ -57,9 +70,7 @@ export interface ProgressTask {
  * Weighted by estimated effort on active leaf tasks.
  */
 export function projectProgress(tasks: ProgressTask[]): number {
-  const parentIds = new Set(tasks.map((t) => t.parentId).filter(Boolean));
-  const leafTasks = tasks.filter((t) => !t.id || !parentIds.has(t.id));
-  const activeLeaves = leafTasks.filter((t) => t.status !== 'CANCELLED');
+  const activeLeaves = activeLeafTasks(tasks);
   if (activeLeaves.length === 0) return 0;
 
   const totalWeight = activeLeaves.reduce((sum, t) => sum + Math.max(t.estimatedHours ?? 8, 1), 0);
@@ -69,6 +80,45 @@ export function projectProgress(tasks: ProgressTask[]): number {
   }, 0);
 
   return Math.round((completedWeight / totalWeight) * 100);
+}
+
+export interface ProjectStepStats {
+  taskCount: number;
+  completedCount: number;
+  blockedCount: number;
+  openCount: number;
+  overdueCount: number;
+  estimatedHours: number;
+  actualHours: number;
+  progressPercent: number;
+}
+
+/**
+ * Computes consistent step counts and progress for project workspaces and project lists.
+ * Every step count strictly reflects active (non-cancelled) leaf tasks.
+ */
+export function projectStepStats(tasks: ProgressTask[], asOfDate: Date = new Date()): ProjectStepStats {
+  const leaves = activeLeafTasks(tasks);
+  const total = leaves.length;
+  const completed = leaves.filter((t) => t.status === 'COMPLETED').length;
+  const blocked = leaves.filter((t) => t.status === 'BLOCKED' || Boolean(t.isBlocked)).length;
+  const open = leaves.filter((t) => t.status !== 'COMPLETED');
+  const now = asOfDate.getTime();
+  const overdue = open.filter((t) => t.plannedEnd && new Date(t.plannedEnd).getTime() < now).length;
+  const estimated = leaves.reduce((sum, t) => sum + (t.estimatedHours ?? 0), 0);
+  const actual = leaves.reduce((sum, t) => sum + (t.actualHours ?? 0), 0);
+  const progressPercent = projectProgress(tasks);
+
+  return {
+    taskCount: total,
+    completedCount: completed,
+    blockedCount: blocked,
+    openCount: open.length,
+    overdueCount: overdue,
+    estimatedHours: Math.round(estimated),
+    actualHours: Math.round(actual),
+    progressPercent,
+  };
 }
 
 export interface HealthInput {

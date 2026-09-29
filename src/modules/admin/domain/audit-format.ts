@@ -1,9 +1,35 @@
-/**
- * Formatting helpers for the platform audit trail.
- *
- * Provides human-readable sentences for known actions, clean entity labels,
- * and robust fallback key-value formatting without leaking sensitive data or nulls.
- */
+import { formatDate } from '@/core/utils/dates';
+
+function formatSingleValue(val: unknown, nameMap: Map<string, string>): string {
+  if (val === null || val === undefined || val === '') return 'None';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  if (typeof val === 'number') return String(val);
+  if (typeof val === 'string') {
+    if (nameMap.has(val)) return nameMap.get(val)!;
+    // Check if it's an ISO date string
+    if (/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?)?$/.test(val)) {
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) {
+        return formatDate(d, { forceYear: true });
+      }
+    }
+    // Check if it's an uppercase enum like IN_REVIEW, ON_HOLD, etc.
+    if (/^[A-Z][A-Z0-9_]+$/.test(val)) {
+      const lower = val.replace(/_/g, ' ').toLowerCase();
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    }
+    return val.replace(/_/g, ' ');
+  }
+  if (Array.isArray(val)) {
+    return val.map((x) => formatSingleValue(x, nameMap)).join(', ');
+  }
+  if (typeof val === 'object') {
+    return Object.entries(val as Record<string, unknown>)
+      .map(([k, v]) => `${k}: ${formatSingleValue(v, nameMap)}`)
+      .join(', ');
+  }
+  return String(val);
+}
 
 export function formatAuditAction(module: string, action: string): string {
   const fullKey = `${module}.${action}`;
@@ -71,15 +97,17 @@ export function formatAuditItem(
   }
 
   if (entityType === 'Project') {
+    const projName = nameMap.get(entityId);
     return {
-      label: 'Project',
+      label: projName ? `Project: ${projName}` : 'Project',
       href: `/pm/projects/${entityId}`,
     };
   }
 
   if (entityType === 'Task') {
+    const taskName = nameMap.get(entityId);
     return {
-      label: 'Task',
+      label: taskName ? `Task: ${taskName}` : 'Task',
       href: `/pm/tasks/${entityId}`,
     };
   }
@@ -172,6 +200,22 @@ export function formatAuditDetails(
     if (v === null || v === undefined || v === '') continue;
 
     let keyName = k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim().toLowerCase();
+
+    // Check for transition object { from, to }
+    if (
+      typeof v === 'object' &&
+      v !== null &&
+      !Array.isArray(v) &&
+      ('from' in v || 'to' in v)
+    ) {
+      const trans = v as { from?: unknown; to?: unknown };
+      const fromStr = formatSingleValue(trans.from, nameMap);
+      const toStr = formatSingleValue(trans.to, nameMap);
+      const labelKey = keyName.charAt(0).toUpperCase() + keyName.slice(1);
+      formattedPairs.push(`${labelKey}: ${fromStr} → ${toStr}`);
+      continue;
+    }
+
     let valStr = '';
 
     if (typeof v === 'string') {
@@ -181,7 +225,7 @@ export function formatAuditDetails(
         valStr = v.replace(/_/g, ' ');
       }
     } else if (typeof v === 'object') {
-      valStr = JSON.stringify(v);
+      valStr = formatSingleValue(v, nameMap);
     } else {
       valStr = String(v);
     }

@@ -651,9 +651,6 @@ export function AutomationProjectWizard({
         <section className="card p-5 space-y-6 bg-surface">
           <div>
             <h2 className="text-title-sm font-semibold text-ink">1. Order & Customer Details</h2>
-            <p className="text-caption text-muted">
-              Enter the Work Order No., select customer client, and schedule milestone dates.
-            </p>
           </div>
 
           {step1Error ? (
@@ -666,8 +663,7 @@ export function AutomationProjectWizard({
             {/* Service Call / Work Order Toggle */}
             <div className="sm:col-span-2 flex items-center justify-between p-3.5 rounded-lg border border-hairline bg-surface-strong/20">
               <div>
-                <p className="text-body-sm font-semibold text-ink">Urgent Service Call (no WO)</p>
-                <p className="text-caption text-muted">Create project directly in client's name without waiting for a Work Order.</p>
+                <p className="text-body-sm font-semibold text-ink">Urgent service call (no WO)</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input

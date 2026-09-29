@@ -96,14 +96,11 @@ export function ServiceCallModal({
             <header className="card-header border-b border-hairline pb-3 flex justify-between items-center">
               <div>
                 <h3 className="card-title text-base font-semibold text-ink flex items-center gap-2">
-                  <span>⚡ Urgent Service Call</span>
+                  <span>⚡ Urgent service call</span>
                   <span className="badge bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs font-bold">
                     No WO
                   </span>
                 </h3>
-                <p className="text-caption text-muted mt-0.5">
-                  Creates an urgent service call project in the client's name without waiting for a Work Order.
-                </p>
               </div>
               <button
                 type="button"

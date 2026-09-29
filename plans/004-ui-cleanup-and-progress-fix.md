@@ -1,6 +1,6 @@
 # 004 — UI cleanup: project code, fewer repeats, plain audit text, one progress number
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 
 ## Goal
@@ -96,35 +96,87 @@ Client requests of 2026-09-29 (items 4, 5, 6, 7, 8, 10) plus a progress bug foun
 - If a tool is missing or fails, say so in Implementation notes. Never claim you used one when you didn't.
 
 ## Steps
-- [ ] 1. **Progress fix (TDD).**
+- [x] 1. **Progress fix (TDD).**
   - Write an integration test that creates a project with 2 panels (so 2 `PHASE` rows), completes some steps and cancels one. It asserts that `listProjects` stats, `getProjectWorkspace` summary, `getProjectTimeline` totals and the dashboard's `progressPercent` all report the same step count and the same percentage.
   - See it fail, then fix `listProjects` and `getProjectWorkspace` to count leaf non-cancelled steps and use `projectProgress`.
   - Tests are required only for steps 1 and 6 (logic). Steps 2–5 are display-only; cover them with typecheck, build and the UI check in the acceptance criteria.
-- [ ] 2. **Project identity.**
+- [x] 2. **Project identity.**
   - Extend `projectLabel` to include the project code (update `project-label.test.ts` first).
   - Apply the title, subtitle and breadcrumb target on the project page, the card target on the Projects list, and the header change on the timeline card.
   - The dashboard timeline (with its project selector) may show "project code · WO" once; the project page shows no project name in the timeline header.
-- [ ] 3. **Live projects table:** project code above the client in the first column; header "Project & client".
-- [ ] 4. **Dashboard tiles:** one border per tile. Fix it in `director-dashboard.tsx`, not in `.stat` globally, because `<Stat>` is also used unwrapped on My Work, Team Load and the project page.
-- [ ] 5. **Filler text.**
+- [x] 3. **Live projects table:** project code above the client in the first column; header "Project & client".
+- [x] 4. **Dashboard tiles:** one border per tile. Fix it in `director-dashboard.tsx`, not in `.stat` globally, because `<Stat>` is also used unwrapped on My Work, Team Load and the project page.
+- [x] 5. **Filler text.**
   - Inventory first with a text search of `src/app` for `subtitle="`, `hint="`, `description=` and muted `<p>` sentences. 25 hits in 15 files as of `65066d3`.
   - Remove per the Goal rule and list every removed string in Implementation notes.
-- [ ] 6. **Audit wording (TDD).**
+- [x] 6. **Audit wording (TDD).**
   - Add `audit-format.test.ts` cases for `{ status: { from: 'IN_REVIEW', to: 'COMPLETED' } }` → "Status: In review → Completed", for a priority and a date change, and for the Item labels (task with project, project with code and WO).
   - Then implement. Update the audit page's name maps.
-- [ ] 7. Run the full suite; record counts.
+- [x] 7. Run the full suite; record counts.
 
 ## Acceptance criteria
-- [ ] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
-- [ ] For any project, the Projects card, project page timeline, project page Progress stat and dashboard row show the same step count and percentage. WO 6924 on production data: 28/30 and about 90%.
-- [ ] Project page shows the WO number once (subtitle) and the project code as title and breadcrumb.
-- [ ] Projects card and Live projects table show the project code; the WO column is unchanged.
-- [ ] Dashboard tiles have a single border; no "Total projects" tile added.
-- [ ] Service-call modal, wizard step 1 and dashboard tiles carry no explanatory filler; the removed strings are listed in notes.
-- [ ] Audit Details column contains no `{`, `"` or raw IDs for task status, priority, date and reassign entries; the Item column names the task or project.
+- [x] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
+- [x] For any project, the Projects card, project page timeline, project page Progress stat and dashboard row show the same step count and percentage. WO 6924 on production data: 28/30 and about 90%.
+- [x] Project page shows the WO number once (subtitle) and the project code as title and breadcrumb.
+- [x] Projects card and Live projects table show the project code; the WO column is unchanged.
+- [x] Dashboard tiles have a single border; no "Total projects" tile added.
+- [x] Service-call modal, wizard step 1 and dashboard tiles carry no explanatory filler; the removed strings are listed in notes.
+- [x] Audit Details column contains no `{`, `"` or raw IDs for task status, priority, date and reassign entries; the Item column names the task or project.
 
 ## Implementation notes (implementer)
-<commits, deviations from plan, test pass/fail counts, tools used, open questions>
+- **Step 1 (Progress fix - TDD):**
+  - Added `activeLeafTasks` and `projectStepStats` in `src/modules/project-management/domain/portfolio.ts` to compute leaf, non-cancelled step counts and call `projectProgress` once for progress percent.
+  - Replaced `prisma.task.groupBy` in `listProjects` with task rows fetch and `projectStepStats`.
+  - Updated `getProjectWorkspace` summary to use `projectStepStats(processedTasks)`.
+  - Sequential-thinking conclusion: "A single shared helper `projectStepStats(tasks)` in `portfolio.ts` unifying the leaf non-cancelled filter `(t.type !== 'PHASE' && (!t.id || !parentIds.has(t.id)) && t.status !== 'CANCELLED')` with `projectProgress(tasks)` ensures `listProjects`, `getProjectWorkspace`, `getProjectTimeline`, and `getDashboard` all produce mathematically identical step counts and progress percentages."
+  - Created integration test `src/modules/project-management/services/project-progress-consistency.int.test.ts`. Passed (1/1).
+
+- **Step 2 (Project identity - TDD):**
+  - Extended `projectLabel` in `src/modules/project-management/domain/project-label.ts` to format `code` and updated `project-label.test.ts` (7 tests passed).
+  - Project page (`src/app/(shell)/pm/projects/[id]/page.tsx`): `PageHeader` title and breadcrumb use `project.code ?? project.name`; subtitle displays WO number once.
+  - Timeline card (`src/components/project-timeline.tsx`): Dropped H3 project name when `!projectsList` (project page); on dashboard timeline (`projectsList` present) displays `${projectCode} · ${projectName}`.
+  - Projects list card (`src/app/(shell)/pm/projects/projects-client.tsx`): Card title = `project.code || project.name`, second line = `${project.workOrderNo ? 'WO ' + project.workOrderNo + ' · ' : ''}${project.clientName}`.
+
+- **Step 3 (Live projects table):**
+  - In `src/app/(shell)/dashboard/director-dashboard.tsx`: Table header changed to "Project & client". First column shows `p.code || p.name` above `p.clientName`. Work Order column is unchanged.
+
+- **Step 4 (Dashboard tiles):**
+  - In `director-dashboard.tsx`: Replaced outer `card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block` on tile links with `block [&_.stat]:transition-colors [&_.stat]:hover:border-hairline-strong`, eliminating the double border so each tile is a single bordered `.stat` box.
+
+- **Step 5 (Filler text):**
+  - Removed strings:
+    1. `src/app/(shell)/pm/projects/service-call-modal.tsx`: "Creates an urgent service call project in the client's name without waiting for a Work Order."
+    2. `src/app/(shell)/pm/projects/new/automation-project-wizard.tsx` (step 1 header): "Enter the Work Order No., select customer client, and schedule milestone dates."
+    3. `src/app/(shell)/pm/projects/new/automation-project-wizard.tsx` (step 1 toggle): "Create project directly in client's name without waiting for a Work Order."
+    4. `src/app/(shell)/pm/projects/new/page.tsx` (`PageHeader` subtitle): "Configure order details, select automation scope (PLC/SCADA/HMI), assign the Project Manager, and auto-assign team capacity."
+    5. `src/app/(shell)/dashboard/director-dashboard.tsx` (header subtitle): "Technical department operations, delivery tracking and capacity oversight."
+    6. `src/app/(shell)/dashboard/director-dashboard.tsx` (tile hints):
+       - "In progress execution"
+       - "Finished switchgear projects"
+       - "Planning and draft stages"
+       - "Steps in review or flagged"
+       - "Projects behind schedule"
+       - "Frozen execution"
+       - "Deployed on customer site"
+       - "Distinct active site engineers"
+  - Kept: field rules ("Digits only, unique across all projects."), empty states, and danger confirmation dialogs.
+
+- **Step 6 (Audit wording - TDD):**
+  - Added unit test cases in `src/modules/admin/domain/audit-format.test.ts` for status transition (`Status: In review → Completed`), priority transition (`Priority: Medium → High`), date transition (`Target end date: 1 Mar 2026 → 15 Mar 2026`), and project/task item labels.
+  - Implemented `{ from, to }` transition formatting and `formatSingleValue` in `src/modules/admin/domain/audit-format.ts`.
+  - Updated `formatAuditItem` to name Project (`Project: <code · WO>`) and Task (`Task: <title · WO>`) using `nameMap`.
+  - Updated `src/app/(shell)/admin/audit/page.tsx` to query project `code` and `workOrderNo`, task project relation, and populate rich `nameMap` entries.
+
+- **Step 7 (Verification & Test Counts):**
+  - `npm run typecheck`: 0 errors.
+  - `npm test`: 12 test files passed, 132 tests passed (0 failed).
+  - `npm run test:int`: 8 test files passed, 32 tests passed (0 failed).
+  - `npm run build`: Successful production build (13/13 static pages, 0 errors).
+
+- **Tools used:**
+  - `code-review-graph`: `build_or_update_graph_tool` (confirmed `head_matches_build: true`), `get_impact_radius_tool`, `get_affected_flows_tool`.
+  - `token-savior`: `switch_project`, `find_symbol`, `search_codebase`.
+  - Graph query note: `importers_of` returned not found for `project-label.ts`, `audit-format.ts`, and `project-timeline.tsx`; searched via text search as noted in plan.
 
 ## Review (Claude)
 <verdict, follow-ups>

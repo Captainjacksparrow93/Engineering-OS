@@ -82,9 +82,6 @@ export function DirectorDashboard({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="page-title text-ink">Engineering Executive Dashboard</h1>
-          <p className="mt-1 text-body-sm text-muted">
-            Technical department operations, delivery tracking and capacity oversight.
-          </p>
         </div>
 
         {canCreateProject ? (
@@ -102,34 +99,31 @@ export function DirectorDashboard({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Link
             href="/pm/projects?status=IN_PROGRESS"
-            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+            className="block [&_.stat]:transition-colors [&_.stat]:hover:border-hairline-strong"
           >
             <Stat
               label="Running projects"
               value={data.counts.runningProjects}
-              hint="In progress execution"
             />
           </Link>
 
           <Link
             href="/pm/projects?status=COMPLETED"
-            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+            className="block [&_.stat]:transition-colors [&_.stat]:hover:border-hairline-strong"
           >
             <Stat
               label="Completed"
               value={data.counts.completedProjects}
-              hint="Finished switchgear projects"
             />
           </Link>
 
           <Link
             href="/pm/projects?status=PLANNING"
-            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+            className="block [&_.stat]:transition-colors [&_.stat]:hover:border-hairline-strong"
           >
             <Stat
               label="Not started"
               value={data.counts.notStartedProjects}
-              hint="Planning and draft stages"
             />
           </Link>
         </div>
@@ -138,36 +132,33 @@ export function DirectorDashboard({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Link
             href="/pm/approvals"
-            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+            className="block [&_.stat]:transition-colors [&_.stat]:hover:border-hairline-strong"
           >
             <Stat
               label="Waiting for approval"
               value={data.counts.waitingApprovalTasks}
               tone={data.counts.waitingApprovalTasks > 0 ? 'warning' : 'default'}
-              hint="Steps in review or flagged"
             />
           </Link>
 
           <Link
             href="/pm/projects"
-            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+            className="block [&_.stat]:transition-colors [&_.stat]:hover:border-hairline-strong"
           >
             <Stat
               label="Overdue"
               value={data.counts.overdueProjects}
               tone={data.counts.overdueProjects > 0 ? 'danger' : 'default'}
-              hint="Projects behind schedule"
             />
           </Link>
 
           <Link
             href="/pm/projects?status=ON_HOLD"
-            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+            className="block [&_.stat]:transition-colors [&_.stat]:hover:border-hairline-strong"
           >
             <Stat
               label="On hold"
               value={data.counts.onHoldProjects}
-              hint="Frozen execution"
             />
           </Link>
         </div>
@@ -176,23 +167,21 @@ export function DirectorDashboard({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Link
             href="/pm/commissioning"
-            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+            className="block [&_.stat]:transition-colors [&_.stat]:hover:border-hairline-strong"
           >
             <Stat
               label="Projects in commissioning"
               value={data.counts.commissioningProjects}
-              hint="Deployed on customer site"
             />
           </Link>
 
           <Link
             href="/pm/commissioning"
-            className="card border-hairline bg-surface p-5 hover:border-hairline-strong transition-colors block"
+            className="block [&_.stat]:transition-colors [&_.stat]:hover:border-hairline-strong"
           >
             <Stat
               label="Engineers on commissioning"
               value={data.counts.commissioningEngineers}
-              hint="Distinct active site engineers"
             />
           </Link>
         </div>
@@ -311,7 +300,7 @@ export function DirectorDashboard({
           <table className="table min-w-[850px]">
             <thead>
               <tr className="select-none text-caption text-muted">
-                <th>Project & Client</th>
+                <th>Project & client</th>
                 <th>PM</th>
                 <th>Work Order</th>
                 <th className="w-48">Done vs Time Used</th>
@@ -334,7 +323,7 @@ export function DirectorDashboard({
                     <td>
                       <div className="space-y-0.5">
                         <Link href={`/pm/projects/${p.id}`} className="font-semibold text-ink hover:underline">
-                          {p.name}
+                          {p.code || p.name}
                         </Link>
                         <div className="text-caption text-muted">
                           <span>{p.clientName}</span>

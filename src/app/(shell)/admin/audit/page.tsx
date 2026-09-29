@@ -42,16 +42,47 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   const [entries, allUsers, allProjects, allTasks, allDepts, allRoles] = await Promise.all([
     listAuditTrail(principal, { module: params.module }),
     prisma.user.findMany({ where: { companyId: principal.companyId }, select: { id: true, fullName: true } }),
-    prisma.project.findMany({ where: { companyId: principal.companyId }, select: { id: true, name: true } }),
-    prisma.task.findMany({ where: { project: { companyId: principal.companyId } }, select: { id: true, title: true } }),
+    prisma.project.findMany({
+      where: { companyId: principal.companyId },
+      select: { id: true, name: true, code: true, workOrderNo: true },
+    }),
+    prisma.task.findMany({
+      where: { project: { companyId: principal.companyId } },
+      select: {
+        id: true,
+        title: true,
+        project: { select: { name: true, code: true, workOrderNo: true } },
+      },
+    }),
     prisma.department.findMany({ where: { companyId: principal.companyId }, select: { id: true, name: true } }),
     prisma.role.findMany({ select: { key: true, name: true } }),
   ]);
 
   const nameMap = new Map<string, string>();
   allUsers.forEach((u) => nameMap.set(u.id, formatName(u.fullName)));
-  allProjects.forEach((p) => nameMap.set(p.id, p.name));
-  allTasks.forEach((t) => nameMap.set(t.id, t.title));
+  allProjects.forEach((p) => {
+    const parts: string[] = [];
+    if (p.code) parts.push(p.code);
+    if (p.workOrderNo) {
+      parts.push(`WO ${p.workOrderNo}`);
+    } else if (!p.code && p.name) {
+      parts.push(p.name);
+    }
+    const label = parts.length > 0 ? parts.join(' · ') : p.name;
+    nameMap.set(p.id, label);
+  });
+  allTasks.forEach((t) => {
+    let taskLabel = t.title;
+    if (t.project) {
+      const projRef = t.project.workOrderNo
+        ? `WO ${t.project.workOrderNo}`
+        : (t.project.code ?? t.project.name);
+      if (projRef) {
+        taskLabel = `${t.title} · ${projRef}`;
+      }
+    }
+    nameMap.set(t.id, taskLabel);
+  });
   allDepts.forEach((d) => nameMap.set(d.id, d.name));
   allRoles.forEach((r) => nameMap.set(r.key, r.name));
 

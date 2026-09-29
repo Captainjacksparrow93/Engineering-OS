@@ -211,10 +211,14 @@ export function ProjectTimeline({
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-title-sm font-semibold text-ink">{data.projectName}</h3>
-          </div>
-          <p className="mt-0.5 text-caption text-muted">
+          {projectsList ? (
+            <div className="flex items-center gap-2">
+              <h3 className="text-title-sm font-semibold text-ink">
+                {data.projectCode ? `${data.projectCode} · ${data.projectName}` : data.projectName}
+              </h3>
+            </div>
+          ) : null}
+          <p className={clsx('text-caption text-muted', projectsList && 'mt-0.5')}>
             {data.manager ? `PM: ${formatName(data.manager.fullName)} · ` : ''}
             <span className="font-medium text-ink">{data.completedSteps} of {data.totalSteps}</span> steps done
           </p>
@@ -231,7 +235,7 @@ export function ProjectTimeline({
             >
               {projectsList.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}
+                  {p.code ? `${p.code} · ${p.name}` : p.name}
                 </option>
               ))}
             </select>

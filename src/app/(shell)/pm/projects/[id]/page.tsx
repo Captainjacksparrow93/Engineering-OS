@@ -113,8 +113,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   return (
     <>
       <PageHeader
-        breadcrumb={[{ label: 'Projects', href: '/pm/projects' }, { label: project.name }]}
-        title={project.name}
+        breadcrumb={[{ label: 'Projects', href: '/pm/projects' }, { label: project.code ?? project.name }]}
+        title={project.code ?? project.name}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             {clientHref ? (

@@ -31,4 +31,16 @@ describe('projectLabel (#11 & #7)', () => {
       projectLabel({ name: 'WO 7000 · Torrent Pharma', clientName: 'Torrent Pharma' })
     ).toBe('WO 7000 · Torrent Pharma');
   });
+
+  it('formats project code together with WO number and client', () => {
+    expect(
+      projectLabel({ code: 'ACS-0004-0001', workOrderNo: '6934', clientName: 'Reliance Industries' })
+    ).toBe('ACS-0004-0001 · WO 6934 · Reliance Industries');
+  });
+
+  it('formats project code for service calls', () => {
+    expect(
+      projectLabel({ code: 'ACS-0004-0002', kind: 'SERVICE_CALL', clientName: 'Torrent Pharma' })
+    ).toBe('ACS-0004-0002 · SERVICE CALL · Torrent Pharma');
+  });
 });

@@ -14,8 +14,8 @@ describe('Audit Formatting (#10)', () => {
     ['user-5', 'Abbasali Sunasara'],
     ['user-6', 'Dhrupin Vaghasiya'],
     ['user-7', 'Aakash Panchal'],
-    ['proj-1', 'WO 7096'],
-    ['task-1', 'Control Wiring Drawing'],
+    ['proj-1', 'ACS-0004-0001 · WO 7096'],
+    ['task-1', 'DI Mapping · WO 6924'],
   ]);
 
   describe('formatAuditAction', () => {
@@ -53,24 +53,70 @@ describe('Audit Formatting (#10)', () => {
       expect(item.label).toBe('Employee: Aakash Panchal');
     });
 
-    it('provides links for projects and tasks', () => {
+    it('names the project with code and WO and provides link', () => {
       const projectItem = formatAuditItem(
         { module: 'pm', action: 'project.updated', entityType: 'Project', entityId: 'proj-1' },
         nameMap
       );
-      expect(projectItem.label).toBe('Project');
+      expect(projectItem.label).toBe('Project: ACS-0004-0001 · WO 7096');
       expect(projectItem.href).toBe('/pm/projects/proj-1');
 
+      const fallback = formatAuditItem(
+        { module: 'pm', action: 'project.updated', entityType: 'Project', entityId: 'unknown-id' },
+        nameMap
+      );
+      expect(fallback.label).toBe('Project');
+    });
+
+    it('names the task with project and provides link', () => {
       const taskItem = formatAuditItem(
         { module: 'pm', action: 'task.updated', entityType: 'Task', entityId: 'task-1' },
         nameMap
       );
-      expect(taskItem.label).toBe('Task');
+      expect(taskItem.label).toBe('Task: DI Mapping · WO 6924');
       expect(taskItem.href).toBe('/pm/tasks/task-1');
+
+      const fallback = formatAuditItem(
+        { module: 'pm', action: 'task.updated', entityType: 'Task', entityId: 'unknown-id' },
+        nameMap
+      );
+      expect(fallback.label).toBe('Task');
     });
   });
 
   describe('formatAuditDetails', () => {
+    it('formats status change in sentence case without JSON or raw keys', () => {
+      const diff = {
+        status: { from: 'IN_REVIEW', to: 'COMPLETED' },
+      };
+      const formatted = formatAuditDetails(
+        { module: 'pm', action: 'task.status_changed', entityType: 'Task', diff },
+        nameMap
+      );
+      expect(formatted).toBe('Status: In review → Completed');
+    });
+
+    it('formats priority change in sentence case', () => {
+      const diff = {
+        priority: { from: 'MEDIUM', to: 'HIGH' },
+      };
+      const formatted = formatAuditDetails(
+        { module: 'pm', action: 'task.updated', entityType: 'Task', diff },
+        nameMap
+      );
+      expect(formatted).toBe('Priority: Medium → High');
+    });
+
+    it('formats date change without raw timestamps or JSON', () => {
+      const diff = {
+        targetEndDate: { from: '2026-03-01T00:00:00.000Z', to: '2026-03-15T00:00:00.000Z' },
+      };
+      const formatted = formatAuditDetails(
+        { module: 'pm', action: 'project.updated', entityType: 'Project', diff },
+        nameMap
+      );
+      expect(formatted).toBe('Target end date: 1 Mar 2026 → 15 Mar 2026');
+    });
     it('formats REASSIGNED TASK with previous and new assignee', () => {
       const diff = {
         fromUserId: 'user-1',

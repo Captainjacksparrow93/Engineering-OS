@@ -11,7 +11,7 @@ import { notify } from '@/core/notifications/notify';
 import { assertProjectPermission, assertProjectVisible, projectVisibilityWhere } from './access';
 import type { CreateProjectInput, UpdateProjectInput } from '../validation/schemas';
 import { computeSchedule, rollUpProgress, type Graph } from '../domain/scheduling';
-import { forecastFinish, projectProgress } from '../domain/portfolio';
+import { forecastFinish, projectStepStats } from '../domain/portfolio';
 import { formatName } from '@/core/utils/strings';
 import { todayInIndia } from '@/core/utils/dates';
 
@@ -406,34 +406,41 @@ export async function listProjects(principal: Principal, filters: ProjectListFil
     },
   });
 
-  // One grouped query instead of N per-project counts.
-  const stats = await prisma.task.groupBy({
-    by: ['projectId', 'status'],
-    where: { projectId: { in: projects.map((p) => p.id) } },
-    _count: { _all: true },
-    _sum: { estimatedHours: true, actualHours: true },
+  const projectIds = projects.map((p) => p.id);
+  const tasks = projectIds.length === 0 ? [] : await prisma.task.findMany({
+    where: { projectId: { in: projectIds } },
+    select: {
+      id: true,
+      projectId: true,
+      parentId: true,
+      type: true,
+      status: true,
+      estimatedHours: true,
+      actualHours: true,
+      percentComplete: true,
+    },
   });
 
+  const tasksByProject = new Map<string, typeof tasks>();
+  for (const t of tasks) {
+    const list = tasksByProject.get(t.projectId) ?? [];
+    list.push(t);
+    tasksByProject.set(t.projectId, list);
+  }
+
   return projects.map((project) => {
-    const rows = stats.filter((s) => s.projectId === project.id);
-    const total = rows.reduce((sum, r) => sum + r._count._all, 0);
-    const completed = rows.filter((r) => r.status === 'COMPLETED').reduce((sum, r) => sum + r._count._all, 0);
-    const blocked = rows.filter((r) => r.status === 'BLOCKED').reduce((sum, r) => sum + r._count._all, 0);
-    const estimated = rows.reduce((sum, r) => sum + (r._sum.estimatedHours ?? 0), 0);
-    const actual = rows.reduce((sum, r) => sum + (r._sum.actualHours ?? 0), 0);
-    const totalEstimated = rows.reduce((sum, r) => sum + (r._sum.estimatedHours ?? 0), 0);
-    const completedEstimated = rows.filter((r) => r.status === 'COMPLETED').reduce((sum, r) => sum + (r._sum.estimatedHours ?? 0), 0);
-    const progressPercent = total === 0 ? 0 : totalEstimated > 0 ? Math.round((completedEstimated / totalEstimated) * 100) : Math.round((completed / total) * 100);
+    const projTasks = tasksByProject.get(project.id) ?? [];
+    const stepStats = projectStepStats(projTasks);
 
     return {
       ...project,
       stats: {
-        taskCount: total,
-        completedCount: completed,
-        blockedCount: blocked,
-        estimatedHours: Math.round(estimated),
-        actualHours: Math.round(actual),
-        progressPercent,
+        taskCount: stepStats.taskCount,
+        completedCount: stepStats.completedCount,
+        blockedCount: stepStats.blockedCount,
+        estimatedHours: stepStats.estimatedHours,
+        actualHours: stepStats.actualHours,
+        progressPercent: stepStats.progressPercent,
       },
     };
   });
@@ -531,10 +538,6 @@ export async function getProjectWorkspace(principal: Principal, projectId: strin
     };
   });
 
-  const openTasks = processedTasks.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED');
-  const estimatedHours = processedTasks.reduce((sum, t) => sum + t.estimatedHours, 0);
-  const actualHours = processedTasks.reduce((sum, t) => sum + t.actualHours, 0);
-
   return {
     project,
     tasks: processedTasks,
@@ -543,16 +546,7 @@ export async function getProjectWorkspace(principal: Principal, projectId: strin
     scheduleError,
     criticalTaskIds: schedule.filter((s) => s.isCritical).map((s) => s.taskId),
 
-    summary: {
-      taskCount: processedTasks.length,
-      openCount: openTasks.length,
-      blockedCount: processedTasks.filter((t) => t.isBlocked).length,
-      completedCount: processedTasks.filter((t) => t.status === 'COMPLETED').length,
-      overdueCount: openTasks.filter((t) => t.plannedEnd && t.plannedEnd < new Date()).length,
-      estimatedHours: Math.round(estimatedHours),
-      actualHours: Math.round(actualHours),
-      progressPercent: projectProgress(tasks),
-    },
+    summary: projectStepStats(processedTasks),
     permissions: {
       canCreateTask: can(principal, 'pm.task.create', { projectId, departmentId: project.departmentId }),
       canCreateAdhocTask: can(principal, 'pm.task.adhoc.create', { projectId, departmentId: project.departmentId }),
