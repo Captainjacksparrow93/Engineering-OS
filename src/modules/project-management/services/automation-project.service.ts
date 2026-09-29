@@ -189,10 +189,6 @@ export async function createAutomationProject(principal: Principal, input: Creat
         throw new DomainError(`Assignee ${id} is not an active employee in your company.`);
       }
     }
-    const pmTeam = new Set(await getDescendantUserIds(principal.companyId, manager.id));
-    if (uniqueIds.some((id) => !pmTeam.has(id))) {
-      throw new DomainError("Steps can only be assigned to engineers in the selected PM's team.");
-    }
   }
 
   // Every panel must have an assigned engineer before creating the project.

@@ -115,7 +115,6 @@ export function AutomationProjectWizard({
     HMI: { enabled: false, qty: 1 },
   });
   const [selectedPMId, setSelectedPMId] = useState<string>('');
-  const filterPMTeamOnly = true;
   const [step2Error, setStep2Error] = useState<string | null>(null);
 
   // Step 3: Team assignments & dates (One engineer per panel)
@@ -304,13 +303,64 @@ export function AutomationProjectWizard({
     return map;
   }, [startDate, targetEndDate, activeScopes, templates]);
 
-  // Candidate engineers in selected PM's team
-  const candidateEngineers = useMemo(() => {
-    if (!selectedPMId) return allEngineers;
-    if (!filterPMTeamOnly) return allEngineers;
-    const teamUserIds = teamsByPM[selectedPMId] || [];
-    return allEngineers.filter((e) => teamUserIds.includes(e.id) || e.id === selectedPMId);
-  }, [selectedPMId, filterPMTeamOnly, allEngineers, teamsByPM]);
+  interface EngineerGroup {
+    id: string;
+    label: string;
+    engineers: Engineer[];
+  }
+
+  // Engineers grouped by PM squad, selected PM's team first and marked
+  const engineerGroups = useMemo<EngineerGroup[]>(() => {
+    const usedIds = new Set<string>();
+    const groups: EngineerGroup[] = [];
+
+    // 1. Selected PM's team first (marked with "(PM)")
+    if (selectedPMId) {
+      const selectedManager = managers.find((m) => m.id === selectedPMId);
+      const teamUserIds = new Set(teamsByPM[selectedPMId] || []);
+      const ownEngineers = allEngineers.filter(
+        (e) => (teamUserIds.has(e.id) || e.id === selectedPMId) && !usedIds.has(e.id),
+      );
+      for (const e of ownEngineers) usedIds.add(e.id);
+
+      const managerName = selectedManager ? formatName(selectedManager.fullName) : 'Selected PM';
+      groups.push({
+        id: selectedPMId,
+        label: `${managerName}'s team (PM)`,
+        engineers: ownEngineers,
+      });
+    }
+
+    // 2. Each other PM's team
+    for (const m of managers) {
+      if (m.id === selectedPMId) continue;
+      const teamUserIds = new Set(teamsByPM[m.id] || []);
+      const teamEngineers = allEngineers.filter(
+        (e) => (teamUserIds.has(e.id) || e.id === m.id) && !usedIds.has(e.id),
+      );
+      for (const e of teamEngineers) usedIds.add(e.id);
+
+      if (teamEngineers.length > 0) {
+        groups.push({
+          id: m.id,
+          label: `${formatName(m.fullName)}'s team`,
+          engineers: teamEngineers,
+        });
+      }
+    }
+
+    // 3. "Other engineers" for anyone in no PM team
+    const remaining = allEngineers.filter((e) => !usedIds.has(e.id));
+    if (remaining.length > 0) {
+      groups.push({
+        id: 'other',
+        label: 'Other engineers',
+        engineers: remaining,
+      });
+    }
+
+    return groups;
+  }, [selectedPMId, managers, teamsByPM, allEngineers]);
 
   // Auto-assign team to panels
   const handleAutoAssign = useCallback(async () => {
@@ -1198,10 +1248,14 @@ export function AutomationProjectWizard({
                           className="select text-xs w-full font-medium"
                         >
                           <option value="">[ Choose Engineer ]</option>
-                          {candidateEngineers.map((eng) => (
-                            <option key={eng.id} value={eng.id}>
-                              {formatName(eng.fullName)} ({eng.grade.replaceAll('_', ' ')})
-                            </option>
+                          {engineerGroups.map((group) => (
+                            <optgroup key={group.id} label={group.label}>
+                              {group.engineers.map((eng) => (
+                                <option key={eng.id} value={eng.id}>
+                                  {formatName(eng.fullName)} ({eng.grade.replaceAll('_', ' ')})
+                                </option>
+                              ))}
+                            </optgroup>
                           ))}
                         </select>
                       </div>

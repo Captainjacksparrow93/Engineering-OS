@@ -20,7 +20,13 @@ describe('Plan 005: Shared Project Code Integration Tests', () => {
     directorPrincipal = (await loadPrincipal(directorUser.id))!;
 
     const pmUser = await prisma.user.findFirst({
-      where: { roleAssignments: { some: { role: { key: 'PROJECT_MANAGER' } } }, status: 'ACTIVE' },
+      where: {
+        roleAssignments: {
+          some: { role: { key: 'PROJECT_MANAGER' } },
+          none: { role: { key: { in: ['DIRECTOR', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'SUPER_ADMIN'] } } },
+        },
+        status: 'ACTIVE',
+      },
     });
     if (!pmUser) throw new Error('No active PROJECT_MANAGER user found in database');
     pmUserId = pmUser.id;

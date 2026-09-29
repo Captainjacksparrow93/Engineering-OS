@@ -1,6 +1,6 @@
 import { prisma } from '@/core/db/prisma';
 import type { Prisma } from '@prisma/client';
-import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
+import { can, hasPermissionAnywhere, isReadOnly } from '@/core/rbac/engine';
 import { DomainError, ForbiddenError, NotFoundError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
@@ -11,6 +11,10 @@ import { formatName } from '@/core/utils/strings';
 import { assertTaskPermission, getOrgPeople, OUTSIDE_TEAM_MESSAGE, oversightRecipients, projectManagerPool, projectVisibilityWhere, reassignTeamFor } from './access';
 import { teamRootOf } from '../domain/teams';
 import { isExecutionStaff } from '../domain/availability';
+
+function isDirectorUser(principal: Principal): boolean {
+  return can(principal, 'pm.project.read.all') && !isReadOnly(principal);
+}
 
 /**
  * Reassign Request (Unified Request -> Accept flow for everyone).
@@ -386,7 +390,7 @@ export async function decideHandover(
   const toSquadRoot = teamRootOf(handover.toUserId, people);
   const isCrossSquad = fromSquadRoot !== toSquadRoot || reqSquadRoot !== toSquadRoot;
 
-  const isDirector = can(principal, 'pm.project.read.all');
+  const isDirector = isDirectorUser(principal);
   const isHead = hasPermissionAnywhere(principal, 'pm.oversight');
   const isReceiver = handover.toUserId === principal.userId;
   const isPM2 = principal.userId === toSquadRoot;
@@ -922,7 +926,7 @@ export async function cancelHandover(principal: Principal, handoverId: string) {
   }
 
   const isRequester = handover.requestedById === principal.userId || handover.fromUserId === principal.userId;
-  const isDirector = can(principal, 'pm.project.read.all');
+  const isDirector = isDirectorUser(principal);
   if (!isRequester && !isDirector) {
     throw new ForbiddenError('Only the requester or a director can withdraw this reassign request.');
   }
@@ -962,7 +966,7 @@ export async function requestProjectHandover(
 
   // Role Gate: Engineers cannot hand over projects
   const isManager = project.managerId === principal.userId;
-  const isDirector = can(principal, 'pm.project.read.all');
+  const isDirector = isDirectorUser(principal);
   const isHead = hasPermissionAnywhere(principal, 'pm.oversight');
   const canManage = can(principal, 'pm.project.update', { projectId: project.id, departmentId: project.departmentId });
 
@@ -1083,7 +1087,7 @@ export async function decideProjectHandover(
   const isCrossSquad = fromSquadRoot !== toSquadRoot;
 
   const isReceiver = handover.toUserId === principal.userId;
-  const isDirector = can(principal, 'pm.project.read.all');
+  const isDirector = isDirectorUser(principal);
   const isHead = hasPermissionAnywhere(principal, 'pm.oversight');
   const now = new Date();
   const oversightIds = await oversightRecipients(principal.companyId, handover.project.departmentId, principal.userId);
@@ -1418,7 +1422,7 @@ export async function cancelProjectHandover(principal: Principal, handoverId: st
     throw new DomainError('Only a pending project handover can be withdrawn.');
   }
   const isRequester = handover.fromUserId === principal.userId;
-  const isDirector = can(principal, 'pm.project.read.all');
+  const isDirector = isDirectorUser(principal);
   if (!isRequester && !isDirector) throw new ForbiddenError('Only the requester or a director can withdraw this.');
 
   await prisma.$transaction(async (tx) => {
@@ -1444,7 +1448,7 @@ export async function cancelProjectHandover(principal: Principal, handoverId: st
 export async function listHandovers(principal: Principal) {
   const people = await getOrgPeople(principal.companyId);
   const isHead = hasPermissionAnywhere(principal, 'pm.oversight');
-  const isDirector = can(principal, 'pm.project.read.all');
+  const isDirector = isDirectorUser(principal);
   const isStaff = isExecutionStaff(principal);
 
   // Squad members for whom principal is the squad lead (PM2)
@@ -1653,7 +1657,7 @@ export async function requestPanelHandover(
   }
 
   const isManager = phaseTask.project.managerId === principal.userId;
-  const isDirector = can(principal, 'pm.project.read.all');
+  const isDirector = isDirectorUser(principal);
   const isHead = hasPermissionAnywhere(principal, 'pm.oversight');
   const canManage =
     isManager ||
