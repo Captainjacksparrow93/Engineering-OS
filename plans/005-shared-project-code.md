@@ -83,6 +83,8 @@ Existing projects keep their codes.
   - `tdd`: Red-to-green workflow followed on integration test suite.
   - `ux-writing`: Applied concise and clear label, placeholder, and helper microcopy to project code pick-or-type input.
   - `review-delta`: Checked blast radius and git diff before completing.
+- **Follow-ups (2026-09-29):**
+  - F1: Simplified project code field in `automation-project-wizard.tsx`. Updated label to sentence case "Project code (optional)", reset placeholder to "Auto-generated if blank", and removed redundant helper microcopy.
 - **Test suite results:**
   - `npm run typecheck`: 0 errors.
   - `npm test`: 12 test files passed, 133 tests passed.
@@ -99,7 +101,7 @@ Existing projects keep their codes.
 - Tests (Claude, local): typecheck OK; unit 133/133; integration 36/36; build OK; `prisma migrate status` up to date.
 
 **Follow-ups**
-- [ ] **F1 (implementer, minor):** the new helper line "Pick an existing code to share across Work Orders, or leave blank to auto-generate." and the long placeholder are the kind of filler the client asked to remove (plan 004, item 8).
+- [x] **F1 (implementer, minor):** the new helper line "Pick an existing code to share across Work Orders, or leave blank to auto-generate." and the long placeholder are the kind of filler the client asked to remove (plan 004, item 8).
   - Drop the helper line; placeholder back to "Auto-generated if blank".
   - Label in sentence case: "Project code (optional)".
 - [x] **F2 (Claude): migration rehearsal on production data is not done.** Done 2026-09-29: production dump restored locally (39 projects, 110 users, migrations = production's 3). `prisma migrate deploy` applied `20260929125414_project_code_shared` cleanly; 39 projects intact; `pm_projects_code_key` gone and `pm_projects_companyId_code_idx` present.

@@ -771,7 +771,7 @@ export function AutomationProjectWizard({
             {/* Project Code (Optional override - pick or type) */}
             <div>
               <label className="label text-xs font-semibold" htmlFor="code">
-                Project Code (Optional)
+                Project code (optional)
               </label>
               <input
                 id="code"
@@ -780,7 +780,7 @@ export function AutomationProjectWizard({
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 maxLength={20}
-                placeholder={clientRefNumber ? `Pick existing or type (e.g. ${clientRefNumber}-0001)` : 'Auto-generated if blank'}
+                placeholder="Auto-generated if blank"
                 className="input text-sm w-full font-mono"
               />
               <datalist id="existing-project-codes">
@@ -788,9 +788,6 @@ export function AutomationProjectWizard({
                   <option key={c} value={c} />
                 ))}
               </datalist>
-              <span className="text-[11px] text-muted">
-                Pick an existing code to share across Work Orders, or leave blank to auto-generate.
-              </span>
             </div>
 
             {/* End User Name */}
