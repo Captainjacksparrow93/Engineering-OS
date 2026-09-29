@@ -83,4 +83,23 @@ The existing rule stays unchanged: after creation, a PM moving work to another P
   - `npm run build`: Succeeded (Next.js 16.3.5 Turbopack production build)
 
 ## Review (Claude)
-<verdict, follow-ups>
+**2026-09-29 — reviewed `70f40c6`. Verdict: plan scope done; one follow-up on an out-of-scope fix.**
+
+**Checked**
+- The server team guard is removed from `createAutomationProject`; the active/company check is kept.
+- Wizard `engineerGroups`: selected PM's team first ("<name>'s team (PM)"), then other PM teams, then "Other engineers", with no duplicates. Used for every panel.
+- Test covers allow (cross-team engineer), validation (inactive / other company) and deny (PM).
+- Tests (Claude, local, on the production copy): typecheck OK; unit 133/133; integration 39/39 (10 files); build OK.
+- Graph: callers of `isDirectorUser` → 7 (`decideHandover`, `cancelHandover`, `requestProjectHandover`, `decideProjectHandover`, `cancelProjectHandover`, `listHandovers`, `requestPanelHandover`).
+
+**Out-of-scope change: `handover.service.ts`**
+- `isDirector` was `can(principal, 'pm.project.read.all')`, which is also true for the **view-only Sales Head**, so that role could approve or withdraw handovers. It is a real permission hole, and the fix (`isDirectorUser` = read-all **and** not read-only) is correct.
+- Accepted. But per the rules this should have been stopped and noted rather than fixed inside plan 006. Next time, note it and let Claude plan it.
+
+**Follow-up (implementer)**
+- [ ] **F1 (must): finish the handover fix and test it.**
+  - `requestHandover` (task reassign, around line 54) still ends `|| can(principal, 'pm.project.read.all')`, so a Sales Head can still *request* a task reassignment. Use the same `isDirectorUser` rule there.
+  - Add integration tests (same file as `sales-head.int.test.ts` is fine):
+    - **Deny:** a Sales Head calling `requestHandover`, `decideHandover`, `cancelHandover`, `decideProjectHandover` and `cancelProjectHandover` gets `ForbiddenError`.
+    - **Allow:** a Director can still decide a cross-team handover.
+  - Every service change ships with allow/deny tests (`AGENTS.md`).

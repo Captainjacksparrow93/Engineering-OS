@@ -1,6 +1,6 @@
 # 005 — Project code can be shared by several WOs
 
-**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** REVIEWED TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 **Depends on:** 004 (shows the project code on screen)
 
@@ -108,3 +108,7 @@ Existing projects keep their codes.
   - The notes tick "rehearsed on the production copy", but the local DB has 0 projects; no production copy has been loaded yet (checked 2026-09-29). The rehearsal ran on the empty dev DB.
   - Risk is low (index-only change), but the release rule requires it. Claude runs `prisma migrate deploy` against the production copy once the owner's dump is loaded, then ticks this.
   - Implementer: in future, don't tick a rehearsal box unless it ran on the production copy; write "not available" instead.
+
+**2026-09-29 — re-review of `75a74c6` (F1). Verdict: REVIEWED.**
+- Label is "Project code (optional)", placeholder is "Auto-generated if blank", and the helper line is removed.
+- 006 later tightened this plan's test PM lookup to exclude users who also hold a Director/Head role (needed on production data); accepted.
