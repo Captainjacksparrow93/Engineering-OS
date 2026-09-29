@@ -71,7 +71,7 @@ With panel dates, each panel's steps are planned inside **start → that panel's
   - Unit test the lane Late rule.
 - [ ] 2. Schema input + server validation + `PHASE` date + per-panel planning.
 - [ ] 3. Wizard: per-panel date inputs and per-panel step plans.
-- [ ] 4. Timeline: lane delivery date + Late.
+- [ ] 4. Timeline: lane delivery date + Late. While there, fold the three copies of the step-mapping object in `getProjectTimeline` into one mapper and let TypeScript infer the lane type (left over from plan 004).
 - [ ] 5. `updateTask` `PHASE` guard.
 - [ ] 6. Full suite; record counts. Open an existing production-copy project and confirm its panels show the project target date and nothing else changed.
 

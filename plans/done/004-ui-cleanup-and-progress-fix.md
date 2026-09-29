@@ -1,6 +1,6 @@
 # 004 — UI cleanup: project code, fewer repeats, plain audit text, one progress number
 
-**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** REVIEWED TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 
 ## Goal
@@ -210,3 +210,14 @@ Client requests of 2026-09-29 (items 4, 5, 6, 7, 8, 10) plus a progress bug foun
   - (b) `admin/audit/page.tsx` builds its own "code · WO" project label. Reuse `projectLabel` so there is one format.
   - (c) The file header comment of `audit-format.ts` was deleted; restore it.
   - *Resolved:* All fallback values route through `formatSingleValue`, `admin/audit/page.tsx` reuses `projectLabel`, and header comment is restored.
+
+**2026-09-29 — re-review of `d1d13d9` (F1/F2). Verdict: REVIEWED.**
+- F1:
+  - `getProjectTimeline` now takes totals from `activeLeafTasks` and adds an "Other tasks" lane for panel-less steps.
+  - The consistency test covers a panel-less ad-hoc task.
+- F2:
+  - Plain values go through `formatSingleValue`; unknown IDs show "Unknown".
+  - The audit page uses `projectLabel`.
+  - The header comment is restored.
+- Tests (Claude): typecheck OK; unit 133/133; integration 36/36 (9 files); build OK.
+- Carried into plan 007 (same function): the step-mapping object is now written out three times in `getProjectTimeline`, and the lane type is spelled out by hand. Fold both into one small mapper when 007 adds the lane delivery date.

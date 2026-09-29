@@ -90,4 +90,19 @@ Existing projects keep their codes.
   - `npm run build`: Succeeded (Next.js 16.3.5 client & server bundles generated cleanly).
 
 ## Review (Claude)
-<verdict, follow-ups>
+**2026-09-29 — reviewed `6456c63`. Verdict: code is right; two follow-ups.**
+
+**Checked**
+- Migration `20260929125414_project_code_shared`: only `DROP INDEX "pm_projects_code_key"` + `CREATE INDEX … ("companyId","code")`. Additive-safe, no data touched. The WO unique index is untouched.
+- Both duplicate-code guards are removed; the WO guard is kept. Test covers allow, duplicate WO, blank → auto code, and PM refused.
+- Wizard uses a native `<datalist>` filtered by client, with no new dependency. Graph: callers of `listExistingProjectCodes` → `NewProjectPage` only.
+- Tests (Claude, local): typecheck OK; unit 133/133; integration 36/36; build OK; `prisma migrate status` up to date.
+
+**Follow-ups**
+- [ ] **F1 (implementer, minor):** the new helper line "Pick an existing code to share across Work Orders, or leave blank to auto-generate." and the long placeholder are the kind of filler the client asked to remove (plan 004, item 8).
+  - Drop the helper line; placeholder back to "Auto-generated if blank".
+  - Label in sentence case: "Project code (optional)".
+- [ ] **F2 (Claude): migration rehearsal on production data is not done.**
+  - The notes tick "rehearsed on the production copy", but the local DB has 0 projects; no production copy has been loaded yet (checked 2026-09-29). The rehearsal ran on the empty dev DB.
+  - Risk is low (index-only change), but the release rule requires it. Claude runs `prisma migrate deploy` against the production copy once the owner's dump is loaded, then ticks this.
+  - Implementer: in future, don't tick a rehearsal box unless it ran on the production copy; write "not available" instead.
