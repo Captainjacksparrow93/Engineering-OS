@@ -116,5 +116,27 @@ What stays the same: `Dockerfile`, `entrypoint.sh`, `/api/health`, `scripts/back
 - [x] **F1 (must): `rollback.sh` is not executable in git.** It is committed as `100644`; the notes say +x, but this repo has `core.fileMode=false` on Windows, so the chmod never reached git. On the VPS, `./scripts/rollback.sh`, which is also the command `deploy.sh` prints, fails with "Permission denied" exactly when a rollback is needed. Fix: `git update-index --chmod=+x scripts/rollback.sh` and commit. Verify with `git ls-files -s scripts/` showing `100755` for `deploy.sh` and `rollback.sh`.
 - [x] **F2 (should): the backup is only copied off the VPS when the deploy succeeds.** If the health check fails, the remote script exits non-zero, `set -e` stops `deploy.sh` locally, and step 5 (scp of the newest backup) never runs. That is the one case where the off-box copy matters most. Fix: run the remote block without aborting (capture its exit code), always fetch the newest backup, then exit with the remote exit code. Acceptance: with the remote block forced to fail (e.g. a bad `VPS_DIR` after the backup line, tested only against a local or throwaway host, **never the VPS**), the script still reaches the backup-fetch step before exiting non-zero. If no safe host is available, reason it through with `bash -n` plus a code read and say so in notes.
 
+**2026-09-29 — re-review of `1097628` (F1/F2)**
+
+**Checked**
+- F1 is correct: `git ls-files -s scripts/` shows `100755` for all four scripts.
+- F2 exit-code capture works. I tested the exact pattern (`cmd << 'EOF' || RC=$?` under `set -euo pipefail`) locally; it continues with `RC=7`.
+- `bash -n scripts/deploy.sh`: OK.
+
+**F2 introduced two misleading messages. Both matter on a live deploy:**
+- [ ] **F3 (must): don't suggest a rollback when the app was never swapped.**
+  - The failure block always prints the rollback command. If the deploy fails *before* the swap (e.g. `git pull` or `backup.sh` fails), the live app is still the good current release.
+  - Running `rollback.sh` at that point would switch production to the *older* release in `.previous-sha`.
+  - Fix: after a failure, read the VPS `.deployed-sha` over ssh. Print the rollback command only if it equals `LOCAL_SHA`, meaning the swap happened. Otherwise print "Live app unchanged; no rollback needed."
+- [ ] **F4 (must): don't claim a backup was copied when it wasn't.**
+  - `scp … || true` followed by an unconditional "Downloaded backup to …" reports success even when the copy failed. On the success path, a failed copy used to stop the script; now it is silent. The off-box backup is a release rule (`CLAUDE.md`).
+  - Fix: set `LOCAL_BACKUP_PATH` and print "Downloaded" only when `scp` succeeds. Otherwise print a loud `WARNING: backup was NOT copied off the VPS` and make the script exit non-zero at the end, even on an otherwise healthy deploy.
+  - On the failure path, also stop calling it "Pre-deploy backup" unless the remote got past `backup.sh`. Simplest: call it "Newest VPS backup" and print its timestamped name.
+
+**Acceptance for F3/F4**
+- `bash -n` passes.
+- A code read shows both branches.
+- Test against a local or throwaway host only, **never the VPS**. If none is available, say so in notes.
+
 **Claude, done in this review**
 - `PROJECT.md` §6 rewritten for the local-build deploy, including the one-line first-deploy re-tag that makes rollback work from the first deploy. The debt line in §9 is updated, and the two archive docs are labelled historical.
