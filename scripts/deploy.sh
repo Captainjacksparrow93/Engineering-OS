@@ -40,7 +40,8 @@ echo "==> Transferring Docker image to VPS (${VPS_HOST})..."
 docker save "engineering-os:${LOCAL_SHA}" | gzip | ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" 'gunzip | docker load'
 
 echo "==> Deploying on VPS..."
-ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "bash -s -- \"${LOCAL_SHA}\" \"${VPS_DIR}\"" << 'REMOTE_SCRIPT'
+REMOTE_EXIT=0
+ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "bash -s -- \"${LOCAL_SHA}\" \"${VPS_DIR}\"" << 'REMOTE_SCRIPT' || REMOTE_EXIT=$?
 set -euo pipefail
 LOCAL_SHA="$1"
 VPS_DIR="$2"
@@ -104,13 +105,25 @@ REMOTE_SCRIPT
 
 echo "==> Fetching newest backup from VPS..."
 mkdir -p backups
-NEWEST_BACKUP="$(ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "ls -t \"${VPS_DIR}/backups\"/backup_*.sql.gz 2>/dev/null | head -n 1")"
+NEWEST_BACKUP="$(ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "ls -t \"${VPS_DIR}/backups\"/backup_*.sql.gz 2>/dev/null | head -n 1" || true)"
 
 LOCAL_BACKUP_PATH=""
 if [ -n "$NEWEST_BACKUP" ]; then
-  scp -P "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}:$NEWEST_BACKUP" backups/
+  scp -P "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}:$NEWEST_BACKUP" backups/ || true
   LOCAL_BACKUP_PATH="backups/$(basename "$NEWEST_BACKUP")"
   echo "==> Downloaded backup to: ${LOCAL_BACKUP_PATH}"
+fi
+
+if [ "$REMOTE_EXIT" -ne 0 ]; then
+  echo "" >&2
+  echo "=========================================" >&2
+  echo " Deploy FAILED on VPS (exit code: ${REMOTE_EXIT})!" >&2
+  if [ -n "$LOCAL_BACKUP_PATH" ]; then
+    echo " Pre-deploy backup copied locally to: ${LOCAL_BACKUP_PATH}" >&2
+  fi
+  echo " Rollback cmd:  ssh ${VPS_USER}@${VPS_HOST} 'cd ${VPS_DIR} && ./scripts/rollback.sh'" >&2
+  echo "=========================================" >&2
+  exit "$REMOTE_EXIT"
 fi
 
 echo ""
