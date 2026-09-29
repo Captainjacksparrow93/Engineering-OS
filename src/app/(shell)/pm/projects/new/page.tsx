@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/ui';
 import { getPMTeamData } from '@/modules/project-management/services/automation-project.service';
 import { listChecklistTemplates } from '@/modules/project-management/services/template.service';
 import { listClients, nextClientRef } from '@/modules/project-management/services/client.service';
+import { listExistingProjectCodes } from '@/modules/project-management/services/project.service';
 import { AutomationProjectWizard } from './automation-project-wizard';
 
 export const dynamic = 'force-dynamic';
@@ -17,11 +18,12 @@ export default async function NewProjectPage() {
   const principal = await requirePrincipal();
   if (!hasPermissionAnywhere(principal, 'pm.project.create')) redirect('/pm/projects');
 
-  const [{ managers, teamsByPM, allEngineers }, templates, clients, defaultClientRef] = await Promise.all([
+  const [{ managers, teamsByPM, allEngineers }, templates, clients, defaultClientRef, existingCodes] = await Promise.all([
     getPMTeamData(principal.companyId),
     listChecklistTemplates(),
     listClients(principal.companyId),
     nextClientRef(principal.companyId),
+    listExistingProjectCodes(principal.companyId),
   ]);
 
   return (
@@ -38,6 +40,7 @@ export default async function NewProjectPage() {
         templates={templates}
         initialClients={clients}
         defaultClientRef={defaultClientRef}
+        existingProjectCodes={existingCodes}
       />
     </>
   );

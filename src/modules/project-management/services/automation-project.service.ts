@@ -229,9 +229,6 @@ export async function createAutomationProject(principal: Principal, input: Creat
     code = await nextClientProjectCode(principal.companyId, clientRef);
   }
 
-  const existing = await prisma.project.findUnique({ where: { code } });
-  if (existing) throw new DomainError(`Project code ${code} is already in use.`);
-
   const trimmedWO = input.workOrderNo ? input.workOrderNo.trim() : null;
   if (trimmedWO) {
     const existingWO = await prisma.project.findUnique({ where: { workOrderNo: trimmedWO } });

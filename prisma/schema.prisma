@@ -421,7 +421,7 @@ enum ProjectPriority {
 model Project {
   id            String          @id @default(cuid())
   companyId     String
-  code          String          @unique
+  code          String
   kind          ProjectKind     @default(WORK_ORDER)
   workOrderNo   String?         @unique
   name          String
@@ -460,6 +460,7 @@ model Project {
   commissioningLogs        CommissioningLog[]
 
   @@index([companyId, status])
+  @@index([companyId, code])
   @@index([managerId])
   @@index([clientId])
   @@map("pm_projects")

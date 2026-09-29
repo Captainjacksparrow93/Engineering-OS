@@ -1,6 +1,6 @@
 # 005 — Project code can be shared by several WOs
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 **Depends on:** 004 (shows the project code on screen)
 
@@ -57,22 +57,37 @@ Existing projects keep their codes.
 - If a tool is missing or fails, say so in Implementation notes. Never claim you used one when you didn't.
 
 ## Steps
-- [ ] 1. **Test first:** integration test that creates two WORK_ORDER projects with the same explicit code and different WOs. Both succeed; a second project with an already-used **WO** still fails; blank code still auto-generates the next number for that client; a PM (no `pm.project.create`) creating a project with an existing code is still refused. See it fail.
-- [ ] 2. Schema + migration; read the generated SQL.
-- [ ] 3. Remove the two duplicate-code guards. Step 1 goes green.
-- [ ] 4. Wizard: pick-or-type code field with the selected client's codes; blank = auto.
-- [ ] 5. Rehearse on the local production copy; run the full suite; record counts.
+- [x] 1. **Test first:** integration test that creates two WORK_ORDER projects with the same explicit code and different WOs. Both succeed; a second project with an already-used **WO** still fails; blank code still auto-generates the next number for that client; a PM (no `pm.project.create`) creating a project with an existing code is still refused. See it fail.
+- [x] 2. Schema + migration; read the generated SQL.
+- [x] 3. Remove the two duplicate-code guards. Step 1 goes green.
+- [x] 4. Wizard: pick-or-type code field with the selected client's codes; blank = auto.
+- [x] 5. Rehearse on the local production copy; run the full suite; record counts.
 
 ## Acceptance criteria
-- [ ] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
-- [ ] Two projects can be created with the same project code and different WOs.
-- [ ] Duplicate WO is still rejected with the existing message.
-- [ ] Blank code still gives `<client ref>-<next>`.
-- [ ] The New project form offers the chosen client's existing codes and accepts a typed new one.
-- [ ] Migration contains only the index drop and add; rehearsed on the production copy with no errors.
+- [x] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
+- [x] Two projects can be created with the same project code and different WOs.
+- [x] Duplicate WO is still rejected with the existing message.
+- [x] Blank code still gives `<client ref>-<next>`.
+- [x] The New project form offers the chosen client's existing codes and accepts a typed new one.
+- [x] Migration contains only the index drop and add; rehearsed on the production copy with no errors.
 
 ## Implementation notes (implementer)
-<commits, deviations from plan, test pass/fail counts, tools used, open questions>
+- **TDD:** Created `src/modules/project-management/services/shared-project-code.int.test.ts`. Ran test before code changes and verified it failed on duplicate code check (`DomainError: Project code ... is already in use.`).
+- **Schema & Migration:** Removed `@unique` from `Project.code` in `prisma/schema.prisma` and added `@@index([companyId, code])`. Generated migration `20260929125414_project_code_shared` via `npx prisma migrate dev --name project_code_shared`. Verified migration SQL contains strictly `DROP INDEX "pm_projects_code_key";` and `CREATE INDEX "pm_projects_companyId_code_idx" ON "pm_projects"("companyId", "code");`. Rehearsed migration and verified `prisma migrate status` clean with no drift.
+- **Service layer:** Removed duplicate project code checks from `createAutomationProject` (`automation-project.service.ts`) and `createProject` (`project.service.ts`). Kept `workOrderNo` duplicate checks intact. Added helper `listExistingProjectCodes(companyId: string)` in `project.service.ts`.
+- **UI:** In `src/app/(shell)/pm/projects/new/page.tsx`, fetched distinct existing codes for the company and passed them to `AutomationProjectWizard`. In `automation-project-wizard.tsx`, converted Project Code input into native pick-or-type input using `<input list="existing-project-codes" ... />` and `<datalist id="existing-project-codes">`, filtered to the selected client's existing codes (or all codes when client unselected).
+- **Tools & Skills Used:**
+  - `code-review-graph`: `query_graph_tool` (callers of `createAutomationProject`, `createProject`, `nextClientProjectCode`), `get_impact_radius_tool` (blast radius analysis of `automation-project.service.ts`), `build_or_update_graph_tool`, `get_review_context_tool`.
+  - `token-savior`: Attempted `get_function_source` (noted it returned def stub without body for TS methods); examined targeted line slices via read tools.
+  - `ponytail` (full): Standard library and native platform `<datalist>` used without external libraries; deleted guards rather than adding complexity.
+  - `tdd`: Red-to-green workflow followed on integration test suite.
+  - `ux-writing`: Applied concise and clear label, placeholder, and helper microcopy to project code pick-or-type input.
+  - `review-delta`: Checked blast radius and git diff before completing.
+- **Test suite results:**
+  - `npm run typecheck`: 0 errors.
+  - `npm test`: 12 test files passed, 133 tests passed.
+  - `npm run test:int`: 9 test files passed, 36 tests passed (including 4 new tests in `shared-project-code.int.test.ts`).
+  - `npm run build`: Succeeded (Next.js 16.3.5 client & server bundles generated cleanly).
 
 ## Review (Claude)
 <verdict, follow-ups>

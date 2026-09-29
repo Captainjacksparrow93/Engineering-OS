@@ -55,6 +55,11 @@ interface ClientOption {
   refNumber: string;
 }
 
+interface ExistingProjectCodeOption {
+  code: string;
+  clientId: string | null;
+}
+
 export function AutomationProjectWizard({
   managers,
   teamsByPM,
@@ -62,6 +67,7 @@ export function AutomationProjectWizard({
   templates,
   initialClients = [],
   defaultClientRef = 'ACS-0001',
+  existingProjectCodes = [],
 }: {
   managers: Manager[];
   teamsByPM: Record<string, string[]>;
@@ -69,6 +75,7 @@ export function AutomationProjectWizard({
   templates: Template[];
   initialClients?: ClientOption[];
   defaultClientRef?: string;
+  existingProjectCodes?: ExistingProjectCodeOption[];
 }) {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
 
@@ -81,6 +88,14 @@ export function AutomationProjectWizard({
   const [endUserName, setEndUserName] = useState('');
   const [applicationName, setApplicationName] = useState('');
   const [code, setCode] = useState('');
+
+  const suggestedCodes = useMemo(() => {
+    const list = clientId
+      ? existingProjectCodes.filter((item) => item.clientId === clientId)
+      : existingProjectCodes;
+    return Array.from(new Set(list.map((item) => item.code)));
+  }, [clientId, existingProjectCodes]);
+
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]!);
   const [targetEndDate, setTargetEndDate] = useState('');
   const [step1Error, setStep1Error] = useState<string | null>(null);
@@ -753,20 +768,29 @@ export function AutomationProjectWizard({
               <span className="text-[11px] text-muted">Used to generate project code (e.g. {clientRefNumber || 'ACS-XXXX'}-0001).</span>
             </div>
 
-            {/* Project Code (Optional override) */}
+            {/* Project Code (Optional override - pick or type) */}
             <div>
               <label className="label text-xs font-semibold" htmlFor="code">
                 Project Code (Optional)
               </label>
               <input
                 id="code"
+                list="existing-project-codes"
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 maxLength={20}
-                placeholder={clientRefNumber ? `e.g. ${clientRefNumber}-0001` : 'Auto-generated if blank'}
+                placeholder={clientRefNumber ? `Pick existing or type (e.g. ${clientRefNumber}-0001)` : 'Auto-generated if blank'}
                 className="input text-sm w-full font-mono"
               />
+              <datalist id="existing-project-codes">
+                {suggestedCodes.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+              <span className="text-[11px] text-muted">
+                Pick an existing code to share across Work Orders, or leave blank to auto-generate.
+              </span>
             </div>
 
             {/* End User Name */}

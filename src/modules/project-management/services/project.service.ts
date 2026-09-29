@@ -35,8 +35,6 @@ export async function createProject(principal: Principal, input: CreateProjectIn
   assertCan(principal, 'pm.project.create', { departmentId: departmentId ?? undefined });
 
   const code = input.code ?? (await nextProjectCode(principal.companyId));
-  const existing = await prisma.project.findUnique({ where: { code } });
-  if (existing) throw new DomainError(`Project code ${code} is already in use.`);
 
   if (input.startDate && input.targetEndDate && input.targetEndDate < input.startDate) {
     throw new DomainError('Target end date cannot be before the start date.');
@@ -168,6 +166,19 @@ export async function nextClientProjectCode(companyId: string, clientRef: string
   const nextSeq = maxSeq + 1;
   return `${prefix}${String(nextSeq).padStart(4, '0')}`;
 }
+
+/** Lists distinct project codes with their clientId for wizard suggestions. */
+export async function listExistingProjectCodes(
+  companyId: string,
+): Promise<Array<{ code: string; clientId: string | null }>> {
+  return prisma.project.findMany({
+    where: { companyId },
+    select: { code: true, clientId: true },
+    distinct: ['code'],
+    orderBy: { code: 'asc' },
+  });
+}
+
 
 
 export async function updateProject(
