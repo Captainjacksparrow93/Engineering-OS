@@ -201,7 +201,10 @@ From `AGENTS.md` and `CLAUDE.md`, which remain the source of truth:
 ## 9. Known debt and open items
 - **Deploy** is manual via `scripts/deploy.sh` (plan 001). The first run needs the one-line re-tag in §6 so that rollback works.
 - **No automatic nightly backup** (§7).
-- **Password handling:** `prisma/data/logins.csv` and `set-passwords-from-csv.ts` still run at startup. The retirement plan is in [docs/client-requests-2026-09-25.md](docs/client-requests-2026-09-25.md) §0 E. `seed.ts` still has a default-password fallback.
+- **Password handling:**
+  - The plain-text CSV and its startup reset were removed (plan 002).
+  - The old passwords are still in git history, so everyone should change their password in the app after that deploy.
+  - `seed.ts` still hardcodes a default password (`SEED_PASSWORD` fallback) for newly seeded users.
 - **4 legacy `grant-*.ts` scripts** run at every start. They're idempotent. New permission changes go in migrations instead.
 - **Manager detection:** `isExecutionStaff` (`domain/availability.ts`) still decides "manager" from grade and designation text. Newer code uses role keys. Moving everything to role keys is pending.
 - **README.md is partly out of date:** its quick start and demo-account table date from before go-live. Trust this file for anything they disagree on.

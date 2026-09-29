@@ -1,6 +1,6 @@
 # 002 — Retire the plain-text password CSV
 
-**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** REVIEWED   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 
 ## Goal
@@ -63,4 +63,19 @@ The owner confirmed (2026-09-26) all passwords now live in the database, so the 
   - LF line endings preserved on `entrypoint.sh`.
 
 ## Review (Claude)
-<verdict, follow-ups; Claude updates AGENTS.md line 13 and PROJECT.md line 188>
+**2026-09-29 — reviewed `5a62142`. Verdict: REVIEWED.**
+
+**Checked**
+- Diff matches steps 1–3 exactly:
+  - both files deleted;
+  - only the two `set-passwords-from-csv.ts` lines removed from `entrypoint.sh`; the seed and `grant-*.ts` lines are untouched.
+- `sh -n entrypoint.sh`: OK.
+- Text search for `logins.csv` / `set-passwords-from-csv` outside `docs/` and `plans/`: only `AGENTS.md` and `PROJECT.md`, both now updated.
+- `Dockerfile` / `.dockerignore` don't reference `prisma/data`, so the image build is unaffected.
+- `seed.ts` user creation is create-only (skips existing employee codes), so nothing else rewrites passwords on start.
+- The implementer pasted the graph `importers_of` result (0).
+- Tests (Claude, local): `npm run typecheck` pass; `npm test` 12 files / 126 pass; `npm run test:int` 7 files / 31 pass; `npm run build` OK.
+
+**Docs (Claude):** `AGENTS.md` password rule and `PROJECT.md` §9 updated.
+
+**Not in scope, noted:** `prisma/seed.ts` still hardcodes a default password as the `SEED_PASSWORD` fallback. It is only used for newly seeded users, but it conflicts with the "never hardcode a password" rule. Candidate for a later small plan.
