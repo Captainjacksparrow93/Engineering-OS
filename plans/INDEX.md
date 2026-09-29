@@ -7,7 +7,7 @@ Status: TODO → IN PROGRESS → DONE → REVIEWED (then moved to done/)
 |---|---|---|---|
 | 001 | [Build image locally, ship to VPS](001-local-image-build-deploy.md) | DONE | Replaces GHCR build + auto-deploy; owner runs `scripts/deploy.sh`. F1/F2 done (`1097628`); open: F3 (no rollback hint if swap didn't happen), F4 (don't report a failed backup copy as done) |
 | 002 | [Retire the plain-text password CSV](done/002-retire-logins-csv.md) | REVIEWED | Deletes `logins.csv` + startup script that reverts passwords |
-| 003 | [Remove finished one-off data scripts](003-remove-one-off-scripts.md) | TODO | Deletes wipe/update/verify scripts; keeps `grant-*.ts` |
+| 003 | [Remove finished one-off data scripts](003-remove-one-off-scripts.md) | DONE | Deletes wipe/update/verify scripts; keeps `grant-*.ts` |
 | 004 | [UI cleanup + progress fix](004-ui-cleanup-and-progress-fix.md) | TODO | Project code on screen, fewer WO repeats, flat tiles, plain audit text, one progress number |
 | 005 | [Shared project code](005-shared-project-code.md) | TODO | Drops unique on `Project.code` (migration); pick-or-type code |
 | 006 | [All engineers on new project](006-all-engineers-on-new-project.md) | TODO | Grouped picker, PM's team first; removes create-time team guard |

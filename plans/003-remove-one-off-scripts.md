@@ -1,6 +1,6 @@
 # 003 — Remove finished one-off data scripts
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 
 ## Goal
@@ -37,17 +37,31 @@ Keep (still run on every start by `entrypoint.sh`): `grant-commissioning-permiss
 - If a tool is missing or fails, say so in Implementation notes. Never claim you used one when you didn't.
 
 ## Steps
-- [ ] 1. Run the importers check on all four files; record results.
-- [ ] 2. `git rm` the four files.
-- [ ] 3. Run the text search and the full test suite; record results.
+- [x] 1. Run the importers check on all four files; record results.
+- [x] 2. `git rm` the four files.
+- [x] 3. Run the text search and the full test suite; record results.
 
 ## Acceptance criteria
-- [ ] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
-- [ ] `ls prisma/scripts` shows only the five `grant-*.ts` files (plus `set-passwords-from-csv.ts` if plan 002 isn't done yet).
-- [ ] No references to the removed scripts outside `docs/`.
+- [x] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
+- [x] `ls prisma/scripts` shows only the five `grant-*.ts` files (plus `set-passwords-from-csv.ts` if plan 002 isn't done yet).
+- [x] No references to the removed scripts outside `docs/`.
 
 ## Implementation notes (implementer)
-<commits, deviations from plan, test pass/fail counts, tools used, open questions>
+- Commits:
+  - Plan 003: Remove finished one-off data scripts from prisma/scripts
+- Tool outputs (`code-review-graph` `query_graph_tool` with pattern `importers_of`):
+  - `prisma/scripts/wipe-all-projects.sql`: `{"status":"not_found","summary":"No node found matching 'prisma/scripts/wipe-all-projects.sql'."}`
+  - `prisma/scripts/wipe-all-projects.ts`: `{"status":"not_found","summary":"No node found matching 'prisma/scripts/wipe-all-projects.ts'."}`
+  - `prisma/scripts/update-pm-team.ts`: `{"status":"not_found","summary":"No node found matching 'prisma/scripts/update-pm-team.ts'."}`
+  - `prisma/scripts/verify-handover-rework.ts`: `{"status":"ok","pattern":"importers_of","target":"prisma/scripts/verify-handover-rework.ts","summary":"Found 0 result(s) for importers_of('prisma/scripts/verify-handover-rework.ts')","result_count":0,"results":[]}`
+- Test Pass/Fail counts:
+  - `npm run typecheck`: Passed (0 errors)
+  - `npm test`: 12 test files passed, 126 unit tests passed (0 failures)
+  - `npm run build`: Next.js production build succeeded with Turbopack, static pages generated
+  - `npm run test:int`: 7 test files passed, 31 integration tests passed (0 failures)
+- Verification:
+  - `ls prisma/scripts`: Confirmed only the five `grant-*.ts` scripts remain (`grant-commissioning-permissions.ts`, `grant-password-reset.ts`, `grant-read-permissions.ts`, `grant-sales-head.ts`, `grant-service-head.ts`).
+  - Text search: 0 occurrences of the removed script names outside `docs/` and `plans/`.
 
 ## Review (Claude)
 <verdict, follow-ups; Claude updates docs/client-requests-2026-09-25.md line 16 if needed>
