@@ -1,6 +1,6 @@
 # 007 — Delivery date per panel
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 **Depends on:** 004 (timeline header changes). Must land before 008, whose edit screen edits these dates.
 
@@ -84,7 +84,20 @@ With panel dates, each panel's steps are planned inside **start → that panel's
 - [ ] PMs cannot change a panel date through task edits.
 
 ## Implementation notes (implementer)
-<commits, deviations from plan, test pass/fail counts, tools used, open questions>
+- **Status at sign-off:** IN PROGRESS (Step 1 tests written, TDD Red phase confirmed).
+- **Work completed:**
+  - Added unit test suite for `isLaneLate` in `src/modules/project-management/domain/portfolio.test.ts`.
+  - Created integration test suite `src/modules/project-management/services/panel-delivery-dates.int.test.ts` covering:
+    - Storing panel delivery dates on `PHASE` task and constraining step planning.
+    - Rejecting panel dates after project target date naming the panel.
+    - Rejecting panel dates before project start date naming the panel.
+    - Refusing PM `updateTask` on a `PHASE` task's `plannedEnd`.
+  - Verified tests fail as expected (Red phase).
+- **Next steps when resuming:**
+  - Step 2: Update schema in `schemas.ts` and implement server validation + `PHASE` date + per-panel planning in `automation-project.service.ts`.
+  - Step 4: Implement `isLaneLate` in `portfolio.ts` and add delivery date & `isLate` to lanes in `getProjectTimeline` (`project.service.ts`).
+  - Step 5: Add `PHASE` schedule date guard in `updateTask` (`task.service.ts`).
+  - Step 3: Update `automation-project-wizard.tsx` (per-panel date inputs and per-panel step plans).
 
 ## Review (Claude)
 <verdict, follow-ups>

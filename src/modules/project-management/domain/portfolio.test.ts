@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countByAutomationType, daysLate, forecastFinish, projectHealth, projectProgress } from './portfolio';
+import { countByAutomationType, daysLate, forecastFinish, isLaneLate, projectHealth, projectProgress } from './portfolio';
 import { summariseProblems } from '../services/dashboard.service';
 import { todayInIndia } from '@/core/utils/dates';
 
@@ -177,3 +177,49 @@ describe('countByAutomationType', () => {
     ).toEqual({ PLC: 2, SCADA: 0, HMI: 1, onHold: 1 });
   });
 });
+
+describe('isLaneLate', () => {
+  const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
+
+  it('returns false when all steps are completed even if past delivery date', () => {
+    const steps = [
+      { parentId: 'plc', status: 'COMPLETED', plannedEnd: d('2026-09-10') },
+      { parentId: 'plc', status: 'COMPLETED', plannedEnd: d('2026-09-14') },
+    ];
+    expect(isLaneLate(steps, d('2026-09-15'), d('2026-09-20'))).toBe(false);
+  });
+
+  it('returns true when there are open steps and today is past delivery date', () => {
+    const steps = [
+      { parentId: 'plc', status: 'COMPLETED', plannedEnd: d('2026-09-10') },
+      { parentId: 'plc', status: 'TODO', plannedEnd: d('2026-09-15') },
+    ];
+    expect(isLaneLate(steps, d('2026-09-15'), d('2026-09-16'))).toBe(true);
+  });
+
+  it('returns true when today is on or before delivery date but overdue steps push forecast past delivery date', () => {
+    // Delivery date: 2026-09-20. Step due 2026-09-14 is not completed on 2026-09-17 (3 working days late).
+    // Last step was planned for 2026-09-19 -> slips to 2026-09-23 (> 2026-09-20).
+    const steps = [
+      { parentId: 'plc', status: 'IN_PROGRESS', plannedEnd: d('2026-09-14') },
+      { parentId: 'plc', status: 'TODO', plannedEnd: d('2026-09-19') },
+    ];
+    expect(isLaneLate(steps, d('2026-09-20'), d('2026-09-17'))).toBe(true);
+  });
+
+  it('returns false when open steps are on track to finish by delivery date', () => {
+    const steps = [
+      { parentId: 'plc', status: 'TODO', plannedEnd: d('2026-09-18') },
+      { parentId: 'plc', status: 'TODO', plannedEnd: d('2026-09-20') },
+    ];
+    expect(isLaneLate(steps, d('2026-09-20'), d('2026-09-17'))).toBe(false);
+  });
+
+  it('returns false when deliveryDate is missing', () => {
+    const steps = [
+      { parentId: 'plc', status: 'TODO', plannedEnd: d('2026-09-18') },
+    ];
+    expect(isLaneLate(steps, null, d('2026-09-17'))).toBe(false);
+  });
+});
+
