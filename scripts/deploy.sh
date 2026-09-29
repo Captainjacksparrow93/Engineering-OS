@@ -108,10 +108,18 @@ mkdir -p backups
 NEWEST_BACKUP="$(ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "ls -t \"${VPS_DIR}/backups\"/backup_*.sql.gz 2>/dev/null | head -n 1" || true)"
 
 LOCAL_BACKUP_PATH=""
+BACKUP_COPY_FAILED=0
 if [ -n "$NEWEST_BACKUP" ]; then
-  scp -P "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}:$NEWEST_BACKUP" backups/ || true
-  LOCAL_BACKUP_PATH="backups/$(basename "$NEWEST_BACKUP")"
-  echo "==> Downloaded backup to: ${LOCAL_BACKUP_PATH}"
+  if scp -P "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}:$NEWEST_BACKUP" backups/; then
+    LOCAL_BACKUP_PATH="backups/$(basename "$NEWEST_BACKUP")"
+    echo "==> Downloaded backup to: ${LOCAL_BACKUP_PATH}"
+  else
+    echo "WARNING: backup was NOT copied off the VPS!" >&2
+    BACKUP_COPY_FAILED=1
+  fi
+else
+  echo "WARNING: backup was NOT copied off the VPS (no backup found on VPS)!" >&2
+  BACKUP_COPY_FAILED=1
 fi
 
 if [ "$REMOTE_EXIT" -ne 0 ]; then
@@ -119,11 +127,30 @@ if [ "$REMOTE_EXIT" -ne 0 ]; then
   echo "=========================================" >&2
   echo " Deploy FAILED on VPS (exit code: ${REMOTE_EXIT})!" >&2
   if [ -n "$LOCAL_BACKUP_PATH" ]; then
-    echo " Pre-deploy backup copied locally to: ${LOCAL_BACKUP_PATH}" >&2
+    echo " Newest VPS backup copied locally to: ${LOCAL_BACKUP_PATH}" >&2
+  else
+    echo " WARNING: backup was NOT copied off the VPS!" >&2
   fi
-  echo " Rollback cmd:  ssh ${VPS_USER}@${VPS_HOST} 'cd ${VPS_DIR} && ./scripts/rollback.sh'" >&2
+
+  CURRENT_REMOTE_DEPLOYED="$(ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "cat \"${VPS_DIR}/.deployed-sha\" 2>/dev/null" || true)"
+  if [ "$CURRENT_REMOTE_DEPLOYED" = "$LOCAL_SHA" ]; then
+    echo " Rollback cmd:  ssh ${VPS_USER}@${VPS_HOST} 'cd ${VPS_DIR} && ./scripts/rollback.sh'" >&2
+  else
+    echo " Live app unchanged; no rollback needed." >&2
+  fi
   echo "=========================================" >&2
   exit "$REMOTE_EXIT"
+fi
+
+if [ "$BACKUP_COPY_FAILED" -ne 0 ] || [ -z "$LOCAL_BACKUP_PATH" ]; then
+  echo "" >&2
+  echo "=========================================" >&2
+  echo " WARNING: backup was NOT copied off the VPS!" >&2
+  echo " Deployed SHA:  ${LOCAL_SHA}" >&2
+  echo " Health Status: healthy" >&2
+  echo " Rollback cmd:  ssh ${VPS_USER}@${VPS_HOST} 'cd ${VPS_DIR} && ./scripts/rollback.sh'" >&2
+  echo "=========================================" >&2
+  exit 1
 fi
 
 echo ""

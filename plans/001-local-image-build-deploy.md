@@ -87,6 +87,8 @@ What stays the same: `Dockerfile`, `entrypoint.sh`, `/api/health`, `scripts/back
 - Follow-ups (2026-09-29):
   - F1: Fixed git index mode for `scripts/rollback.sh` via `git update-index --chmod=+x scripts/rollback.sh`. Confirmed `git ls-files -s scripts/` reports `100755` for `rollback.sh` (and `deploy.sh`, `backup.sh`, `restore.sh`).
   - F2: Updated `scripts/deploy.sh` to capture `REMOTE_EXIT` from SSH invocation (`|| REMOTE_EXIT=$?`) without aborting, proceed to fetch the newest backup via SSH/SCP to local `backups/`, and then exit with `REMOTE_EXIT` if non-zero while reporting backup location. Tested failure progression and verified syntax with `bash -n`.
+  - F3: In `scripts/deploy.sh`, on remote deploy failure (`REMOTE_EXIT -ne 0`), SSH reads `${VPS_DIR}/.deployed-sha`. Only prints the rollback command if it matches `LOCAL_SHA` (indicating container swap occurred). Otherwise prints "Live app unchanged; no rollback needed."
+  - F4: In `scripts/deploy.sh`, tests `scp` success directly; sets `LOCAL_BACKUP_PATH` and prints "Downloaded" only when `scp` succeeds. On failure or missing backup, prints a loud `WARNING: backup was NOT copied off the VPS!` and exits non-zero (`exit 1` or `REMOTE_EXIT`). On the failure path, prints "Newest VPS backup" instead of "Pre-deploy backup". Checked syntax with `bash -n` (0 errors). Traced both branches in code review. No throwaway/separate test VPS was available, so never connected or ran against the live VPS.
 - Tool notes:
   - `sequential-thinking` MCP server has no registered tools in environment; step 3 flow analysis was performed directly using analytical steps.
   - Shell scripts saved with LF line endings and executable mode (+x).
@@ -124,11 +126,11 @@ What stays the same: `Dockerfile`, `entrypoint.sh`, `/api/health`, `scripts/back
 - `bash -n scripts/deploy.sh`: OK.
 
 **F2 introduced two misleading messages. Both matter on a live deploy:**
-- [ ] **F3 (must): don't suggest a rollback when the app was never swapped.**
+- [x] **F3 (must): don't suggest a rollback when the app was never swapped.**
   - The failure block always prints the rollback command. If the deploy fails *before* the swap (e.g. `git pull` or `backup.sh` fails), the live app is still the good current release.
   - Running `rollback.sh` at that point would switch production to the *older* release in `.previous-sha`.
   - Fix: after a failure, read the VPS `.deployed-sha` over ssh. Print the rollback command only if it equals `LOCAL_SHA`, meaning the swap happened. Otherwise print "Live app unchanged; no rollback needed."
-- [ ] **F4 (must): don't claim a backup was copied when it wasn't.**
+- [x] **F4 (must): don't claim a backup was copied when it wasn't.**
   - `scp … || true` followed by an unconditional "Downloaded backup to …" reports success even when the copy failed. On the success path, a failed copy used to stop the script; now it is silent. The off-box backup is a release rule (`CLAUDE.md`).
   - Fix: set `LOCAL_BACKUP_PATH` and print "Downloaded" only when `scp` succeeds. Otherwise print a loud `WARNING: backup was NOT copied off the VPS` and make the script exit non-zero at the end, even on an otherwise healthy deploy.
   - On the failure path, also stop calling it "Pre-deploy backup" unless the remote got past `backup.sh`. Simplest: call it "Newest VPS backup" and print its timestamped name.
