@@ -1,6 +1,6 @@
 # 001 — Build the Docker image locally and ship it to the VPS
 
-**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** REVIEWED   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 
 ## Goal
@@ -142,3 +142,11 @@ What stays the same: `Dockerfile`, `entrypoint.sh`, `/api/health`, `scripts/back
 
 **Claude, done in this review**
 - `PROJECT.md` §6 rewritten for the local-build deploy, including the one-line first-deploy re-tag that makes rollback work from the first deploy. The debt line in §9 is updated, and the two archive docs are labelled historical.
+
+**2026-09-29 — re-review of `e3a43a8` (F3/F4). Verdict: REVIEWED.**
+- `scripts/deploy.sh` blob `4bc1958` is identical to the version reviewed before it was committed.
+- F3: the rollback hint appears only when the VPS `.deployed-sha` equals the new sha; otherwise it prints "Live app unchanged; no rollback needed."
+- F4: "Downloaded" is printed only on a successful `scp`; otherwise a loud warning and a non-zero exit, even on a healthy deploy.
+- `bash -n` OK; both scripts `100755`.
+- Known edge, accepted: a failure after `docker tag … current` but before `compose up` leaves `current` pointing at the new image. PROJECT.md §6 says to use the scripts; the next deploy or rollback re-tags it.
+- Owner: first-deploy re-tag on the VPS is done (verified 2026-09-29: `engineering-os:06cdd68…` present, same image ID as the running GHCR image).

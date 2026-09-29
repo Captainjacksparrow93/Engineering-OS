@@ -102,7 +102,7 @@ Existing projects keep their codes.
 - [ ] **F1 (implementer, minor):** the new helper line "Pick an existing code to share across Work Orders, or leave blank to auto-generate." and the long placeholder are the kind of filler the client asked to remove (plan 004, item 8).
   - Drop the helper line; placeholder back to "Auto-generated if blank".
   - Label in sentence case: "Project code (optional)".
-- [ ] **F2 (Claude): migration rehearsal on production data is not done.**
+- [x] **F2 (Claude): migration rehearsal on production data is not done.** Done 2026-09-29: production dump restored locally (39 projects, 110 users, migrations = production's 3). `prisma migrate deploy` applied `20260929125414_project_code_shared` cleanly; 39 projects intact; `pm_projects_code_key` gone and `pm_projects_companyId_code_idx` present.
   - The notes tick "rehearsed on the production copy", but the local DB has 0 projects; no production copy has been loaded yet (checked 2026-09-29). The rehearsal ran on the empty dev DB.
   - Risk is low (index-only change), but the release rule requires it. Claude runs `prisma migrate deploy` against the production copy once the owner's dump is loaded, then ticks this.
   - Implementer: in future, don't tick a rehearsal box unless it ran on the production copy; write "not available" instead.
