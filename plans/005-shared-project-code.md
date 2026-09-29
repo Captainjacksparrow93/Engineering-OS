@@ -47,6 +47,22 @@ Existing projects keep their codes.
 - WO numbers stay unique. Do not touch `pm_projects_workOrderNo_key`.
 
 ## Tools & skills (implementer: follow these)
+- **Session setup (do these first, in order):**
+  1. `mcp__token-savior__switch_project` with `name: "Project management"` (a path-based switch can land on the parent `Downloads` folder).
+  2. `mcp__code-review-graph__build_or_update_graph_tool` (incremental, default args). Confirm `head_matches_build: true` in the result.
+  3. Load skills with the Skill tool: `ponytail` (full), then the others listed under **Skills** below.
+- **How to call the graph:** `mcp__code-review-graph__query_graph_tool` with `pattern` (`callers_of` / `importers_of` / `tests_for`) and `target`.
+  - Plain function names work, e.g. `target: "listProjects"`.
+  - File targets and some symbols return *not found* with relative paths. Retry with the qualified form `C:\Users\Dhruv-Home\Downloads\projects\ACS\Project management\<path>::<symbol>`. If that still fails, use a text search and write "graph not_found → text search" in Implementation notes.
+  - `mcp__code-review-graph__get_impact_radius_tool` takes `changed_files` (repo-relative paths) and `detail_level: "minimal"`.
+  - `mcp__code-review-graph__get_affected_flows_tool` takes the same `changed_files`.
+- **How to read code:**
+  - `mcp__token-savior__get_function_source` with `name` (or `names`, up to 10).
+  - `mcp__token-savior__find_symbol` to locate.
+  - `mcp__token-savior__get_full_context` with `depth: 1` when you need dependents.
+  - Never `cat` or Read a whole file over 300 lines; search for the quoted string and read that range.
+- **sequential-thinking:** `mcp__sequential-thinking__sequentialthinking`. Paste its final conclusion (one or two lines) into Implementation notes for the step that requires it.
+- **Paste back:** for every graph call, a one-line result (count plus names) in Implementation notes, so the reviewer can compare with **Affected code** above.
 - **code-review-graph:** `query_graph_tool` `callers_of` `createAutomationProject`, `createProject` and `nextClientProjectCode`; `get_impact_radius_tool` on `automation-project.service.ts` before editing.
 - **Token Savior:** `get_function_source` `createAutomationProject`, `createProject` and `nextClientProjectCode`. In the wizard, search for `setCode` and `Project code` instead of reading the file.
 - **sequential-thinking:** not needed.
