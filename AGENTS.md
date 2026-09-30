@@ -40,6 +40,7 @@ Real employees of ACS Engitech use it every day at the VPS (`72.62.248.38`, `/ro
 - UI/visual changes (layout, tables, forms, accessibility, responsive): follow the `impeccable` skill.
 - Database changes are **additive only** (see the migration rule above). User data must survive every restart, rebuild and deploy.
 - Tests: `npm run typecheck && npm test && npm run build` and `npm run test:int` (needs the local Postgres from `docker-compose.local.yml`) must all pass before every commit and before marking a plan DONE.
+- Before marking a plan DONE, run `npm run test:int` against a fresh database built like CI: empty DB, `npx prisma migrate deploy`, `npm run db:seed`. Use a throwaway database, not the dev one. A production copy can differ from the seed (e.g. edited checklist hours), so tests must not rely on data only the production copy has.
 
 ## Skills to Use
 - `ponytail` (full): default posture on every coding task.
