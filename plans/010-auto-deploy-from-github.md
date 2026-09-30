@@ -57,7 +57,7 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 3. **GHCR (user).** After the first publish, check that the package `engineering-os` is **private** and linked to the repository (Packages → engineering-os → Package settings).
 4. **Old keys.** `authorized_keys` on the VPS also holds `root@srv1275499` and `Jaimin`.
    - **Keep `root@srv1275499`** (user decision 2026-09-30).
-   - `Jaimin`: not decided yet. Claude removes it only after an explicit yes from the user, and backs up `authorized_keys` first.
+   - `Jaimin` is `dhruv laptop - Jaimin`, the user's own laptop (the key Claude and `deploy.sh` use). **Keep it.** Removing it would lock the laptop out.
 
 ## Constraints
 - The app is LIVE. The implementer commits locally only and never pushes: **after this plan, a push is a production deploy.** The implementer never runs anything against the VPS and never adds secrets.
@@ -92,6 +92,13 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - [ ] The full test suite passes (counts pasted).
 
 ## Implementation notes (implementer)
+**Setup 1 done (Claude, 2026-09-30, user approved):**
+- Generated an ed25519 key `github-actions-engos-deploy` (`SHA256:NYLPqWnY2bb7zKZdC5GmpIkzVae8PGy/mNHsW/zOAQU`).
+- Appended its public key to `/root/.ssh/authorized_keys` on its own line (backup: `/root/.ssh/authorized_keys.bak-20260930`). The file now holds `root@srv1275499`, `dhruv laptop - Jaimin` and `github-actions-engos-deploy`.
+- Tested: the new key logs in, and the laptop key still logs in.
+- The `Jaimin` key is the user's own laptop (`dhruv laptop - Jaimin`), so it was **not** removed.
+- The private key sits only in Claude's scratchpad until the user saves it as the GitHub secret `VPS_SSH_KEY`; then Claude deletes it.
+
 <commits, text-search hits, deviations, test counts, tools used>
 
 ## Review (Claude)
