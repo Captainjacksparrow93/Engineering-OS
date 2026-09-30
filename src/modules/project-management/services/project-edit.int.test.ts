@@ -314,4 +314,30 @@ describe('Plan 008: Edit Project and Client Integration Tests', () => {
       })
     ).rejects.toThrow(ForbiddenError);
   });
+
+  it('ignores any status passed to updateProject, keeping project status unchanged', async () => {
+    const rand = Math.floor(10000 + Math.random() * 89999);
+    const initial = await createAutomationProject(directorPrincipal, {
+      kind: 'WORK_ORDER',
+      workOrderNo: String(rand),
+      clientId: testClient.id,
+      clientName: testClient.name,
+      managerId: pmId,
+      startDate: '2026-10-01',
+      targetEndDate: '2026-10-30',
+      scopes: [{ templateCode: 'PLC', quantity: 1 }],
+    });
+    createdProjectIds.push(initial.id);
+    expect(initial.status).toBe('PLANNING');
+
+    const inputWithStatus = Object.assign({ priority: 'HIGH' as const }, { status: 'COMPLETED' });
+    const updated = await updateProject(directorPrincipal, initial.id, inputWithStatus);
+
+    expect(updated.priority).toBe('HIGH');
+    expect(updated.status).toBe('PLANNING');
+
+    const fromDb = await prisma.project.findUnique({ where: { id: initial.id } });
+    expect(fromDb?.status).toBe('PLANNING');
+    expect(fromDb?.actualEndDate).toBeNull();
+  });
 });

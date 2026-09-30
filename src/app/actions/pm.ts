@@ -356,8 +356,8 @@ export async function updateClientAction(clientId: string, name: string, refNumb
     revalidatePath('/pm/projects');
     revalidatePath('/dashboard');
     return { success: true, client };
-  } catch (err: unknown) {
-    return { success: false, error: err instanceof Error ? err.message : 'Failed to update client.' };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to update client.' };
   }
 }
 
@@ -503,8 +503,8 @@ export async function updateProjectAction(projectId: string, input: unknown) {
       revalidatePath(`/pm/clients/${project.clientId}`);
     }
     return { success: true, project };
-  } catch (err: unknown) {
-    return { success: false, error: err instanceof Error ? err.message : 'Failed to update project.' };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to update project.' };
   }
 }
 

@@ -172,7 +172,7 @@ export async function updateClient(
         action: 'client.updated',
         entityType: 'Client',
         entityId: id,
-        diff: diffOf(before as unknown as Record<string, unknown>, { name, refNumber }),
+        diff: diffOf({ name: before.name, refNumber: before.refNumber }, { name, refNumber }),
       },
       tx,
     );

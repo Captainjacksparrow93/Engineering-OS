@@ -40,7 +40,7 @@ export const baseProjectSchema = z.object({
 
 export const updateProjectSchema = baseProjectSchema
   .partial()
-  .omit({ managerId: true, sponsorId: true, departmentId: true })
+  .omit({ managerId: true, sponsorId: true, departmentId: true, status: true, kind: true })
   .extend({
     panelDeliveryDates: z.record(z.string(), dateString).optional(),
   });

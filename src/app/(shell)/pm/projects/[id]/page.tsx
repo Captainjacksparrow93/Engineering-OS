@@ -51,9 +51,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const { project, tasks, summary, permissions, criticalTaskIds } = workspace;
 
   const canHandoverProject = !isExecutionStaff(principal) && permissions.canManageMembers;
-  const canEditProjectDetails =
-    can(principal, 'pm.project.create', { departmentId: project.departmentId ?? undefined }) ||
-    hasPermissionAnywhere(principal, 'pm.project.create');
+  const departmentId = project.departmentId || principal.departmentId;
+  const canEditProjectDetails = can(principal, 'pm.project.create', { departmentId: departmentId ?? undefined });
 
   const [colleagues, eligibleManagers, people, clients, existingCodes] = await Promise.all([
     permissions.canAssign || permissions.canManageMembers || permissions.canEditProject

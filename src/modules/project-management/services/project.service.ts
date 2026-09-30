@@ -299,7 +299,7 @@ export async function updateProject(
     }
   }
 
-  const data = {
+  const data: Record<string, unknown> = {
     name: input.name !== undefined ? input.name : before.name,
     code,
     workOrderNo,
@@ -311,28 +311,30 @@ export async function updateProject(
     panelType: input.panelType !== undefined ? input.panelType : before.panelType,
     panelCount: input.panelCount !== undefined ? input.panelCount : before.panelCount,
     priority: input.priority !== undefined ? input.priority : before.priority,
-    status: input.status !== undefined ? input.status : before.status,
     startDate,
     targetEndDate,
   };
 
-  const statusChanged = Boolean(input.status && input.status !== before.status);
-  let actualEndDate = before.actualEndDate;
-  if (statusChanged) {
-    if (input.status === 'COMPLETED') {
-      actualEndDate = new Date();
-    } else if (before.status === 'COMPLETED') {
-      actualEndDate = null;
-    }
-  }
+  const beforeData: Record<string, unknown> = {
+    name: before.name,
+    code: before.code,
+    workOrderNo: before.workOrderNo,
+    description: before.description,
+    clientId: before.clientId,
+    clientName: before.clientName,
+    endUserName: before.endUserName,
+    applicationName: before.applicationName,
+    panelType: before.panelType,
+    panelCount: before.panelCount,
+    priority: before.priority,
+    startDate: before.startDate,
+    targetEndDate: before.targetEndDate,
+  };
 
   return prisma.$transaction(async (tx) => {
     const updated = await tx.project.update({
       where: { id: projectId },
-      data: {
-        ...data,
-        actualEndDate,
-      },
+      data,
     });
 
     for (const pu of phaseUpdates) {
@@ -342,7 +344,7 @@ export async function updateProject(
       });
     }
 
-    const auditDiff = diffOf(before as unknown as Record<string, unknown>, data as Record<string, unknown>);
+    const auditDiff = diffOf(beforeData, data);
     for (const pu of phaseUpdates) {
       auditDiff[`${pu.title} delivery`] = {
         from: pu.from ? pu.from.toISOString().slice(0, 10) : null,
@@ -362,19 +364,6 @@ export async function updateProject(
       tx,
     );
 
-    if (statusChanged) {
-      await publish(
-        {
-          name: EVENTS.PROJECT_STATUS_CHANGED,
-          module: 'pm',
-          entityType: 'Project',
-          entityId: projectId,
-          actorId: principal.userId,
-          payload: { from: before.status, to: updated.status, code: updated.code },
-        },
-        tx,
-      );
-    }
     return updated;
   });
 }
