@@ -246,6 +246,7 @@ export interface SmartCandidate {
   workingDays: number;
   leaveDays: number;
   leaves: LeavePeriod[];
+  isPM?: boolean;
 }
 
 export interface SmartStepRequirement {
@@ -300,8 +301,9 @@ export function applyHardRules(candidate: SmartCandidate, step: SmartStepRequire
   // H5: Inactive account
   if (candidate.status !== 'ACTIVE') return false;
 
-  // H4: Exclude PMs / Assistant Managers / Directors / Upper management from task execution
-  if (!isExecutionStaff(candidate)) return false;
+  // H4: Exclude Upper management (HEAD, DIRECTOR always). PMs / Assistant Managers allowed if candidate.isPM.
+  if (['HEAD', 'DIRECTOR'].includes(candidate.grade)) return false;
+  if (!isExecutionStaff(candidate) && !candidate.isPM) return false;
 
   // H1: Approved leave covering >50% of the task's working days
   if (isCandidateOnHeavyLeave(candidate, step)) return false;
@@ -416,7 +418,12 @@ export function computeFairShare(
   steps: SmartStepRequirement[],
   pmSquadUserIds: Set<string>,
 ): Map<string, number> {
-  const workers = candidates.filter((c) => c.status === 'ACTIVE' && !['MANAGER', 'HEAD', 'DIRECTOR'].includes(c.grade));
+  const workers = candidates.filter(
+    (c) =>
+      c.status === 'ACTIVE' &&
+      !['HEAD', 'DIRECTOR'].includes(c.grade) &&
+      (isExecutionStaff(c) || c.isPM),
+  );
   const squad = workers.filter((c) => pmSquadUserIds.has(c.id));
   const pool = squad.length > 0 ? squad : workers;
 
@@ -472,7 +479,8 @@ export function allocateTeamForSteps(
         (c) =>
           inScope(c) &&
           c.status === 'ACTIVE' &&
-          !['MANAGER', 'HEAD', 'DIRECTOR'].includes(c.grade) &&
+          !['HEAD', 'DIRECTOR'].includes(c.grade) &&
+          (isExecutionStaff(c) || c.isPM) &&
           (GRADE_RANK[c.grade] ?? 1) >= gradeFloor(step.recommendedSeniority) &&
           !isCandidateOnHeavyLeave(c, step),
       );

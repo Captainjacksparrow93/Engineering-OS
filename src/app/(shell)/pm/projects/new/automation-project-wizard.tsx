@@ -40,6 +40,7 @@ interface Engineer {
   grade: string;
   avatarColor: string;
   managerId: string | null;
+  isPM?: boolean;
 }
 
 interface Manager {
@@ -321,6 +322,11 @@ export function AutomationProjectWizard({
       const ownEngineers = allEngineers.filter(
         (e) => (teamUserIds.has(e.id) || e.id === selectedPMId) && !usedIds.has(e.id),
       );
+      ownEngineers.sort((a, b) => {
+        if (a.id === selectedPMId) return -1;
+        if (b.id === selectedPMId) return 1;
+        return 0;
+      });
       for (const e of ownEngineers) usedIds.add(e.id);
 
       const managerName = selectedManager ? formatName(selectedManager.fullName) : 'Selected PM';
@@ -338,6 +344,11 @@ export function AutomationProjectWizard({
       const teamEngineers = allEngineers.filter(
         (e) => (teamUserIds.has(e.id) || e.id === m.id) && !usedIds.has(e.id),
       );
+      teamEngineers.sort((a, b) => {
+        if (a.id === m.id) return -1;
+        if (b.id === m.id) return 1;
+        return 0;
+      });
       for (const e of teamEngineers) usedIds.add(e.id);
 
       if (teamEngineers.length > 0) {
@@ -1314,7 +1325,7 @@ export function AutomationProjectWizard({
                             <optgroup key={group.id} label={group.label}>
                               {group.engineers.map((eng) => (
                                 <option key={eng.id} value={eng.id}>
-                                  {formatName(eng.fullName)} ({eng.grade.replaceAll('_', ' ')})
+                                  {formatName(eng.fullName)} {eng.isPM ? '(PM)' : `(${eng.grade.replaceAll('_', ' ')})`}
                                 </option>
                               ))}
                             </optgroup>

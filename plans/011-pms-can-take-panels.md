@@ -1,6 +1,6 @@
 # 011 — PMs and Assistant PMs can take a panel
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 
 ## Goal
@@ -52,21 +52,34 @@ User request 2026-09-30: on the New project form (step 3, "Review Panels & Assig
 - If a tool is missing or fails, say so in Implementation notes.
 
 ## Steps
-- [ ] 1. **Tests first:**
+- [x] 1. **Tests first:**
   - **Unit (`availability.test.ts`):** a candidate flagged `isPM` with grade `MANAGER` passes the hard rules and can be allocated; a `HEAD` or `DIRECTOR` still can't; an unflagged `MANAGER` still can't; `isExecutionStaff` results unchanged.
   - **Integration:** `getPMTeamData().allEngineers` includes every PM-pool user, once each. `autoAssignAutomationTeam` can return a PM for a panel when the engineers are fully booked (build that state inside the test). `createAutomationProject` accepts a PM as a panel assignee. A Director is never auto-assigned.
-- [ ] 2. `getPMTeamData` + wizard grouping and label.
-- [ ] 3. Auto-assign candidates, the `isPM` flag and the domain rules.
-- [ ] 4. Full suite (CI-like database); record counts.
+- [x] 2. `getPMTeamData` + wizard grouping and label.
+- [x] 3. Auto-assign candidates, the `isPM` flag and the domain rules.
+- [x] 4. Full suite (CI-like database); record counts.
 
 ## Acceptance criteria
-- [ ] In the New project picker, each PM/Asst PM is pickable, listed first in their own team group and marked as PM.
-- [ ] Auto-Assign can pick a PM/Asst PM under the same rules as engineers; never a Director or Head.
-- [ ] Dashboards, team load and handover behaviour are unchanged (existing tests pass untouched).
-- [ ] The full suite passes on a fresh CI-like database (counts pasted).
+- [x] In the New project picker, each PM/Asst PM is pickable, listed first in their own team group and marked as PM.
+- [x] Auto-Assign can pick a PM/Asst PM under the same rules as engineers; never a Director or Head.
+- [x] Dashboards, team load and handover behaviour are unchanged (existing tests pass untouched).
+- [x] The full suite passes on a fresh CI-like database (counts pasted).
 
 ## Implementation notes (implementer)
-<commits, graph output, deviations, test counts, tools used>
+- **Commits:** Local commit `plan 011: PMs and Assistant PMs can take a panel`.
+- **Changes:**
+  - `src/modules/project-management/domain/availability.ts`: Extended `SmartCandidate` with `isPM?: boolean`. Updated `applyHardRules` (H4 allows `isExecutionStaff(candidate) || candidate.isPM`, strictly excluding `HEAD` and `DIRECTOR`). Updated `computeFairShare` and `allocateTeamForSteps` (escalation rung 3) to allow `candidate.isPM` while keeping `HEAD`/`DIRECTOR` excluded. `isExecutionStaff` remains strictly unchanged.
+  - `src/modules/project-management/services/automation-project.service.ts`: Updated `getPMTeamData` to include all managers from `projectManagerPool` in `allEngineers` with `isPM: true` (deduplicating by user ID). Updated `autoAssignAutomationTeam` candidate query to also fetch TECH `PROJECT_MANAGER` / `ASST_MANAGER` (excluding `HEAD`/`DIRECTOR`), map `isPM: true`, and added `input.managerId` to `squadSet`.
+  - `src/app/(shell)/pm/projects/new/automation-project-wizard.tsx`: Updated `Engineer` type with `isPM?: boolean`. Sorted group's PM first in `ownEngineers` and `teamEngineers`. Formatted PM options in Select with `(PM)` label suffix.
+  - `src/modules/project-management/domain/availability.test.ts`: Added unit tests for flagged PM availability rules and allocation.
+  - `src/modules/project-management/services/pm-panel-assignment.int.test.ts`: Added integration tests covering PM pool presence in `getPMTeamData`, panel assignment via `createAutomationProject`, auto-assign allocating PM and never Director, and auto-assign allocating PM when subordinates are fully booked.
+- **Known effect:** PMs usually hold fewer leaf checklist tasks, so the workload balancer may treat them as having high availability and allocate them early panels. Accepted per user specification.
+- **Test counts:**
+  - Unit tests: 12 test files passed, 147 tests passed (`vitest run`).
+  - Integration tests: 13 test files passed, 58 tests passed (`vitest run --config vitest.integration.config.ts`).
+  - Fresh CI-like database (`throwaway_plan011` with `prisma migrate deploy` + `db:seed`): 13 test files passed, 58 tests passed.
+  - Production build: `npm run build` compiled successfully (all 37 routes).
+- **Tools used:** Token Savior, code-review-graph, vitest, Next.js build.
 
 ## Review (Claude)
 <verdict, follow-ups>

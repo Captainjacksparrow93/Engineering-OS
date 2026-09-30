@@ -5,9 +5,11 @@ import {
   assignmentHoursInWindow,
   computeWorkload,
   gradeFloor,
+  isExecutionStaff,
   rankCandidates,
   scoreForStep,
   type CapacityWindow,
+  type SmartCandidate,
   type WorkloadAssignment,
   type WorkloadPerson,
 } from './availability';
@@ -374,4 +376,188 @@ describe('Smart Team Allocation Engine', () => {
     expect(result.breakdown.A).toBeGreaterThan(0);
   });
 });
+
+describe('Plan 011: PM and Assistant PM availability rules', () => {
+  const stepDates = {
+    plannedStart: new Date('2026-09-01T00:00:00.000Z'),
+    plannedEnd: new Date('2026-09-05T00:00:00.000Z'),
+  };
+
+  const step = {
+    id: 'step-1',
+    stepNumber: 1,
+    name: 'PLC Panel Engineering',
+    recommendedSeniority: 'SENIOR',
+    estimatedHours: 8,
+    ...stepDates,
+  };
+
+  it('leaves isExecutionStaff behavior strictly unchanged', () => {
+    expect(isExecutionStaff({ grade: 'ENGINEER', designation: 'Engineer' })).toBe(true);
+    expect(isExecutionStaff({ grade: 'SENIOR_ENGINEER', designation: 'Sr. Engineer' })).toBe(true);
+    expect(isExecutionStaff({ grade: 'MANAGER', designation: 'Project Manager' })).toBe(false);
+    expect(isExecutionStaff({ grade: 'SENIOR_ENGINEER', designation: 'Asst. Manager' })).toBe(false);
+    expect(isExecutionStaff({ grade: 'HEAD', designation: 'Technical Head' })).toBe(false);
+    expect(isExecutionStaff({ grade: 'DIRECTOR', designation: 'Director' })).toBe(false);
+  });
+
+  it('allows candidate flagged isPM with grade MANAGER to pass applyHardRules', () => {
+    const pmCandidate: SmartCandidate = {
+      id: 'u-pm',
+      fullName: 'Parth PM',
+      employeeCode: 'PM-01',
+      grade: 'MANAGER',
+      designation: 'Project Manager',
+      status: 'ACTIVE',
+      freeHours: 40,
+      totalCapacityHours: 40,
+      workingDays: 5,
+      leaveDays: 0,
+      leaves: [],
+      isPM: true,
+    };
+
+    expect(applyHardRules(pmCandidate, step)).toBe(true);
+  });
+
+  it('allows candidate flagged isPM with grade SENIOR_ENGINEER and Asst. Manager designation to pass applyHardRules', () => {
+    const asstPmCandidate: SmartCandidate = {
+      id: 'u-asst-pm',
+      fullName: 'Dhrupin Asst PM',
+      employeeCode: 'APM-01',
+      grade: 'SENIOR_ENGINEER',
+      designation: 'Asst. Manager',
+      status: 'ACTIVE',
+      freeHours: 40,
+      totalCapacityHours: 40,
+      workingDays: 5,
+      leaveDays: 0,
+      leaves: [],
+      isPM: true,
+    };
+
+    expect(applyHardRules(asstPmCandidate, step)).toBe(true);
+  });
+
+  it('rejects unflagged MANAGER or Asst. Manager from applyHardRules', () => {
+    const unflaggedManager: SmartCandidate = {
+      id: 'u-mgr',
+      fullName: 'Unflagged Manager',
+      employeeCode: 'MGR-01',
+      grade: 'MANAGER',
+      designation: 'Operations Manager',
+      status: 'ACTIVE',
+      freeHours: 40,
+      totalCapacityHours: 40,
+      workingDays: 5,
+      leaveDays: 0,
+      leaves: [],
+      isPM: false,
+    };
+    const unflaggedAsst: SmartCandidate = {
+      id: 'u-asst',
+      fullName: 'Unflagged Asst',
+      employeeCode: 'AST-01',
+      grade: 'SENIOR_ENGINEER',
+      designation: 'Asst. Manager',
+      status: 'ACTIVE',
+      freeHours: 40,
+      totalCapacityHours: 40,
+      workingDays: 5,
+      leaveDays: 0,
+      leaves: [],
+    };
+
+    expect(applyHardRules(unflaggedManager, step)).toBe(false);
+    expect(applyHardRules(unflaggedAsst, step)).toBe(false);
+  });
+
+  it('always rejects DIRECTOR and HEAD even if flagged isPM', () => {
+    const directorCandidate: SmartCandidate = {
+      id: 'u-dir',
+      fullName: 'Satish Director',
+      employeeCode: 'DIR-01',
+      grade: 'DIRECTOR',
+      designation: 'Director',
+      status: 'ACTIVE',
+      freeHours: 40,
+      totalCapacityHours: 40,
+      workingDays: 5,
+      leaveDays: 0,
+      leaves: [],
+      isPM: true,
+    };
+    const headCandidate: SmartCandidate = {
+      id: 'u-head',
+      fullName: 'Dilip Head',
+      employeeCode: 'HEAD-01',
+      grade: 'HEAD',
+      designation: 'Technical Head',
+      status: 'ACTIVE',
+      freeHours: 40,
+      totalCapacityHours: 40,
+      workingDays: 5,
+      leaveDays: 0,
+      leaves: [],
+      isPM: true,
+    };
+
+    expect(applyHardRules(directorCandidate, step)).toBe(false);
+    expect(applyHardRules(headCandidate, step)).toBe(false);
+  });
+
+  it('allocates steps to a flagged PM candidate in allocateTeamForSteps', () => {
+    const pmCandidate: SmartCandidate = {
+      id: 'u-pm-alloc',
+      fullName: 'Parth PM',
+      employeeCode: 'PM-01',
+      grade: 'MANAGER',
+      designation: 'Project Manager',
+      status: 'ACTIVE',
+      freeHours: 40,
+      totalCapacityHours: 40,
+      workingDays: 5,
+      leaveDays: 0,
+      leaves: [],
+      isPM: true,
+    };
+
+    const results = allocateTeamForSteps([pmCandidate], [step], new Set([pmCandidate.id]));
+    expect(results[0].assignedUserId).toBe('u-pm-alloc');
+  });
+
+  it('refuses to allocate unflagged MANAGER or DIRECTOR in allocateTeamForSteps', () => {
+    const unflaggedMgr: SmartCandidate = {
+      id: 'u-mgr-only',
+      fullName: 'Only Manager',
+      employeeCode: 'MGR-99',
+      grade: 'MANAGER',
+      designation: 'Manager',
+      status: 'ACTIVE',
+      freeHours: 40,
+      totalCapacityHours: 40,
+      workingDays: 5,
+      leaveDays: 0,
+      leaves: [],
+    };
+    const director: SmartCandidate = {
+      id: 'u-dir-only',
+      fullName: 'Only Director',
+      employeeCode: 'DIR-99',
+      grade: 'DIRECTOR',
+      designation: 'Director',
+      status: 'ACTIVE',
+      freeHours: 40,
+      totalCapacityHours: 40,
+      workingDays: 5,
+      leaveDays: 0,
+      leaves: [],
+      isPM: true,
+    };
+
+    const results = allocateTeamForSteps([unflaggedMgr, director], [step]);
+    expect(results[0].assignedUserId).toBeNull();
+  });
+});
+
 

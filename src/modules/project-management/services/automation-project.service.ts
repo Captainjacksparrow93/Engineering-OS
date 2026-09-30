@@ -109,7 +109,9 @@ export async function getPMTeamData(companyId: string) {
     select: { id: true, managerId: true },
   });
   const reportsByManager = new Map<string, string[]>();
+  const managerIdByUser = new Map<string, string | null>();
   for (const u of activeCompanyUsers) {
+    managerIdByUser.set(u.id, u.managerId);
     if (u.managerId) {
       const list = reportsByManager.get(u.managerId) ?? [];
       list.push(u.id);
@@ -124,7 +126,7 @@ export async function getPMTeamData(companyId: string) {
   }
 
   // All technical engineers (holding SENIOR_ENGINEER or JUNIOR_ENGINEER) in TECH department, excluding management/assistants
-  const allEngineers = await prisma.user.findMany({
+  const engineers = await prisma.user.findMany({
     where: {
       companyId,
       status: 'ACTIVE',
@@ -145,6 +147,27 @@ export async function getPMTeamData(companyId: string) {
     },
     orderBy: [{ grade: 'asc' }, { fullName: 'asc' }],
   });
+
+  const managerIds = new Set(managers.map((m) => m.id));
+  const engineerList = engineers.map((e) => ({
+    ...e,
+    isPM: managerIds.has(e.id),
+  }));
+
+  const engineerIds = new Set(engineerList.map((e) => e.id));
+  const pmList = managers
+    .filter((m) => !engineerIds.has(m.id))
+    .map((m) => ({
+      id: m.id,
+      fullName: m.fullName,
+      designation: m.designation,
+      grade: m.grade,
+      avatarColor: m.avatarColor,
+      managerId: managerIdByUser.get(m.id) ?? null,
+      isPM: true,
+    }));
+
+  const allEngineers = [...engineerList, ...pmList];
 
   return { managers, teamsByPM, allEngineers };
 }
@@ -530,26 +553,38 @@ export async function autoAssignAutomationTeam(
   // 1. Fetch PM Squad hierarchy
   const descendantIds = input.managerId ? await getDescendantUserIds(principal.companyId, input.managerId) : [];
   const squadSet = new Set<string>(descendantIds);
+  if (input.managerId) {
+    squadSet.add(input.managerId);
+  }
 
   // 2. Determine capacity window
   const windowStart = input.startDate ? startOfDay(new Date(input.startDate)) : startOfDay(new Date());
   const windowEnd = input.targetEndDate ? startOfDay(new Date(input.targetEndDate)) : addDays(windowStart, 30);
   const window = { from: windowStart, to: windowEnd };
 
-  // 3. Fetch candidate engineers (strictly TECH department execution staff)
+  // 3. Fetch candidate engineers and PM-pool staff (strictly TECH department, excluding HEAD and DIRECTOR)
   const users = await prisma.user.findMany({
     where: {
       companyId: principal.companyId,
       status: 'ACTIVE',
       department: { code: { in: ['TECH'] } },
-      grade: { notIn: ['MANAGER', 'HEAD', 'DIRECTOR'] },
-      NOT: [
-        { designation: { contains: 'Manager', mode: 'insensitive' } },
-        { designation: { contains: 'Asst', mode: 'insensitive' } },
+      grade: { notIn: ['HEAD', 'DIRECTOR'] },
+      OR: [
+        {
+          grade: { notIn: ['MANAGER', 'HEAD', 'DIRECTOR'] },
+          NOT: [
+            { designation: { contains: 'Manager', mode: 'insensitive' } },
+            { designation: { contains: 'Asst', mode: 'insensitive' } },
+          ],
+        },
+        {
+          roleAssignments: { some: { role: { key: { in: ['PROJECT_MANAGER', 'ASST_MANAGER'] } } } },
+        },
       ],
     },
     include: {
       department: { select: { id: true, name: true } },
+      roleAssignments: { select: { role: { select: { key: true } } } },
     },
     orderBy: { fullName: 'asc' },
   });
@@ -645,6 +680,10 @@ export async function autoAssignAutomationTeam(
       window,
     );
 
+    const isPM = user.roleAssignments.some(
+      (ra) => ra.role.key === 'PROJECT_MANAGER' || ra.role.key === 'ASST_MANAGER',
+    );
+
     return {
       id: user.id,
       fullName: user.fullName,
@@ -657,6 +696,7 @@ export async function autoAssignAutomationTeam(
       workingDays: workload.workingDays,
       leaveDays: workload.leaveDays,
       leaves: leavesByUser.get(user.id) || [],
+      isPM,
     };
   });
 
