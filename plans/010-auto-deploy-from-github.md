@@ -123,4 +123,20 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
   - Local Docker container `engos_local_db` for throwaway database CI-parity verification.
 
 ## Review (Claude)
-<verdict, follow-ups>
+**2026-09-30, commit `f5493ee`. Verdict: close to the plan; two follow-ups before the first push. The push of these commits is itself the first automatic deploy.**
+
+**Checked:**
+- `ci.yml` `publish`: `needs: test-and-build`, only on `push` to `main`, `packages: write`, pushes `ghcr.io/n8nmonk-wq/engineering-os:${{ github.sha }}`. Because `publish` is a job inside `CI`, `workflow_run` success means publish succeeded too. ✓
+- `deploy.yml`:
+  - Triggers: `CI` completed on `main` with `conclusion == success` and `event == push`, plus `workflow_dispatch`. Concurrency `deploy-production`, no cancel. Secrets fall back to `72.62.248.38` / `root` / `22` (there are no host/user/port secrets). ✓
+  - Remote steps are passed as a command string with `</dev/null` on `backup.sh`, `docker pull` and `docker compose`, so the `deploy.sh` stdin bug can't happen. ✓
+  - Success requires `healthy` **and** `.Config.Image == engineering-os:<sha>`. ✓
+  - Cleanup is limited to `engineering-os` and `ghcr.io/n8nmonk-wq/engineering-os` tags; `current`, target and `OLD` are kept. ✓
+- The remote script, extracted from the YAML with the `${{ }}` expressions substituted, passes `bash -n`.
+- `scripts/deploy.sh` deleted; `rollback.sh`, `backup.sh`, `restore.sh` and `docker-compose.yml` unchanged. No `deploy.sh` references are left outside `plans/` and `docs/archive` (CLAUDE.md updated by Claude).
+- Implementer's counts: typecheck clean · unit 140 · int 54 (also on a fresh CI-like database) · build clean. No app code changed, so Claude did not re-run the suite; CI runs it on push.
+
+**Follow-ups (implementer):**
+- [ ] **F1 — A failed swap must also roll back.** The script runs under `set -euo pipefail`. If `docker compose up -d --no-build app` itself fails (not just an unhealthy container), the script exits at once. Compose may already have stopped and removed the old `engos_app`, and the failure branch never runs, so the app could be down with no rollback. Make every failure after step 3 (`OLD` recorded) go through the same rollback: e.g. a function called from an `ERR`/`EXIT` trap, or `if ! … ; then` around the swap. The rollback should also `git checkout "$OLD"` so compose and scripts on the server match the running image. Keep it short.
+- [ ] **F2 — Validate the SHA first.** `TARGET_SHA` can come from the manual `sha` input. Before step 1, refuse anything that isn't 40 lowercase hex characters (`^[0-9a-f]{40}$`), with a clear message. A short SHA would pass `git checkout` and then fail at `docker pull`, because images are tagged with the full SHA. It also keeps free text out of the script.
+- Re-check with the same extraction + `bash -n`, and note it.
