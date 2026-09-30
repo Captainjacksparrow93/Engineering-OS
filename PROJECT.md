@@ -131,44 +131,48 @@ npm run typecheck && npm test && npm run build && npm run test:int
 
 ## 6. How it's deployed
 
-**Pushing to `main` does not deploy.** CI only runs tests. The owner deploys by running one script on their own PC, and the image is built there. GitHub and the VPS never build or publish images, and there is no registry. Plan: [plans/001-local-image-build-deploy.md](plans/001-local-image-build-deploy.md).
+**Pushing to `main` deploys to production if CI passes.** Image building happens in GitHub Actions, and an automated workflow deploys via SSH to the VPS (`72.62.248.38`). No local Docker Desktop or `deploy.sh` is needed. Plan: [plans/010-auto-deploy-from-github.md](plans/010-auto-deploy-from-github.md).
 
-1. **CI** (`.github/workflows/ci.yml`) runs on every push and PR to `main`: `npm ci` → `prisma validate` → migrate and seed a throwaway Postgres → typecheck → unit tests → integration tests → `next build`.
-2. **Deploy:** from Git Bash in the repo, run `scripts/deploy.sh`. The host defaults are `VPS_HOST=72.62.248.38`, `VPS_USER=root` and `VPS_DIR=/root/engos-docker`; SSH uses the owner's key. The script:
-   1. Refuses to run unless the working tree is clean and `HEAD` equals `origin/main`.
-   2. Builds `engineering-os:<sha>` for `linux/amd64` locally.
-   3. Streams the image to the VPS (`docker save | gzip | ssh … docker load`).
-   4. On the VPS:
-      - `git pull` (compose file and scripts only; nothing is built there).
-      - `./scripts/backup.sh`. The deploy stops if the backup fails.
-      - Saves the running sha to `.previous-sha`.
-      - Tags `engineering-os:current`, then runs `up -d --no-build app` with `APP_IMAGE=engineering-os:<sha>`.
-      - Writes `.deployed-sha`.
-      - Waits up to 3 minutes for the container to be healthy. If it isn't, it prints the logs and fails. There is no automatic rollback.
-      - Removes old `engineering-os:*` images except current, new and previous.
-   5. Copies the newest backup to `backups/` on the PC. That folder is git-ignored.
+1. **CI** (`.github/workflows/ci.yml`):
+   - Runs on every push and PR to `main`: `npm ci` → `prisma validate` → migrate and seed a throwaway Postgres → typecheck → unit tests → integration tests → `next build`.
+   - On `push` to `main`, a subsequent **`publish`** job builds the production image using Buildx and GHA caching, then pushes `ghcr.io/n8nmonk-wq/engineering-os:<sha>` to private GHCR.
+2. **Deploy** (`.github/workflows/deploy.yml`):
+   - Triggers automatically via `workflow_run` when CI succeeds on `main` (`push`), or manually via `workflow_dispatch` with an optional `sha` input for redeploys.
+   - Enforces single-concurrency (`deploy-production`) so deploys never overlap.
+   - Connects to the VPS via SSH (`appleboy/ssh-action` with secret `VPS_SSH_KEY`) and executes:
+     1. Fetches git and checks out the exact `<sha>` in `/root/engos-docker`.
+     2. Runs `./scripts/backup.sh </dev/null` (halts immediately if backup fails).
+     3. Records running container SHA `OLD` (`.deployed-sha`).
+     4. Pulls `ghcr.io/n8nmonk-wq/engineering-os:<sha>` and tags it `engineering-os:<sha>`.
+     5. Swaps the container: `APP_IMAGE=engineering-os:<sha> docker compose up -d --no-build app </dev/null` (never touches `db`).
+     6. Polls up to 3 minutes verifying `engos_app` is `healthy` **and** the running image matches `engineering-os:<sha>`.
+     7. **On success:** tags `engineering-os:current`, writes `.previous-sha` (`OLD`) and `.deployed-sha` (`<sha>`), and prunes older `engineering-os:*` and `ghcr.io/n8nmonk-wq/engineering-os:*` images except `current`, `<sha>`, and `OLD`.
+     8. **On failure:** prints container logs (`docker compose logs --tail 150 app`), automatically rolls back to `engineering-os:OLD`, waits for healthy, and exits non-zero (prompting a GitHub notification email).
 3. **Container start** (`entrypoint.sh`):
    - `prisma migrate deploy`. This is fatal if it fails.
-   - Seed and the legacy `grant-*.ts` scripts. These aren't fatal: failures are only logged.
-   - Then the Next.js server starts.
-   - The healthcheck calls `/api/health`, which checks the DB and that no migration is left unfinished.
+   - Seed and legacy `grant-*.ts` scripts (idempotent; errors are logged).
+   - Starts Next.js server.
+   - Healthcheck calls `/api/health` (DB check + migration status check).
 
-**Rollback:** on the VPS, run `./scripts/rollback.sh`. It re-tags and starts the image named in `.previous-sha`, which is already loaded on the VPS, so nothing is downloaded.
-- If the bad release ran a migration, restore the backup first (`scripts/restore.sh`), with owner approval.
+**Backups:**
+- Stored on the VPS in `/root/engos-docker/backups/` (`backup_<timestamp>.sql.gz`, 14-day retention).
+- To copy the newest backup to local PC:
+  ```bash
+  scp root@72.62.248.38:/root/engos-docker/backups/<filename> backups/
+  ```
+
+**Rollback:**
+- **Automatic:** If container healthcheck or image verification fails during deploy, the deploy workflow automatically rolls back to the previous image.
+- **Manual code rollback:** On the VPS, run `./scripts/rollback.sh`. It swaps back to the image named in `.previous-sha` (already loaded on VPS) and updates `.deployed-sha`.
+- If the failed release ran a database migration, restore the database backup first (`./scripts/restore.sh <file>`) with owner approval.
 - Running `docker compose up` by hand without `APP_IMAGE` uses `engineering-os:current`, which the deploy and rollback scripts keep pointed at the live image.
-
-**First deploy on this pipeline:** the VPS runs `ghcr.io/n8nmonk-wq/engineering-os:06cdd68fc4c9861c7a811da33ab0ea0e27fbd429` (checked read-only 2026-09-29; no `.previous-sha` yet). So that rollback works from the first deploy, the owner first runs this on the VPS:
-```bash
-docker tag ghcr.io/n8nmonk-wq/engineering-os:06cdd68fc4c9861c7a811da33ab0ea0e27fbd429 engineering-os:06cdd68fc4c9861c7a811da33ab0ea0e27fbd429
-```
-After a successful deploy, the old GHCR image can be removed, along with `docker logout ghcr.io` on the VPS and the `VPS_SSH_KEY` secret and GHCR package on GitHub.
 
 ### Release checklist
 1. All local checks are green (§5) and the work has been reviewed.
-2. `git push origin main` and wait for CI to go green. Nothing deploys yet.
-3. Before a migration that changes existing rows, rehearse it on a restored backup first ([docs/migration-rehearsal-plan.md](docs/migration-rehearsal-plan.md)).
-4. Run `scripts/deploy.sh`. Keep the backup it copies to `backups/`.
-5. Smoke test on prod: log in, then open the dashboard, a project, a task, People and Audit, and use the screens the change touched.
+2. Any migration must be additive and rehearsed on a production copy before pushing ([docs/migration-rehearsal-plan.md](docs/migration-rehearsal-plan.md)).
+3. Push to `main`.
+4. Monitor GitHub Actions: CI → publish → deploy.
+5. Smoke test on prod: log in, open dashboard, a project, a task, People and Audit, and test touched screens.
 
 The older [docs/archive/deployment-runbook.md](docs/archive/deployment-runbook.md) and [docs/archive/deploy-pipeline-plan.md](docs/archive/deploy-pipeline-plan.md) describe earlier deploy methods and are historical.
 
@@ -199,7 +203,6 @@ From `AGENTS.md` and `CLAUDE.md`, which remain the source of truth:
 - **Way of working so far:** Claude (Claude Code) writes plans in `docs/` and reviews commits. Antigravity (Gemini) implements. The owner relays between them and pushes.
 
 ## 9. Known debt and open items
-- **Deploy** is manual via `scripts/deploy.sh` (plan 001). The first run needs the one-line re-tag in §6 so that rollback works.
 - **No automatic nightly backup** (§7).
 - **Password handling:**
   - The plain-text CSV and its startup reset were removed (plan 002).
