@@ -1,6 +1,6 @@
 # 009 — Release plans 002–008 to production
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Runs it:** the user (push, `deploy.sh`) and Claude (backup, rehearsal, production checks, each after the user approves)
 **Depends on:** 002–008, all REVIEWED.
 
@@ -48,15 +48,15 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
 - **Tests:** `npm run typecheck && npm test && npm run build` and `npm run test:int`, on local `main`.
 
 ## Steps
-- [ ] **1. Pre-flight (Claude, local).**
+- [x] **1. Pre-flight (Claude, local).**
   - `plans/INDEX.md`: 001–008 all REVIEWED.
   - `git status` clean.
   - The full suite passes on `main`; paste the counts here.
-- [ ] **2. Fresh backup, copied off the box (Claude, after the user approves).**
+- [x] **2. Fresh backup, copied off the box (Claude, after the user approves).**
   - On the VPS: `cd /root/engos-docker && ./scripts/backup.sh`.
   - Then `scp` the new `backups/backup_<ts>.sql.gz` to local `backups/` and check it is non-empty and that `gunzip -t` passes.
   - Record the filename here.
-- [ ] **3. Rehearse on a copy of production (Claude, local).**
+- [x] **3. Rehearse on a copy of production (Claude, local).**
   1. In the local Postgres container, create a separate database `engos_rehearsal` and restore the step-2 backup into it. Don't restore over the dev database: `restore.sh` pipes into an existing database and does not drop it first.
   2. With `DATABASE_URL` pointing at `engos_rehearsal`, run `npx prisma migrate status`. Expect exactly one pending migration, `20260929125414_project_code_shared`.
   3. Run `npx prisma migrate deploy`, then `migrate status`: expect "up to date". Check that `pm_projects_code_key` is gone and `pm_projects_companyId_code_idx` exists.
@@ -106,7 +106,15 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
 - [ ] CLAUDE.md migration note updated.
 
 ## Notes (whoever runs each step)
-<backup filename, rehearsal results, CI link, deploy.sh summary, smoke-test results>
+**2026-09-30, Claude, steps 1–3:**
+- **Step 1:** 001–008 REVIEWED; tree clean at `1321f71`. `npm run typecheck` clean · `npm test` 12 files / 140 passed · `npm run test:int` 12 files / 54 passed · `npm run build` clean.
+- **Step 2:** `backups/backup_20260930_063123.sql.gz` (404 KB) taken on the VPS with `backup.sh` and copied to local `backups/` (git-ignored). `gunzip -t` OK; 29 `COPY public.*` blocks.
+- **Step 3:**
+  - Restored into a fresh local database `engos_rehearsal` (`ON_ERROR_STOP`, exit 0).
+  - `migrate status`: exactly one pending migration, `20260929125414_project_code_shared`. `migrate deploy` applied it, and `migrate status` then reports "up to date". `pm_projects_code_key` is gone and `pm_projects_companyId_code_idx` exists.
+  - `prisma/seed.ts`, `grant-commissioning-permissions.ts`, `grant-password-reset.ts` and `grant-read-permissions.ts`: all exit 0, no errors.
+  - Counts after the startup scripts match production: 110 active users, 42 projects, 87 panels (the seed added nothing).
+  - Browser click-through on the copy **not done by Claude**: it needs real employees' passwords, which Claude must not enter. The behaviour is covered by the 54 integration tests. The user may sign in to the copy themselves before pushing (optional). The full role click-through happens in step 6 on production.
 
 ## Review (Claude)
 <verdict>
