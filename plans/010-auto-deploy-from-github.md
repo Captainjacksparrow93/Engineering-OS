@@ -156,3 +156,23 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - The remote script passes `bash -n`; root's login shell on the VPS is `/bin/bash`, so the bash-only syntax is fine.
 - Accepted as is: the manual `sha` input is substituted by GitHub before the regex check runs. Only people with write access can trigger `workflow_dispatch`, and they can already deploy by pushing. Passing it through `envs:` would close this; not needed now.
 - Not yet verified (steps 6–7): GHCR push permissions, the VPS's GHCR login still valid, and the real SSH login with `VPS_SSH_KEY`. The first push tests all three.
+
+**First live run 2026-09-30: CI failed in `publish` (nothing deployed; production still `ccbdd71`).**
+- `docker build` → `npm run build` failed with `module-not-found` for `[next]/internal/font/google/jetbrains_mono_….module.css`. `next/font/google` in `src/app/layout.tsx` downloads Inter and JetBrains Mono from Google **at build time**, and that download failed inside GitHub's Buildx build.
+- The same commit builds from a clean checkout on the owner's PC (`docker build --target builder`, exit 0), and CI's own test job's `npm run build` passed minutes earlier, so the cause was the network, not the code.
+- Immediate: re-run the failed job.
+
+**Follow-up (implementer):**
+- [ ] **F3 — No network needed to build: ship the fonts in the repo.**
+  - In `src/app/layout.tsx`, replace `next/font/google` with `next/font/local`. Keep exactly the same families, weights and settings:
+    - Inter 400/500/600 → `--font-sans`
+    - JetBrains Mono 400/500 → `--font-mono`
+    - latin, `display: 'swap'`
+  - Commit the `.woff2` files under `src/app/fonts/`. Both fonts are SIL Open Font License; take the files from the official releases (`rsms/inter`, `JetBrains/JetBrainsMono`) and commit each font's `OFL.txt` next to them.
+  - Fix the comment in `layout.tsx` so it says the files are in the repo.
+  - No new npm dependency.
+  - **Accept when:**
+    - `grep -r "next/font/google" src` finds nothing;
+    - `npm run typecheck && npm test && npm run build` pass;
+    - `npm run test:int` passes on a fresh CI-like database;
+    - a screenshot of the login page and a project page before and after shows the same typography (paste both).
