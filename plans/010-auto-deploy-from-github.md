@@ -122,6 +122,11 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
   - Git Bash / Python YAML parser.
   - Local Docker container `engos_local_db` for throwaway database CI-parity verification.
 
+**Follow-ups F1 & F2:**
+- **F1 (Rollback on swap failure):** Defined `rollback()` function with `trap 'rollback' ERR` activated after step 3 (`OLD` recorded). If `docker compose up` or any command fails after step 3, `ERR` trap immediately catches it, logs app output, restores `git checkout "$OLD"`, rolls back container to `engineering-os:$OLD`, and verifies health. Also, health-check failure invokes the same `rollback()` function. On successful health check, `trap - ERR` is disarmed before image pruning.
+- **F2 (SHA validation):** Added validation before step 1 verifying `TARGET_SHA` matches `^[0-9a-f]{40}$`, terminating immediately with an informative error if invalid or short.
+- **Verification:** Script extracted from `.github/workflows/deploy.yml` with template variables substituted and checked with `bash -n` (exited code 0). Tested both error trap and invalid SHA validation paths in Git Bash. Full suite typecheck and unit tests passing.
+
 ## Review (Claude)
 **2026-09-30, commit `f5493ee`. Verdict: close to the plan; two follow-ups before the first push. The push of these commits is itself the first automatic deploy.**
 
@@ -137,6 +142,6 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - Implementer's counts: typecheck clean · unit 140 · int 54 (also on a fresh CI-like database) · build clean. No app code changed, so Claude did not re-run the suite; CI runs it on push.
 
 **Follow-ups (implementer):**
-- [ ] **F1 — A failed swap must also roll back.** The script runs under `set -euo pipefail`. If `docker compose up -d --no-build app` itself fails (not just an unhealthy container), the script exits at once. Compose may already have stopped and removed the old `engos_app`, and the failure branch never runs, so the app could be down with no rollback. Make every failure after step 3 (`OLD` recorded) go through the same rollback: e.g. a function called from an `ERR`/`EXIT` trap, or `if ! … ; then` around the swap. The rollback should also `git checkout "$OLD"` so compose and scripts on the server match the running image. Keep it short.
-- [ ] **F2 — Validate the SHA first.** `TARGET_SHA` can come from the manual `sha` input. Before step 1, refuse anything that isn't 40 lowercase hex characters (`^[0-9a-f]{40}$`), with a clear message. A short SHA would pass `git checkout` and then fail at `docker pull`, because images are tagged with the full SHA. It also keeps free text out of the script.
+- [x] **F1 — A failed swap must also roll back.** The script runs under `set -euo pipefail`. If `docker compose up -d --no-build app` itself fails (not just an unhealthy container), the script exits at once. Compose may already have stopped and removed the old `engos_app`, and the failure branch never runs, so the app could be down with no rollback. Make every failure after step 3 (`OLD` recorded) go through the same rollback: e.g. a function called from an `ERR`/`EXIT` trap, or `if ! … ; then` around the swap. The rollback should also `git checkout "$OLD"` so compose and scripts on the server match the running image. Keep it short.
+- [x] **F2 — Validate the SHA first.** `TARGET_SHA` can come from the manual `sha` input. Before step 1, refuse anything that isn't 40 lowercase hex characters (`^[0-9a-f]{40}$`), with a clear message. A short SHA would pass `git checkout` and then fail at `docker pull`, because images are tagged with the full SHA. It also keeps free text out of the script.
 - Re-check with the same extraction + `bash -n`, and note it.
