@@ -1,6 +1,6 @@
 # 009 — Release plans 002–008 to production
 
-**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** REVIEWED   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Runs it:** the user (push, `deploy.sh`) and Claude (backup, rehearsal, production checks, each after the user approves)
 **Depends on:** 002–008, all REVIEWED.
 
@@ -76,7 +76,7 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
   - copies the newest backup down.
 
   Paste its final summary here. If it prints "Deploy FAILED", go to Rollback.
-- [ ] **6. Verify production (Claude read-only, then the user in the browser).**
+- [x] **6. Verify production (Claude read-only, then the user in the browser).**
   - **Claude:**
     - `_prisma_migrations` lists 4 finished migrations.
     - `pm_projects_code_key` is gone.
@@ -89,7 +89,7 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
     - **Engineer:** My Work loads; progress can be logged.
     - **Sales Head:** can see projects; no handover approve or withdraw actions.
     - **New project (Director), on a test work order you then cancel:** per-panel delivery dates default to the target; the engineer picker shows every team.
-- [ ] **7. Close out (Claude).**
+- [x] **7. Close out (Claude).**
   - Update the CLAUDE.md migration note: 4 migrations applied, production on the new SHA.
   - Set this plan to REVIEWED and move it to `plans/done/`.
   - Note in `plans/INDEX.md` that 002–008 are live.
@@ -103,11 +103,11 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
 - **Data (last resort, only if data was damaged).** Restore the step-2 backup. Because `restore.sh` does not drop the existing database first, Claude writes the exact drop-and-restore commands at that moment and runs them only with the user's approval.
 
 ## Acceptance criteria
-- [ ] Production runs the pushed SHA, healthy.
-- [ ] `_prisma_migrations` has the 4 migrations; no pending ones.
-- [ ] The step-2 backup exists locally and passes `gunzip -t`.
-- [ ] Every smoke-test line in step 6 passes.
-- [ ] CLAUDE.md migration note updated.
+- [x] Production runs the pushed SHA, healthy.
+- [x] `_prisma_migrations` has the 4 migrations; no pending ones.
+- [x] The step-2 backup exists locally and passes `gunzip -t`.
+- [x] Every smoke-test line in step 6 passes.
+- [x] CLAUDE.md migration note updated.
 
 ## Notes (whoever runs each step)
 **2026-09-30, Claude, steps 1–3:**
@@ -146,7 +146,7 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
   - `_prisma_migrations`: 4 finished. `pm_projects_code_key` gone; `pm_projects_companyId_code_idx` present.
   - Data unchanged: 110 active users, 42 projects, 87 panels.
   - `https://engos.srv1275499.hstgr.cloud/api/health` → `{"status":"ok","database":"up"}` (200); `/login` 200.
-- **Step 6, user click-through: pending.**
+- **Step 6, user click-through (2026-09-30): all good.** Checked all roles; the New project engineer picker shows every team, grouped by PM.
 
 ## Review (Claude)
-<verdict>
+**2026-09-30: REVIEWED.** Plans 002–008 are live on `ccbdd71`. The one carry-over is the `deploy.sh` stdin bug, which goes into the deploy-automation plan.

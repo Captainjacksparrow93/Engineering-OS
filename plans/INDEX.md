@@ -13,4 +13,4 @@ Status: TODO → IN PROGRESS → DONE → REVIEWED (then moved to done/)
 | 006 | [All engineers on new project](done/006-all-engineers-on-new-project.md) | REVIEWED | Grouped picker, PM's team first; Sales Head can no longer request/decide/cancel handovers |
 | 007 | [Panel delivery dates](done/007-panel-delivery-dates.md) | REVIEWED | Per-panel date on `PHASE` `plannedEnd`, no schema change; Late per panel; server enforces date range, step ends and min window |
 | 008 | [Edit project and client](done/008-edit-project-and-client.md) | REVIEWED | Director/Head only via `pm.project.create` (closes PM edit via API); panel dates, client rename cascade; status stays with its buttons |
-| 009 | [Release plans 002–008](009-release-plans-002-008.md) | IN PROGRESS | Runbook: backup off-box → rehearse on prod copy → push → `deploy.sh` → verify. One migration (`project_code_shared`); first deploy needs manual rollback to the GHCR image |
+| 009 | [Release plans 002–008](done/009-release-plans-002-008.md) | REVIEWED | Live 2026-09-30 on `ccbdd71`; `deploy.sh` stdin bug found (swap skipped, reported success); finished by hand |
