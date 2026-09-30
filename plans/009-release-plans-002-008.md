@@ -51,7 +51,7 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
 - [x] **1. Pre-flight (Claude, local).**
   - `plans/INDEX.md`: 001–008 all REVIEWED.
   - `git status` clean.
-  - The full suite passes on `main`; paste the counts here.
+  - The full suite passes on `main`; paste the counts here. **Run `test:int` against a fresh database built like CI** (empty DB, `migrate deploy`, `db:seed`), not only against the local production copy (lesson from step 3b).
 - [x] **2. Fresh backup, copied off the box (Claude, after the user approves).**
   - On the VPS: `cd /root/engos-docker && ./scripts/backup.sh`.
   - Then `scp` the new `backups/backup_<ts>.sql.gz` to local `backups/` and check it is non-empty and that `gunzip -t` passes.
@@ -63,6 +63,10 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
   4. Run the startup steps the entrypoint runs: `npx tsx prisma/seed.ts` and the three `prisma/scripts/grant-*.ts`. Expect no `ERROR`.
   5. Run `npm run build && npm start` against it and do the smoke test (step 6 list) locally with real data.
   6. Record any surprise here and **stop** if anything fails.
+- [ ] **3b. Fix the CI-only test failure (Antigravity), blocker.** On the first push, CI failed in `panel-delivery-dates.int.test.ts:219` (plan 007 F3 test): "rejects panel date with too few working days".
+  - **Cause:** the test assumes PLC = 14 working days. CI builds its database from the seed, where PLC is 13 steps × 8 h = 104 h (13 days). 1–15 Oct 2026 has exactly 13 working days, so the project is accepted. Local runs passed because the local database is a production copy, whose PLC template was edited to 112 h.
+  - **Fix (test only; no app change):** make the test independent of template data. Pick a panel date clearly too short for any real template (e.g. start `2026-10-01`, PLC Panel 1 due `2026-10-03`), and assert the message pattern `/PLC Panel 1 needs at least \d+ working days/` instead of a fixed number and date. Check the other tests in that file and in `project-edit.int.test.ts` for the same hidden assumption (fixed hours or day counts).
+  - **Verify like CI:** run the integration tests against a fresh database built exactly as CI does: an empty database, then `npx prisma migrate deploy`, `npm run db:seed`, then `npm run test:int`. Use a separate throwaway database (e.g. `engos_ci`) so the dev database is untouched. Paste the counts. Commit as `plan 009: step 3b ...`.
 - [ ] **4. Push (user).** `git push origin main`, then wait for CI (`ci.yml`) to go green. `deploy.sh` only checks that local HEAD matches `origin/main`. It does not check CI, so don't run it on a red build.
 - [ ] **5. Deploy (user, from Git Bash in the repo).** `./scripts/deploy.sh`. It:
   - pulls the repo on the VPS;
