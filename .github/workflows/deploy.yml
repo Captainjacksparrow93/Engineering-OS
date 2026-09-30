@@ -25,6 +25,27 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
 
     steps:
+      - name: Wait for VPS SSH to be reachable
+        run: |
+          HOST="${{ secrets.VPS_HOST || '72.62.248.38' }}"
+          PORT="${{ secrets.VPS_PORT || 22 }}"
+          echo "==> Checking TCP reachability for ${HOST}:${PORT}..."
+          CONNECTED=false
+          for i in $(seq 1 6); do
+            echo "Attempt $i/6: Connecting to ${HOST}:${PORT}..."
+            if nc -z -w 10 "$HOST" "$PORT"; then
+              echo "==> SSH port ${HOST}:${PORT} is reachable."
+              CONNECTED=true
+              break
+            fi
+            echo "Connection attempt $i failed. Retrying in 20s..."
+            sleep 20
+          done
+          if [ "$CONNECTED" != true ]; then
+            echo "Error: Could not reach VPS SSH port ${HOST}:${PORT} after 6 attempts." >&2
+            exit 1
+          fi
+
       - name: SSH to VPS & Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -32,6 +53,7 @@ jobs:
           username: ${{ secrets.VPS_USER || 'root' }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
+          timeout: 60s
           script_stop: true
           script: |
             set -euo pipefail

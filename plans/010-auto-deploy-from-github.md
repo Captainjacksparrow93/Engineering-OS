@@ -213,4 +213,8 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - `engineering-os:ccbdd71` was cleaned up as expected. `scripts/rollback.sh` now targets `3c63d19`, which is loaded.
 
 **Follow-up (implementer):**
-- [ ] **F4 — Retry the SSH connection before failing.** A dropped connection should not need a manual re-run. In `deploy.yml`, before the `appleboy/ssh-action` step, add a short step that waits for `72.62.248.38:22` to accept TCP, e.g. up to 6 tries with `nc -z -w 10` 20 s apart, and fails with a clear message if it never does. Also set the action's `timeout` (SSH connect timeout) to `60s`. No change to the remote script.
+- [x] **F4 — Retry the SSH connection before failing.** A dropped connection should not need a manual re-run. In `deploy.yml`, before the `appleboy/ssh-action` step, add a short step that waits for `72.62.248.38:22` to accept TCP, e.g. up to 6 tries with `nc -z -w 10` 20 s apart, and fails with a clear message if it never does. Also set the action's `timeout` (SSH connect timeout) to `60s`. No change to the remote script.
+  - Added `Wait for VPS SSH to be reachable` step to `deploy.yml` with 6 retries (`nc -z -w 10 "$HOST" "$PORT"`), 20s sleep between attempts, and explicit error message upon failure.
+  - Set `timeout: 60s` in `appleboy/ssh-action@v1.0.3`.
+  - Remote deployment script remains untouched.
+  - YAML structure validated with python parser; bash retry script validated with `bash -n`.
