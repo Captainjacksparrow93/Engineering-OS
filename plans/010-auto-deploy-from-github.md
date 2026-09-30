@@ -97,7 +97,7 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - Appended its public key to `/root/.ssh/authorized_keys` on its own line (backup: `/root/.ssh/authorized_keys.bak-20260930`). The file now holds `root@srv1275499`, `dhruv laptop - Jaimin` and `github-actions-engos-deploy`.
 - Tested: the new key logs in, and the laptop key still logs in.
 - The `Jaimin` key is the user's own laptop (`dhruv laptop - Jaimin`), so it was **not** removed.
-- The private key sits only in Claude's scratchpad until the user saves it as the GitHub secret `VPS_SSH_KEY`; then Claude deletes it.
+- **Setup 2 done (user, 2026-09-30):** GitHub secret `VPS_SSH_KEY` saved. No `VPS_HOST`/`VPS_USER`/`VPS_PORT` secrets exist, so the workflow must default to `72.62.248.38` / `root` / `22` (as the old `deploy.yml` did). Claude deleted the local private key and `.pub` from the scratchpad; the only copy is the GitHub secret.
 
 <commits, text-search hits, deviations, test counts, tools used>
 
