@@ -12,4 +12,4 @@ Status: TODO → IN PROGRESS → DONE → REVIEWED (then moved to done/)
 | 005 | [Shared project code](done/005-shared-project-code.md) | REVIEWED | Drops unique on `Project.code` (migration, rehearsed on prod copy); pick-or-type code |
 | 006 | [All engineers on new project](006-all-engineers-on-new-project.md) | DONE | Grouped picker, PM's team first; F1 handover fix & tests done |
 | 007 | [Panel delivery dates](done/007-panel-delivery-dates.md) | REVIEWED | Per-panel date on `PHASE` `plannedEnd`, no schema change; Late per panel; server enforces date range, step ends and min window |
-| 008 | [Edit project and client](008-edit-project-and-client.md) | DONE | Reviewed 2026-09-30: F1 status not editable, F2 page gate = service gate, F3 friendly action errors |
+| 008 | [Edit project and client](done/008-edit-project-and-client.md) | REVIEWED | Director/Head only via `pm.project.create` (closes PM edit via API); panel dates, client rename cascade; status stays with its buttons |

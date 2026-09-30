@@ -1,6 +1,6 @@
 # 008 — Edit project and client details (Director / Head only)
 
-**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** REVIEWED   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 **Depends on:** 004 (audit wording), 005 (shared project code), 007 (panel dates on `PHASE` rows)
 
@@ -159,4 +159,11 @@ Client request 2026-09-29, item 9. Directors and Heads can correct a project's d
 - [x] **F2 — The page must show Edit details only to people the service lets save.** `page.tsx` shows the button when `can(principal, 'pm.project.create', { departmentId: project.departmentId })` **or** `hasPermissionAnywhere(...)`. The service checks only the department (`project.departmentId ?? principal.departmentId`). Heads are department-scoped (Technical Head: TECH + DESIGN; Service Head: TECH), so a Head sees the button on another department's project, and saving fails with "forbidden". Use the same department rule on the page as in the service, and drop the `hasPermissionAnywhere` fallback.
 - [x] **F3 — Friendly errors from the two new actions.** `updateProjectAction` and `updateClientAction` return `err.message` raw. A Zod failure becomes a JSON blob in the form, and an unexpected Prisma error leaks its internals. Use the existing `toState` helper in `src/core/utils/actions.ts`, which formats Zod issues and passes only client-safe errors.
 - [x] Nit (`AGENTS.md`: no `as unknown as`): `updateClient` adds `diffOf(before as unknown as Record<string, unknown>, …)`. Pass `{ name: before.name, refNumber: before.refNumber }` instead.
+
+**Re-review 2026-09-30, commit `d5d320a`. Verdict: REVIEWED.**
+- F1 ok: `status` and `kind` are omitted from `updateProjectSchema`. `updateProject` no longer writes status, `actualEndDate` or `PROJECT_STATUS_CHANGED`, and a new int test shows a smuggled `status: 'COMPLETED'` changes nothing. Status stays with Hold / Cancel / Complete.
+- F2 ok: the page uses the service's rule (`project.departmentId || principal.departmentId`, `can(... 'pm.project.create')`), with no `hasPermissionAnywhere` fallback.
+- F3 ok: both actions go through `toState`. The `as unknown as` casts are gone from both `updateClient` and `updateProject`.
+- Re-ran: `npm run typecheck` clean · `npm test` 12 files / 140 passed · `npm run test:int` 12 files / 54 passed · `npm run build` clean.
+- Left as is (non-blocking): `updateProject` now annotates `data` as `Record<string, unknown>`, so Prisma no longer type-checks its keys. Letting TypeScript infer it would work, since `diffOf` accepts the inferred object. Fix it the next time this function is touched.
 
