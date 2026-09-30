@@ -1,6 +1,6 @@
 # 011 — PMs and Assistant PMs can take a panel
 
-**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** REVIEWED   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 
 ## Goal
@@ -82,4 +82,11 @@ User request 2026-09-30: on the New project form (step 3, "Review Panels & Assig
 - **Tools used:** Token Savior, code-review-graph, vitest, Next.js build.
 
 ## Review (Claude)
-<verdict, follow-ups>
+**2026-09-30, commit `bb369a5`. Verdict: REVIEWED.** Goes live with the next push (automatic deploy, plan 010).
+- `getPMTeamData`: `allEngineers` = engineers plus PM-pool users not already listed, each with `isPM`. There are no duplicates (int test 1).
+- Wizard `engineerGroups`: each group's PM is sorted first and labelled "(PM)". Asst PMs get the same label.
+- `autoAssignAutomationTeam`: candidates are TECH users who are either execution staff or hold `PROJECT_MANAGER`/`ASST_MANAGER`, never grade `HEAD`/`DIRECTOR`. `isPM` comes from the role. The selected PM is added to `squadSet`.
+- `availability.ts`: H4, `computeFairShare` and rung 3 accept `isExecutionStaff(c) || c.isPM`, and always refuse `HEAD`/`DIRECTOR`. `isExecutionStaff` is untouched, so dashboards, team load, `teamOf` and handover rules are unchanged, and their existing tests pass untouched.
+- Tests: 7 new unit tests (including "isExecutionStaff unchanged" and "Director/Head refused even if flagged") and 4 new int tests (pool listing, PM as assignee, auto-assign picks a PM and never a Director, a PM picked when engineers are full).
+- Re-ran: `npm run typecheck` clean · `npm test` 12 files / 147 passed · `npm run test:int` 13 files / 58 passed on a **fresh CI-like database** and 58 passed on the production copy · `npm run build` clean.
+- Watch after release (accepted by the user): PMs may be picked first because they hold few step assignments. If that happens, write a follow-up plan to weight them lower.
