@@ -6,6 +6,10 @@ Everything in `AGENTS.md` applies to Claude too.
 
 - **The app is live.** Before any deploy, follow `docs/client-requests-2026-09-25.md` section 0 D and `docs/archive/deployment-runbook.md`: CI green → `pg_dump` backup copied off the box → rehearse locally → push → smoke test.
 - Claude may run read-only checks on the VPS. Claude runs data operations and migration cut-overs only after the user approves each one.
+- **Permission model (user direction 2026-09-30, deferred, not to be planned yet):** Directors get every module (PM, ERP, HRMS, CRM, …). A department head gets read/write on their department's module; that department's staff get read. Open question for later: engineers still need to log progress on their own tasks.
+- **ERP (user decision 2026-09-30):** ERPNext on the same VPS, integrated over its REST API (no stack change), on branch `erp`, phases 0–2 first (`docs/archive/erp-integration-plan.md`). Once integrated, all clients and orders come from ERPNext. **Do not start ERP planning until every earlier plan (007, 008) is done and live.** HRMS and Gate stay parked.
+- **Test branch (deferred 2026-09-30, not planned yet):** branch `test` = `main` + a password-free quick role login, run locally only against the local DB with seed + demo data. It never merges into `main` and is never deployed. Design notes for when it's planned: put it on its own route (e.g. `/test-login`), because `src/middleware.ts` rate-limits POST `/login` to 15 per 15 min; it reuses `createSession(userId)` (called today only by `signIn` and `api/auth/login`); guard both page and action with an env flag **and** `NODE_ENV !== 'production'`.
+- **Order (user decision 2026-09-30):** finish open plans 007 and 008 and get them live first. Then the test branch, then ERP.
 - Production migration state as of 2026-09-25: `_prisma_migrations` holds only `init`, and the live schema equals `schema.prisma@eaff6f6`. The old migration folder does not replay (P1014 at `handover_rework`). The baseline cut-over is in the client-requests plan, R1.
 
 ## Claude Code notes
