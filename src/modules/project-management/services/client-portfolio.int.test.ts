@@ -151,10 +151,11 @@ describe('Clients Menu & Portfolio Integration (#6)', () => {
     });
     const pmUser = await prisma.user.findFirst({
       where: {
-        id: { not: directorUser?.id },
         roleAssignments: {
           some: { role: { key: 'PROJECT_MANAGER' } },
+          none: { role: { key: { in: ['DIRECTOR', 'TECHNICAL_HEAD', 'SERVICE_HEAD', 'SUPER_ADMIN'] } } },
         },
+        status: 'ACTIVE',
       },
     });
     expect(directorUser).not.toBeNull();

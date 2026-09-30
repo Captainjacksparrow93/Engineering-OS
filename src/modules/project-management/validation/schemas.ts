@@ -2,11 +2,12 @@ import { z } from 'zod';
 
 /** Input contracts shared by route handlers, server actions and tests. */
 
-const isoDate = z
+const dateString = z
   .string()
   .trim()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD')
-  .transform((value) => new Date(`${value}T00:00:00.000Z`));
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD');
+
+const isoDate = dateString.transform((value) => new Date(`${value}T00:00:00.000Z`));
 
 const optionalDate = z.union([isoDate, z.literal('').transform(() => null), z.null()]).optional();
 
@@ -171,7 +172,7 @@ export const createAutomationProjectSchema = z
       )
       .max(500)
       .default([]),
-    panelDeliveryDates: z.record(z.string(), z.string()).optional(),
+    panelDeliveryDates: z.record(z.string(), dateString).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.kind === 'WORK_ORDER' || !data.kind) {

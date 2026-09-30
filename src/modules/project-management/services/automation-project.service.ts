@@ -251,23 +251,40 @@ export async function createAutomationProject(principal: Principal, input: Creat
   const templateMap = new Map(templates.map((t) => [t.code, t]));
 
   // Validate per-panel delivery dates
-  if (input.panelDeliveryDates) {
-    const startDay = startOfDay(start);
-    const targetEndDay = startOfDay(targetEnd);
+  const panelDeliveryDatesMap = new Map<string, Date>();
+  const startDay = startOfDay(start);
+  const targetEndDay = startOfDay(targetEnd);
 
-    for (const scope of scopes) {
-      for (let unit = 1; unit <= scope.quantity; unit++) {
-        const panelKey = `${scope.templateCode}_${unit}`;
-        const rawDate = input.panelDeliveryDates[panelKey];
-        if (!rawDate) continue;
-        const panelDate = startOfDay(new Date(rawDate));
-        const panelTitle = `${scope.templateCode} Panel ${unit}`;
+  for (const scope of scopes) {
+    for (let unit = 1; unit <= scope.quantity; unit++) {
+      const panelKey = `${scope.templateCode}_${unit}`;
+      const rawDate = input.panelDeliveryDates?.[panelKey];
+      const panelDate = rawDate ? startOfDay(new Date(rawDate)) : targetEndDay;
+      const panelTitle = `${scope.templateCode} Panel ${unit}`;
+      if (rawDate) {
+        if (isNaN(panelDate.getTime())) {
+          throw new DomainError(`${panelTitle} delivery date is invalid.`);
+        }
         if (panelDate.getTime() < startDay.getTime()) {
           throw new DomainError(`${panelTitle} delivery date is before the project start date.`);
         }
         if (panelDate.getTime() > targetEndDay.getTime()) {
           throw new DomainError(`${panelTitle} delivery date is after the project target date.`);
         }
+      }
+      panelDeliveryDatesMap.set(panelKey, panelDate);
+    }
+  }
+
+  // Refuse task drafts whose plannedEnd is after their panel delivery date
+  for (const task of tasks) {
+    if (task.plannedEnd) {
+      const panelKey = `${task.templateCode}_${task.unitIndex}`;
+      const panelDate = panelDeliveryDatesMap.get(panelKey) ?? targetEndDay;
+      const taskEnd = startOfDay(new Date(task.plannedEnd));
+      if (taskEnd.getTime() > panelDate.getTime()) {
+        const panelTitle = `${task.templateCode} Panel ${task.unitIndex}`;
+        throw new DomainError(`${panelTitle} step "${task.title}" planned end date is after the panel delivery date.`);
       }
     }
   }

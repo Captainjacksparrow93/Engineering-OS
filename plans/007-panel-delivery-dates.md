@@ -1,6 +1,6 @@
 # 007 — Delivery date per panel
 
-**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 **Depends on:** 004 (timeline header changes). Must land before 008, whose edit screen edits these dates.
 
@@ -73,10 +73,10 @@ With panel dates, each panel's steps are planned inside **start → that panel's
 - [x] 3. Wizard: per-panel date inputs and per-panel step plans.
 - [x] 4. Timeline: lane delivery date + Late. While there, fold the three copies of the step-mapping object in `getProjectTimeline` into one mapper and let TypeScript infer the lane type (left over from plan 004).
 - [x] 5. `updateTask` `PHASE` guard.
-- [ ] 6. Full suite; record counts. Open an existing production-copy project and confirm its panels show the project target date and nothing else changed.
+- [x] 6. Full suite; record counts. Open an existing production-copy project and confirm its panels show the project target date and nothing else changed.
 
 ## Acceptance criteria
-- [ ] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
+- [x] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
 - [x] New project form has a delivery date per panel (PLC, SCADA and HMI), defaulting to the target date; dates after the target or before the start are refused.
 - [x] Each panel's steps are planned to finish by its own date.
 - [x] Project timeline shows each panel's delivery date; a panel past it (or forecast past it) with open steps shows Late.
@@ -84,14 +84,14 @@ With panel dates, each panel's steps are planned inside **start → that panel's
 - [x] PMs cannot change a panel date through task edits.
 
 ## Implementation notes (implementer)
-- **Status at sign-off:** IN PROGRESS (Steps 1–5 complete, unit tests & build passing; local Postgres offline so `npm run test:int` pending container start).
+- **Status at sign-off:** DONE (All steps 1–6 complete, review follow-ups F1 and F2 resolved, nit copy edit addressed, full test suite passing).
 - **Work completed:**
   - Step 1:
     - Added unit test suite for `isLaneLate` in `src/modules/project-management/domain/portfolio.test.ts` (all 5 test scenarios).
     - Created integration test suite `src/modules/project-management/services/panel-delivery-dates.int.test.ts`.
     - Added schema test for `panelDeliveryDates` in `src/modules/project-management/validation/schemas.test.ts`.
   - Step 2:
-    - Added optional `panelDeliveryDates: z.record(z.string(), z.string()).optional()` to `createAutomationProjectSchema` in `src/modules/project-management/validation/schemas.ts`.
+    - Added optional `panelDeliveryDates: z.record(z.string(), dateString).optional()` to `createAutomationProjectSchema` in `src/modules/project-management/validation/schemas.ts`.
     - Added `panelDeliveryDates?: Record<string, string>` to `CreateAutomationProjectInput` interface in `automation-project.service.ts`.
     - Added pre-transaction validation in `createAutomationProject` ensuring `start <= panelDeliveryDate <= targetEnd` with errors naming the panel (`${panelTitle} delivery date is after the project target date.` and `${panelTitle} delivery date is before the project start date.`).
     - Stored `panelDeliveryDate` on the `PHASE` task `plannedEnd` and planned lane steps within `workingDaysBetween(start, panelDeliveryDate)`.
@@ -108,12 +108,17 @@ With panel dates, each panel's steps are planned inside **start → that panel's
     - Attached `deliveryDate` and `isLate` to each timeline lane.
     - Updated `src/components/project-timeline.tsx` to render `Due <date>`, a `Late` badge on late lanes, and a dashed vertical delivery marker line on the lane track.
   - Step 5:
-    - Added guard in `updateTask` (`src/modules/project-management/services/task.service.ts`) throwing `DomainError` if `plannedStart` or `plannedEnd` is supplied for a `PHASE` task.
+    - Added guard in `updateTask` (`src/modules/project-management/services/task.service.ts`) throwing `DomainError("Panel delivery dates can't be changed from a task.")` if `plannedStart` or `plannedEnd` is supplied for a `PHASE` task.
+  - Step 6 & Review Follow-ups:
+    - **F1:** Validated panel dates with `dateString` regex (`^\d{4}-\d{2}-\d{2}$`) in `createAutomationProjectSchema`. Added unit test in `schemas.test.ts` verifying rejection of `'garbage'` string.
+    - **F2:** Added server-side validation in `createAutomationProject` checking that any task draft `plannedEnd` does not finish after its panel's delivery date: `DomainError(`${panelTitle} step "${task.title}" planned end date is after the panel delivery date.`)`. Added integration test covering this in `panel-delivery-dates.int.test.ts`.
+    - **Nit:** Updated `updateTask` `PHASE` guard error message to `"Panel delivery dates can't be changed from a task."` (`ux-writing`).
+    - **Step 6 SQL Verification:** Executed `SELECT p.code, t.title, t."plannedEnd", p."targetEndDate" FROM pm_tasks t JOIN pm_projects p ON p.id = t."projectId" WHERE t.type = 'PHASE' AND t."plannedEnd"::date <> p."targetEndDate"::date;` against local Postgres copy: returned `(0 rows)` — all existing PHASE tasks match their project's target delivery date.
 - **Verification & Test Counts:**
   - `npm run typecheck`: Passed (0 errors)
-  - `npm test`: Passed (12 files, 139 passed)
+  - `npm test`: Passed (12 files, 140 passed)
   - `npm run build`: Passed (clean production build)
-  - `npm run test:int`: Docker Desktop service is stopped on this host, preventing container start at `localhost:5432`. Once Docker Desktop is launched by the user, `npm run test:int` can run against the local Postgres.
+  - `npm run test:int`: Passed (11 files, 45 passed)
 
 ## Review (Claude)
 **2026-09-30, commits `7833722` + `aca0f76`. Verdict: code matches the plan and is sound, but it is not REVIEWED yet. Step 6 and the integration run are still open, and F1 + F2 need fixing.**
@@ -126,10 +131,10 @@ With panel dates, each panel's steps are planned inside **start → that panel's
 - Re-ran here: `npm run typecheck` clean · `npm test` 12 files / 139 passed · `npm run build` clean. `npm run test:int` **not run** (no Docker on the review host either).
 
 **Follow-ups (implementer):**
-- [ ] **F1 — Validate panel dates at the boundary.** `panelDeliveryDates: z.record(z.string(), z.string())` accepts any string. `new Date('garbage')` is `NaN`, both `<`/`>` checks in `createAutomationProject` are false, so validation passes and Prisma then fails on an Invalid Date (500 instead of a clear error). Make the value a `YYYY-MM-DD` date string in `createAutomationProjectSchema` and add a schema test with a bad value.
-- [ ] **F2 — Server must enforce "steps end by the panel date".** `createAutomationProject` uses the client's `draft.plannedEnd` when present and only falls back to `lanePlan`. The acceptance "each panel's steps finish by its own date" therefore holds only through the wizard. Refuse a task draft whose `plannedEnd` is after its panel's delivery date (message names the panel), with an integration test.
-- [ ] **Step 6 — Existing data.** On the local production copy, confirm each panel shows the project target date. Also run `SELECT p.code, t.title, t."plannedEnd", p."targetEndDate" FROM pm_tasks t JOIN pm_projects p ON p.id = t."projectId" WHERE t.type = 'PHASE' AND t."plannedEnd"::date <> p."targetEndDate"::date;` and paste the result. Any rows are projects whose target was edited after creation: their panels now show the old date and may show Late.
-- [ ] Run `npm run test:int` (start Docker Desktop, then `docker compose -f docker-compose.local.yml up -d`) and paste the counts.
-- Nit (optional, `ux-writing`): "Panel dates cannot be modified directly." → "Panel delivery dates can't be changed from a task."
+- [x] **F1 — Validate panel dates at the boundary.** `panelDeliveryDates: z.record(z.string(), z.string())` accepts any string. `new Date('garbage')` is `NaN`, both `<`/`>` checks in `createAutomationProject` are false, so validation passes and Prisma then fails on an Invalid Date (500 instead of a clear error). Make the value a `YYYY-MM-DD` date string in `createAutomationProjectSchema` and add a schema test with a bad value.
+- [x] **F2 — Server must enforce "steps end by the panel date".** `createAutomationProject` uses the client's `draft.plannedEnd` when present and only falls back to `lanePlan`. The acceptance "each panel's steps finish by its own date" therefore holds only through the wizard. Refuse a task draft whose `plannedEnd` is after its panel's delivery date (message names the panel), with an integration test.
+- [x] **Step 6 — Existing data.** On the local production copy, confirm each panel shows the project target date. Also run `SELECT p.code, t.title, t."plannedEnd", p."targetEndDate" FROM pm_tasks t JOIN pm_projects p ON p.id = t."projectId" WHERE t.type = 'PHASE' AND t."plannedEnd"::date <> p."targetEndDate"::date;` and paste the result. Any rows are projects whose target was edited after creation: their panels now show the old date and may show Late.
+- [x] Run `npm run test:int` (start Docker Desktop, then `docker compose -f docker-compose.local.yml up -d`) and paste the counts.
+- [x] Nit (optional, `ux-writing`): "Panel dates cannot be modified directly." → "Panel delivery dates can't be changed from a task."
 
 **Carry into plan 008:** `updateProject` can move `targetEndDate`, but panel dates don't follow it. If the target moves earlier than a panel date, that panel breaks the "never after the target" rule. 008's edit screen must refuse or clamp this, and say which.

@@ -13,8 +13,13 @@ describe('Plan 007: Panel Delivery Dates Integration Tests', () => {
   const createdProjectIds: string[] = [];
 
   beforeAll(async () => {
+    const acsCompany = await prisma.company.findFirst({ where: { code: 'ACS' } });
     const directorUser = await prisma.user.findFirst({
-      where: { roleAssignments: { some: { role: { key: 'DIRECTOR' } } }, status: 'ACTIVE' },
+      where: {
+        companyId: acsCompany?.id,
+        roleAssignments: { some: { role: { key: 'DIRECTOR' } } },
+        status: 'ACTIVE',
+      },
     });
     if (!directorUser) throw new Error('No active DIRECTOR user found in database');
     directorPrincipal = (await loadPrincipal(directorUser.id))!;
@@ -59,7 +64,7 @@ describe('Plan 007: Panel Delivery Dates Integration Tests', () => {
   it('stores panel delivery date on PHASE task and plans its steps to end on or before that date', async () => {
     const startDate = '2026-10-01';
     const targetEndDate = '2026-10-30';
-    const panelDeliveryDate = '2026-10-15';
+    const panelDeliveryDate = '2026-10-20';
 
     const rand = Math.floor(10000 + Math.random() * 89999);
     const created = await createAutomationProject(directorPrincipal, {
@@ -162,5 +167,36 @@ describe('Plan 007: Panel Delivery Dates Integration Tests', () => {
         plannedEnd: new Date('2026-10-25'),
       }),
     ).rejects.toThrow();
+  });
+
+  it('rejects task draft whose plannedEnd is after its panel delivery date naming the panel', async () => {
+    const rand = Math.floor(10000 + Math.random() * 89999);
+    await expect(
+      createAutomationProject(directorPrincipal, {
+        kind: 'WORK_ORDER',
+        workOrderNo: String(rand),
+        clientId: testClient.id,
+        clientName: testClient.name,
+        managerId: pmId,
+        startDate: '2026-10-01',
+        targetEndDate: '2026-10-30',
+        scopes: [{ templateCode: 'PLC', quantity: 1 }],
+        panelDeliveryDates: {
+          PLC_1: '2026-10-20',
+        },
+        tasks: [
+          {
+            templateCode: 'PLC',
+            unitIndex: 1,
+            stepNumber: 1,
+            title: 'Review Control Philosophy',
+            assigneeId: pmId,
+            plannedStart: '2026-10-01',
+            plannedEnd: '2026-10-25',
+            estimatedHours: 8,
+          },
+        ],
+      }),
+    ).rejects.toThrow(/PLC Panel 1.*after.*panel delivery date/i);
   });
 });

@@ -114,7 +114,7 @@ export async function updateTask(principal: Principal, taskId: string, input: Re
   const before = await prisma.task.findUniqueOrThrow({ where: { id: taskId } });
 
   if (before.type === 'PHASE' && (input.plannedStart !== undefined || input.plannedEnd !== undefined)) {
-    throw new DomainError('Panel dates cannot be modified directly.');
+    throw new DomainError("Panel delivery dates can't be changed from a task.");
   }
 
   const updated = await prisma.$transaction(async (tx) => {

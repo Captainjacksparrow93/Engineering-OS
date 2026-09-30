@@ -67,6 +67,21 @@ describe('createAutomationProjectSchema', () => {
     });
   });
 
+  it('rejects invalid panel delivery date strings', () => {
+    const invalid = {
+      workOrderNo: '4821',
+      clientId: 'client-1',
+      clientName: 'Client A',
+      managerId: 'pm-1',
+      scopes: [{ templateCode: 'PLC', name: 'PLC', quantity: 1 }],
+      panelDeliveryDates: {
+        PLC_1: 'garbage',
+      },
+      tasks: [],
+    };
+    expect(() => createAutomationProjectSchema.parse(invalid)).toThrow('Use the format YYYY-MM-DD');
+  });
+
   it('rejects non-numeric workOrderNo', () => {
     const invalid = {
       workOrderNo: 'WO-1234',
