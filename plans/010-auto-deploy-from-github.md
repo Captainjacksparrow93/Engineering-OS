@@ -80,7 +80,7 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - [x] 4. Run the checks above, then commit locally (`plan 010: …`). **Do not push.**
 - [ ] 5. (Claude + user) One-time setup 1–3, then Claude reviews.
 - [x] 6. (User) Push. Watch CI → publish → deploy go green. Claude verifies production: running image `engineering-os:<sha>`, `.deployed-sha`, health, and a new backup on the server.
-- [ ] 7. (Claude, after the user approves) **Rollback drill:** run the deploy workflow by hand with `sha` = the previous SHA and confirm it deploys and turns healthy. Then run it again with the latest SHA.
+- [x] 7. (Claude, after the user approves) **Rollback drill:** run the deploy workflow by hand with `sha` = the previous SHA and confirm it deploys and turns healthy. Then run it again with the latest SHA.
 
 ## Acceptance criteria
 - [ ] A push to `main` with green CI deploys that SHA to production with no manual step. A red CI deploys nothing. (Verified upon push)
@@ -203,7 +203,7 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - Re-ran: typecheck clean · `npm test` 147 passed · `npm run build` clean. The implementer ran int 58/58 on a fresh CI-like database.
 - The files are full Latin fonts (~92–115 KB each, not Google's subset). That's a small first-load cost and acceptable.
 
-**Plan 010: step 7 (rollback drill) and F4 are left.**
+**Plan 010: only F4 is left.**
 
 **Second automatic deploy, 2026-09-30 (`b537744`: plan 011 + F3):**
 - CI and publish were green (the image is in GHCR), but Deploy run `36698319191` **failed before any change**: `dial tcp 72.62.248.38:22: i/o timeout` at 09:47:47 UTC.
@@ -218,3 +218,9 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
   - Set `timeout: 60s` in `appleboy/ssh-action@v1.0.3`.
   - Remote deployment script remains untouched.
   - YAML structure validated with python parser; bash retry script validated with `bash -n`.
+
+**Rollback drill passed (Claude, user approved, 2026-09-30):**
+- **Back to the previous version:** `gh workflow run Deploy -f sha=3c63d19…` → run `36704263833`, green in 33 s. Backup `backup_20260930_104453.sql.gz`; `OLD` = `b537744`; healthy on check 4 running `engineering-os:3c63d19…`. VPS: `.deployed-sha` = `3c63d19`, `.previous-sha` = `b537744`, checkout `3c63d19`; `/api/health` ok.
+- **Forward to the latest:** `gh workflow run Deploy` (empty `sha`, defaults to `main` = `b537744`) → run `36704384068`, green in 33 s. Backup `backup_20260930_104606.sql.gz`; healthy on check 4. VPS: `.deployed-sha` = `b537744`, `.previous-sha` = `3c63d19`, checkout `b537744`; `engos_db` untouched; `/api/health` ok.
+- Each swap caused about 20–30 s of restart. Two images are kept (current and previous), local and GHCR tags.
+- **Acceptance:** automatic deploy on green CI ✓; success needs healthy + correct image ✓; auto-rollback on failure (simulated locally, all three paths) ✓; backup before every swap ✓; `deploy.sh` gone and `rollback.sh` works ✓; cleanup limited to `engineering-os` ✓; full suite ✓. Tick after F4.
