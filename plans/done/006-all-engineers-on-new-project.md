@@ -1,6 +1,6 @@
 # 006 — New project: pick engineers from every team, grouped by PM
 
-**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** REVIEWED   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 
 ## Goal
@@ -108,3 +108,8 @@ The existing rule stays unchanged: after creation, a PM moving work to another P
     - **Deny:** a Sales Head calling `requestHandover`, `decideHandover`, `cancelHandover`, `decideProjectHandover` and `cancelProjectHandover` gets `ForbiddenError`.
     - **Allow:** a Director can still decide a cross-team handover.
   - Every service change ships with allow/deny tests (`AGENTS.md`).
+
+**Re-review 2026-09-30, commit `8657f32`. Verdict: REVIEWED.**
+- F1 ok: `requestHandover` now uses `isDirectorUser` (read-all **and** not read-only), like the other handover paths. Graph: `callers_of isDirectorUser` returns 7 (`decideHandover`, `cancelHandover`, `requestProjectHandover`, `decideProjectHandover`, `cancelProjectHandover`, `listHandovers`, `requestPanelHandover`), and no `can(principal, 'pm.project.read.all')` shortcut is left in `handover.service.ts`.
+- Tests: `sales-head.int.test.ts` shows a Sales Head is refused by `requestHandover`, `decideHandover`, `cancelHandover`, `decideProjectHandover` and `cancelProjectHandover`, and a Director can still accept a cross-team handover (status `ACCEPTED`, new owner set).
+- Suite (run at `d5d320a`, same code as now): `npm run typecheck` clean · `npm test` 140 passed · `npm run test:int` 12 files / 54 passed · `npm run build` clean.
