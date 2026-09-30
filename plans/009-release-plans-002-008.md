@@ -67,8 +67,8 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
   - **Cause:** the test assumes PLC = 14 working days. CI builds its database from the seed, where PLC is 13 steps × 8 h = 104 h (13 days). 1–15 Oct 2026 has exactly 13 working days, so the project is accepted. Local runs passed because the local database is a production copy, whose PLC template was edited to 112 h.
   - **Fix (test only; no app change):** make the test independent of template data. Pick a panel date clearly too short for any real template (e.g. start `2026-10-01`, PLC Panel 1 due `2026-10-03`), and assert the message pattern `/PLC Panel 1 needs at least \d+ working days/` instead of a fixed number and date. Check the other tests in that file and in `project-edit.int.test.ts` for the same hidden assumption (fixed hours or day counts).
   - **Verify like CI:** run the integration tests against a fresh database built exactly as CI does: an empty database, then `npx prisma migrate deploy`, `npm run db:seed`, then `npm run test:int`. Use a separate throwaway database (e.g. `engos_ci`) so the dev database is untouched. Paste the counts. Commit as `plan 009: step 3b ...`.
-- [ ] **4. Push (user).** `git push origin main`, then wait for CI (`ci.yml`) to go green. `deploy.sh` only checks that local HEAD matches `origin/main`. It does not check CI, so don't run it on a red build.
-- [ ] **5. Deploy (user, from Git Bash in the repo).** `./scripts/deploy.sh`. It:
+- [x] **4. Push (user).** `git push origin main`, then wait for CI (`ci.yml`) to go green. `deploy.sh` only checks that local HEAD matches `origin/main`. It does not check CI, so don't run it on a red build.
+- [x] **5. Deploy (user, from Git Bash in the repo).** `./scripts/deploy.sh`. It:
   - pulls the repo on the VPS;
   - runs `backup.sh`;
   - swaps to `engineering-os:<sha>`;
@@ -129,6 +129,24 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
   - Dropped throwaway database `engos_ci`.
 
 **Step 3b check (Claude, 2026-09-30, `6d1e436`):** test-only change. PLC Panel 1 is now due `2026-10-03` and the test asserts `/PLC Panel 1 needs at least \d+ working days/`. Verified exactly like CI (no `grant-*` scripts): fresh database `engos_ci_check` → `prisma migrate deploy` → `npm run db:seed` → `npm run test:int` = 12 files / 54 passed. Database dropped afterwards. Ready for step 4.
+
+**Steps 4–6, 2026-09-30:**
+- **Step 4 (user):** pushed `ccbdd71`; CI green.
+- **Step 5, `deploy.sh` (user): did not deploy, although it appeared to succeed.**
+  - What ran: the image `engineering-os:ccbdd71…` was loaded on the VPS, the VPS checkout was pulled to `ccbdd71`, and `backup_20260930_072022.sql.gz` was taken and copied to local `backups/`.
+  - Nothing after `backup.sh` ran: no tag, no swap, `.previous-sha` still the empty file from 26 Sep, `.deployed-sha` still `06cdd68`, and the old container up 44 h.
+  - **Likely cause (bug in `scripts/deploy.sh`, plan 001):** the remote steps are sent as a heredoc on the SSH stdin. `backup.sh` → `docker compose exec -T db pg_dump` reads stdin and swallows the rest of the script, so remote bash ends with exit 0 and `deploy.sh` reports success without checking that the new SHA is running.
+  - To fix in the deploy-automation plan: redirect stdin (`</dev/null`) for commands inside the remote script, and make success depend on `engos_app` running the new SHA.
+- **Step 5, finished by hand (Claude, user approved):**
+  - Checked first: the `docker-compose.yml` diff `06cdd68..ccbdd71` changes only the app image default, so `db` was not recreated.
+  - On the VPS: `cp .deployed-sha .previous-sha` → `docker tag engineering-os:ccbdd71… engineering-os:current` → `APP_IMAGE=engineering-os:ccbdd71… docker compose up -d --no-build app </dev/null` → `echo ccbdd71… > .deployed-sha` → `healthy` on check 4. `engos_db` untouched (up 44 h).
+- **Step 6, Claude (read-only):**
+  - `.deployed-sha` = `ccbdd714f106…`, `.previous-sha` = `06cdd68…`. The image `engineering-os:06cdd68…` is also on the box, so `rollback.sh` works.
+  - Startup log: `migrate deploy` applied `20260929125414_project_code_shared`. Seed and grant scripts ran with 0 `ERROR … failed` lines.
+  - `_prisma_migrations`: 4 finished. `pm_projects_code_key` gone; `pm_projects_companyId_code_idx` present.
+  - Data unchanged: 110 active users, 42 projects, 87 panels.
+  - `https://engos.srv1275499.hstgr.cloud/api/health` → `{"status":"ok","database":"up"}` (200); `/login` 200.
+- **Step 6, user click-through: pending.**
 
 ## Review (Claude)
 <verdict>
