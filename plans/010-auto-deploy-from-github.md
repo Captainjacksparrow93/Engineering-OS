@@ -55,7 +55,9 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
    - If `VPS_HOST`, `VPS_USER` or `VPS_PORT` exist from the old pipeline, check they are `72.62.248.38` / `root` / `22`, or delete them.
    - Then delete the private key from wherever it was handed over.
 3. **GHCR (user).** After the first publish, check that the package `engineering-os` is **private** and linked to the repository (Packages → engineering-os → Package settings).
-4. **Old keys (user decides).** `authorized_keys` on the VPS also holds `root@srv1275499` and `Jaimin`. Confirm both are still needed. If the old pipeline's `VPS_SSH_KEY` was one of them, it is replaced by the new key.
+4. **Old keys.** `authorized_keys` on the VPS also holds `root@srv1275499` and `Jaimin`.
+   - **Keep `root@srv1275499`** (user decision 2026-09-30).
+   - `Jaimin`: not decided yet. Claude removes it only after an explicit yes from the user, and backs up `authorized_keys` first.
 
 ## Constraints
 - The app is LIVE. The implementer commits locally only and never pushes: **after this plan, a push is a production deploy.** The implementer never runs anything against the VPS and never adds secrets.
