@@ -12,6 +12,7 @@ import {
   handoverDecisionSchema,
   handoverRequestSchema,
   progressSchema,
+  updateProjectSchema,
 } from '@/modules/project-management/validation/schemas';
 import {
   addProjectMember,
@@ -25,6 +26,7 @@ import {
   removeProjectMember,
   restoreProject,
   resumeProject,
+  updateProject,
 } from '@/modules/project-management/services/project.service';
 import {
   addComment,
@@ -48,7 +50,7 @@ import {
   requestPanelHandover,
   decidePanelHandover,
 } from '@/modules/project-management/services/handover.service';
-import { createClient, listClients, nextClientRef } from '@/modules/project-management/services/client.service';
+import { createClient, updateClient, listClients, nextClientRef } from '@/modules/project-management/services/client.service';
 import { autoAssignAutomationTeam } from '@/modules/project-management/services/automation-project.service';
 import { markAllRead, markRead } from '@/core/notifications/notify';
 import { toState, value, list, type ActionState } from '@/core/utils/actions';
@@ -344,6 +346,21 @@ export async function createClientAction(name: string, refNumber: string) {
   }
 }
 
+export async function updateClientAction(clientId: string, name: string, refNumber: string) {
+  const principal = await requirePrincipal();
+  try {
+    const client = await updateClient(principal, clientId, { name, refNumber });
+    await drainOutbox().catch(() => undefined);
+    revalidatePath('/pm/clients');
+    revalidatePath(`/pm/clients/${clientId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/dashboard');
+    return { success: true, client };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to update client.' };
+  }
+}
+
 export async function getNextClientRefAction() {
   const principal = await requirePrincipal();
   try {
@@ -470,6 +487,24 @@ export async function restoreProjectAction(projectId: string) {
     return { success: true };
   } catch (error) {
     return { success: false, error: toState(error).error ?? 'Failed to restore project.' };
+  }
+}
+
+export async function updateProjectAction(projectId: string, input: unknown) {
+  const principal = await requirePrincipal();
+  try {
+    const data = updateProjectSchema.parse(input);
+    const project = await updateProject(principal, projectId, data);
+    await drainOutbox().catch(() => undefined);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/dashboard');
+    if (project.clientId) {
+      revalidatePath(`/pm/clients/${project.clientId}`);
+    }
+    return { success: true, project };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to update project.' };
   }
 }
 

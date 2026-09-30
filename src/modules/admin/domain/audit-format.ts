@@ -61,6 +61,8 @@ export function formatAuditAction(module: string, action: string): string {
     'pm.project.member.added': 'Member added',
     'pm.project.member.removed': 'Member removed',
     'pm.project.tasks.bulk_reassigned': 'Tasks bulk reassigned',
+    'pm.client.created': 'Client created',
+    'pm.client.updated': 'Client updated',
     'pm.task.created': 'Task created',
     'pm.task.updated': 'Task updated',
     'pm.task.status_changed': 'Task status changed',
@@ -112,6 +114,14 @@ export function formatAuditItem(
     return {
       label: projName ? `Project: ${projName}` : 'Project',
       href: `/pm/projects/${entityId}`,
+    };
+  }
+
+  if (entityType === 'Client') {
+    const clientName = nameMap.get(entityId);
+    return {
+      label: clientName ? `Client: ${clientName}` : 'Client',
+      href: `/pm/clients/${entityId}`,
     };
   }
 

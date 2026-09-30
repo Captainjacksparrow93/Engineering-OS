@@ -4,8 +4,10 @@ import { requirePrincipal } from '@/core/auth/session';
 import { NotFoundError } from '@/core/rbac/errors';
 import { getClientPortfolio, type ClientPortfolioProject } from '@/modules/project-management/services/client.service';
 import { projectLabel } from '@/modules/project-management/domain/project-label';
+import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { PageHeader, StatusBadge, PriorityBadge, ProgressBar, Avatar } from '@/components/ui';
 import { formatDate } from '@/core/utils/dates';
+import { EditClientButton } from './edit-client-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -142,6 +144,7 @@ export default async function ClientDetailPage({
   }
 
   const { client, stats, currentProjects, pastProjects } = portfolio;
+  const canEdit = hasPermissionAnywhere(principal, 'pm.project.create');
 
   return (
     <div className="space-y-6">
@@ -162,6 +165,7 @@ export default async function ClientDetailPage({
             </span>
           </div>
         }
+        actions={canEdit ? <EditClientButton client={client} /> : null}
       />
 
       {/* Current Projects Section */}

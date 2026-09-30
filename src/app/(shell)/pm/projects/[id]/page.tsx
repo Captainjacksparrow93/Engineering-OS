@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
-import { getProjectWorkspace, getProjectTimeline } from '@/modules/project-management/services/project.service';
+import { getProjectWorkspace, getProjectTimeline, listExistingProjectCodes } from '@/modules/project-management/services/project.service';
+import { listClients } from '@/modules/project-management/services/client.service';
 import { formatDate, daysUntil } from '@/core/utils/dates';
 import { Alert, Card, PageHeader, ProgressBar, Stat, StatusBadge, PriorityBadge } from '@/components/ui';
 import { ProjectTimeline } from '@/components/project-timeline';
@@ -16,6 +17,7 @@ import { CompleteProjectButton } from './complete-project-button';
 import { HandoverProjectButton } from './handover-project-button';
 import { HoldProjectButton } from './hold-project-button';
 import { ProjectDangerActions } from './project-danger-actions';
+import { EditProjectDetailsButton } from './edit-project-details-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,8 +51,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const { project, tasks, summary, permissions, criticalTaskIds } = workspace;
 
   const canHandoverProject = !isExecutionStaff(principal) && permissions.canManageMembers;
+  const canEditProjectDetails =
+    can(principal, 'pm.project.create', { departmentId: project.departmentId ?? undefined }) ||
+    hasPermissionAnywhere(principal, 'pm.project.create');
 
-  const [colleagues, eligibleManagers, people] = await Promise.all([
+  const [colleagues, eligibleManagers, people, clients, existingCodes] = await Promise.all([
     permissions.canAssign || permissions.canManageMembers || permissions.canEditProject
       ? prisma.user.findMany({
           where: {
@@ -83,6 +88,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         })
       : Promise.resolve([]),
     getOrgPeople(principal.companyId),
+    canEditProjectDetails ? listClients(principal.companyId) : Promise.resolve([]),
+    canEditProjectDetails ? listExistingProjectCodes(principal.companyId) : Promise.resolve([]),
   ]);
 
   const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight') || can(principal, 'pm.project.read.all');
@@ -93,6 +100,19 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const allLeafClosed = tasks
     .filter((t) => t.type !== 'PHASE' && !tasks.some((c) => c.parentId === t.id))
     .every((t) => t.status === 'COMPLETED' || t.status === 'CANCELLED');
+
+  const phasePanels = tasks
+    .filter((t) => t.type === 'PHASE')
+    .map((t) => {
+      const match = t.title.match(/^([A-Za-z0-9]+)\s+Panel\s+(\d+)$/i);
+      const key = match ? `${match[1].toUpperCase()}_${match[2]}` : t.id;
+      return {
+        id: t.id,
+        key,
+        title: t.title,
+        plannedEnd: t.plannedEnd ? t.plannedEnd.toISOString().slice(0, 10) : '',
+      };
+    });
 
   let clientHref: string | null = null;
   if (project.clientId) {
@@ -147,6 +167,26 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             <Link href={`/pm/resources?projectId=${project.id}`} className="btn btn-secondary text-body-sm">
               Team load
             </Link>
+            {canEditProjectDetails ? (
+              <EditProjectDetailsButton
+                project={{
+                  id: project.id,
+                  code: project.code,
+                  name: project.name,
+                  clientId: project.clientId,
+                  clientName: project.clientName,
+                  workOrderNo: project.workOrderNo,
+                  endUserName: project.endUserName,
+                  applicationName: project.applicationName,
+                  priority: project.priority,
+                  startDate: project.startDate,
+                  targetEndDate: project.targetEndDate,
+                }}
+                clients={clients}
+                existingCodes={existingCodes}
+                panels={phasePanels}
+              />
+            ) : null}
             {canHandoverProject && project.status !== 'ON_HOLD' && project.status !== 'CANCELLED' ? (
               <HandoverProjectButton projectId={project.id} colleagues={eligibleManagers} />
             ) : null}

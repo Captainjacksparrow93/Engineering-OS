@@ -13,7 +13,8 @@ import type { CreateProjectInput, UpdateProjectInput } from '../validation/schem
 import { computeSchedule, rollUpProgress, type Graph } from '../domain/scheduling';
 import { activeLeafTasks, forecastFinish, isLaneLate, projectStepStats } from '../domain/portfolio';
 import { formatName } from '@/core/utils/strings';
-import { todayInIndia } from '@/core/utils/dates';
+import { startOfDay, todayInIndia } from '@/core/utils/dates';
+import { getClientById } from './client.service';
 
 
 /**
@@ -186,22 +187,133 @@ export async function updateProject(
   projectId: string,
   input: UpdateProjectInput,
 ) {
-  await assertProjectPermission(principal, projectId, 'pm.project.update');
   const before = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+  if (before.companyId !== principal.companyId) {
+    throw new NotFoundError('Project not found.');
+  }
+  const departmentId = before.departmentId || principal.departmentId;
+  assertCan(principal, 'pm.project.create', { departmentId: departmentId ?? undefined });
+
+  let code = before.code;
+  if (input.code !== undefined && input.code !== null && input.code !== '') {
+    code = input.code.trim().toUpperCase().replace(/[\s_]+/g, '-');
+    if (!/^[A-Z0-9][A-Z0-9-]{2,19}$/.test(code)) {
+      throw new DomainError('Project code must be 3-20 characters: letters, digits or dashes (e.g. ACS-0042-0001).');
+    }
+  }
+
+  let workOrderNo = before.workOrderNo;
+  if (input.workOrderNo !== undefined) {
+    if (input.workOrderNo !== null && input.workOrderNo !== '') {
+      const trimmedWO = input.workOrderNo.trim();
+      if (!/^\d+$/.test(trimmedWO)) {
+        throw new DomainError('Work order number must contain digits only.');
+      }
+      if (trimmedWO !== before.workOrderNo) {
+        const existingWO = await prisma.project.findFirst({
+          where: {
+            companyId: principal.companyId,
+            kind: 'WORK_ORDER',
+            workOrderNo: trimmedWO,
+            id: { not: projectId },
+          },
+        });
+        if (existingWO) {
+          throw new DomainError(`Work order number "${trimmedWO}" is already in use by project ${existingWO.code}.`);
+        }
+      }
+      workOrderNo = trimmedWO;
+    } else {
+      workOrderNo = null;
+    }
+  }
+
+  let clientId = before.clientId;
+  let clientName = before.clientName;
+  if (input.clientId !== undefined) {
+    clientId = input.clientId || null;
+    if (clientId && clientId !== before.clientId) {
+      const client = await getClientById(principal.companyId, clientId);
+      if (!client) throw new DomainError('Client not found.');
+      clientName = client.name;
+    }
+  }
+  if (input.clientName !== undefined && !input.clientId) {
+    clientName = input.clientName;
+  }
+
+  const startDate = input.startDate !== undefined ? input.startDate : before.startDate;
+  const targetEndDate = input.targetEndDate !== undefined ? input.targetEndDate : before.targetEndDate;
+
+  const start = startDate ? startOfDay(startDate) : null;
+  const targetEnd = targetEndDate ? startOfDay(targetEndDate) : null;
+
+  if (start && targetEnd && targetEnd.getTime() < start.getTime()) {
+    throw new DomainError('Target delivery date cannot be before the start date.');
+  }
+
+  const phaseTasks = await prisma.task.findMany({
+    where: { projectId, type: 'PHASE' },
+    orderBy: { code: 'asc' },
+  });
+
+  const phaseUpdates: Array<{ id: string; title: string; from: Date | null; to: Date }> = [];
+
+  for (const phaseTask of phaseTasks) {
+    const match = phaseTask.title.match(/^([A-Za-z0-9]+)\s+Panel\s+(\d+)$/i);
+    const panelKey = match ? `${match[1]?.toUpperCase()}_${match[2]}` : null;
+    const rawInputDate = (panelKey && input.panelDeliveryDates?.[panelKey]) ?? input.panelDeliveryDates?.[phaseTask.title];
+
+    let panelDate: Date | null = null;
+    if (rawInputDate) {
+      panelDate = startOfDay(new Date(rawInputDate));
+      if (isNaN(panelDate.getTime())) {
+        throw new DomainError(`${phaseTask.title} delivery date is invalid.`);
+      }
+    } else if (phaseTask.plannedEnd) {
+      panelDate = startOfDay(phaseTask.plannedEnd);
+    } else if (targetEnd) {
+      panelDate = targetEnd;
+    }
+
+    if (panelDate) {
+      if (start && panelDate.getTime() < start.getTime()) {
+        throw new DomainError(`${phaseTask.title} delivery date is before the project start date.`);
+      }
+      if (targetEnd && panelDate.getTime() > targetEnd.getTime()) {
+        throw new DomainError(`${phaseTask.title} delivery date is after the project target date.`);
+      }
+    }
+
+    if (rawInputDate && panelDate) {
+      const oldDateStr = phaseTask.plannedEnd ? phaseTask.plannedEnd.toISOString().slice(0, 10) : null;
+      const newDateStr = panelDate.toISOString().slice(0, 10);
+      if (oldDateStr !== newDateStr) {
+        phaseUpdates.push({
+          id: phaseTask.id,
+          title: phaseTask.title,
+          from: phaseTask.plannedEnd,
+          to: new Date(rawInputDate),
+        });
+      }
+    }
+  }
 
   const data = {
-    name: input.name,
-    description: input.description,
-    clientId: input.clientId,
-    clientName: input.clientName,
-    endUserName: input.endUserName,
-    applicationName: input.applicationName,
-    panelType: input.panelType,
-    panelCount: input.panelCount,
-    priority: input.priority,
-    status: input.status,
-    startDate: input.startDate,
-    targetEndDate: input.targetEndDate,
+    name: input.name !== undefined ? input.name : before.name,
+    code,
+    workOrderNo,
+    description: input.description !== undefined ? input.description : before.description,
+    clientId,
+    clientName,
+    endUserName: input.endUserName !== undefined ? input.endUserName : before.endUserName,
+    applicationName: input.applicationName !== undefined ? input.applicationName : before.applicationName,
+    panelType: input.panelType !== undefined ? input.panelType : before.panelType,
+    panelCount: input.panelCount !== undefined ? input.panelCount : before.panelCount,
+    priority: input.priority !== undefined ? input.priority : before.priority,
+    status: input.status !== undefined ? input.status : before.status,
+    startDate,
+    targetEndDate,
   };
 
   const statusChanged = Boolean(input.status && input.status !== before.status);
@@ -223,6 +335,21 @@ export async function updateProject(
       },
     });
 
+    for (const pu of phaseUpdates) {
+      await tx.task.update({
+        where: { id: pu.id },
+        data: { plannedEnd: pu.to },
+      });
+    }
+
+    const auditDiff = diffOf(before as unknown as Record<string, unknown>, data as Record<string, unknown>);
+    for (const pu of phaseUpdates) {
+      auditDiff[`${pu.title} delivery`] = {
+        from: pu.from ? pu.from.toISOString().slice(0, 10) : null,
+        to: pu.to.toISOString().slice(0, 10),
+      };
+    }
+
     await audit(
       {
         actorId: principal.userId,
@@ -230,7 +357,7 @@ export async function updateProject(
         action: 'project.updated',
         entityType: 'Project',
         entityId: projectId,
-        diff: diffOf(before as unknown as Record<string, unknown>, data as Record<string, unknown>),
+        diff: auditDiff,
       },
       tx,
     );

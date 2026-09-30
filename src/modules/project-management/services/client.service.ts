@@ -2,7 +2,7 @@ import { prisma } from '@/core/db/prisma';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { DomainError, ForbiddenError, NotFoundError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
-import { audit } from '@/core/audit/audit';
+import { audit, diffOf } from '@/core/audit/audit';
 import { projectVisibilityWhere } from './access';
 import { projectProgress } from '../domain/portfolio';
 
@@ -100,6 +100,85 @@ export async function createClient(
   });
 
   return client;
+}
+
+export async function updateClient(
+  principal: Principal,
+  id: string,
+  input: { name: string; refNumber: string },
+) {
+  if (!hasPermissionAnywhere(principal, 'pm.project.create')) {
+    throw new ForbiddenError('Missing permission: pm.project.create');
+  }
+
+  const before = await prisma.client.findFirst({
+    where: { id, companyId: principal.companyId },
+  });
+  if (!before) {
+    throw new NotFoundError('Client not found.');
+  }
+
+  const name = input.name.trim();
+  const refNumber = input.refNumber.trim().toUpperCase();
+
+  if (!name || name.length < 2) {
+    throw new DomainError('Client name must be at least 2 characters.');
+  }
+
+  if (!refNumber || !/^ACS-\d{4}$/.test(refNumber)) {
+    throw new DomainError('Client reference number must follow format ACS-XXXX (e.g. ACS-0042).');
+  }
+
+  if (refNumber !== before.refNumber) {
+    const existingRef = await prisma.client.findUnique({
+      where: { companyId_refNumber: { companyId: principal.companyId, refNumber } },
+      select: { id: true, name: true },
+    });
+    if (existingRef && existingRef.id !== id) {
+      throw new DomainError(`Reference number ${refNumber} is already used by ${existingRef.name}.`);
+    }
+  }
+
+  if (name !== before.name) {
+    const existingName = await prisma.client.findUnique({
+      where: { companyId_name: { companyId: principal.companyId, name } },
+      select: { id: true, name: true },
+    });
+    if (existingName && existingName.id !== id) {
+      throw new DomainError(`Client name "${name}" is already used by another client.`);
+    }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.client.update({
+      where: { id },
+      data: {
+        name,
+        refNumber,
+      },
+    });
+
+    if (name !== before.name) {
+      await tx.project.updateMany({
+        where: { clientId: id, companyId: principal.companyId },
+        data: { clientName: name },
+      });
+    }
+
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'pm',
+        action: 'client.updated',
+        entityType: 'Client',
+        entityId: id,
+        diff: diffOf(before as unknown as Record<string, unknown>, { name, refNumber }),
+      },
+      tx,
+    );
+
+    return updated;
+  });
 }
 
 export interface ClientWithStats {

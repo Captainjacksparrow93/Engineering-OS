@@ -1,6 +1,6 @@
 # 008 — Edit project and client details (Director / Head only)
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 **Depends on:** 004 (audit wording), 005 (shared project code), 007 (panel dates on `PHASE` rows)
 
@@ -76,7 +76,7 @@ Client request 2026-09-29, item 9. Directors and Heads can correct a project's d
 - If a tool is missing or fails, say so in Implementation notes. Never claim you used one when you didn't.
 
 ## Steps
-- [ ] 1. **Tests first** (integration, per `AGENTS.md`: allow, deny, happy path, validation failure):
+- [x] 1. **Tests first** (integration, per `AGENTS.md`: allow, deny, happy path, validation failure):
   - A Director edits WO, code, dates, priority and one panel date → saved and audited.
   - A PM calling `updateProject` → `ForbiddenError`.
   - A target date before a panel date → refused, naming the panel.
@@ -84,20 +84,62 @@ Client request 2026-09-29, item 9. Directors and Heads can correct a project's d
   - A Head renames a client → the client's projects show the new `clientName`.
   - A duplicate client reference number or name → friendly message.
   - A PM calling `updateClient` → forbidden.
-- [ ] 2. `updateProject` changes (gate, fields, panel dates, client name, validation, audit).
-- [ ] 3. `updateClient`.
-- [ ] 4. Server actions + Edit details form on the project page + Edit on the client page.
-- [ ] 5. Full suite; record counts. Check the audit trail shows the edits in plain words (plan 004).
+- [x] 2. `updateProject` changes (gate, fields, panel dates, client name, validation, audit).
+- [x] 3. `updateClient`.
+- [x] 4. Server actions + Edit details form on the project page + Edit on the client page.
+- [x] 5. Full suite; record counts. Check the audit trail shows the edits in plain words (plan 004).
 
 ## Acceptance criteria
-- [ ] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
-- [ ] Director/Head sees Edit details on a project and Edit on a client; PM and engineer do not, and the service refuses them.
-- [ ] Edits save, keep all tasks untouched, and appear in the audit trail in plain words.
-- [ ] Panel dates cannot end up after the target date; reference numbers and client names cannot be duplicated, with a clear message.
-- [ ] Renaming a client updates the client name shown on its projects.
+- [x] Full suite passes: `npm run typecheck && npm test && npm run build`, `npm run test:int` (paste counts).
+- [x] Director/Head sees Edit details on a project and Edit on a client; PM and engineer do not, and the service refuses them.
+- [x] Edits save, keep all tasks untouched, and appear in the audit trail in plain words.
+- [x] Panel dates cannot end up after the target date; reference numbers and client names cannot be duplicated, with a clear message.
+- [x] Renaming a client updates the client name shown on its projects.
 
 ## Implementation notes (implementer)
-<commits, deviations from plan, test pass/fail counts, tools used, open questions>
+- **Step 1 (TDD Tests First):** Created integration test suite `src/modules/project-management/services/project-edit.int.test.ts` covering all 7 required scenarios:
+  1. Director edits WO, code, dates, priority, panel dates -> saved and audited.
+  2. PM calling `updateProject` -> `ForbiddenError`.
+  3. Moving target date before a panel date -> refused with message naming the panel.
+  4. Refuses duplicate `workOrderNo` on `updateProject`.
+  5. Technical Head renames client -> cascades new `clientName` to projects and audits `client.updated`.
+  6. Friendly error when duplicate reference number is used ("Reference number ACS-XXXX is already used by <client name>.").
+  7. PM calling `updateClient` -> `ForbiddenError`.
+- **Step 2 (`updateProject` service & schema):**
+  - Updated `updateProjectSchema` in `src/modules/project-management/validation/schemas.ts` to allow `code` and add `panelDeliveryDates: z.record(z.string(), dateString).optional()`.
+  - In `src/modules/project-management/services/project.service.ts`:
+    - Moved gate from `pm.project.update` to `assertCan(principal, 'pm.project.create', { departmentId })` closing security gap.
+    - Added `code` and `workOrderNo` validation (digits only, duplicate check with friendly error).
+    - Added `clientId` lookups updating `clientName`.
+    - Validated start/target dates (`target >= start`) and panel dates (`start <= panelDate <= targetEnd`), with clear error naming the panel if violated.
+    - Updated `PHASE` task `plannedEnd` dates in transaction and added panel changes to `project.updated` audit diff (`"${phaseTask.title} delivery": { from, to }`).
+- **Step 3 (`updateClient` service):**
+  - Added `updateClient` in `src/modules/project-management/services/client.service.ts` gated on `pm.project.create`.
+  - Reused validation from `createClient` (name min 2 chars, refNumber `ACS-XXXX`), checking duplicates with friendly error message including other client's name.
+  - Cascaded `clientName` update to all projects belonging to the client in the same transaction.
+  - Recorded `client.updated` audit entry.
+- **Step 4 (Server Actions & UI):**
+  - Exported `updateProjectAction` and `updateClientAction` in `src/app/actions/pm.ts`.
+  - Created `EditClientButton` (`src/app/(shell)/pm/clients/[id]/edit-client-button.tsx`) and mounted in `src/app/(shell)/pm/clients/[id]/page.tsx` when user has `pm.project.create`.
+  - Created `EditProjectDetailsButton` (`src/app/(shell)/pm/projects/[id]/edit-project-details-button.tsx`) with client selector, pick-or-type project code datalist, digits-only WO, end user, application, dates, priority, and per-panel date inputs.
+  - Mounted in `src/app/(shell)/pm/projects/[id]/page.tsx` header actions when user has `pm.project.create`.
+- **Step 5 (Audit formatting & Verification):**
+  - Updated `src/modules/admin/domain/audit-format.ts` to format `pm.client.created`, `pm.client.updated`, and `Client` items in plain words.
+  - Checked audit trail diff formatting; transition objects `{ from, to }` format cleanly as `key: from → to`.
+- **Tools & Skills Used:**
+  - `code-review-graph`: `query_graph_tool` (callers_of updateProject, importers_of client.service.ts), `get_impact_radius_tool`.
+  - `token-savior`: symbol search and inspection.
+  - `sequential-thinking`: transaction ordering and atomic updates.
+  - `ponytail` (full): Minimal changes, reused existing UI components and stdlib date helpers without new dependencies.
+  - `tdd`: Red-to-green test-driven development.
+  - `ux-writing` & `impeccable`: Accessible modals, responsive grid form, clear error feedback.
+  - `review-delta`: Checked diff and blast radius.
+- **Test suite results:**
+  - `npm run typecheck`: 0 errors.
+  - `npm test`: 12 test files passed, 140 tests passed.
+  - `npm run test:int`: 12 test files passed, 53 tests passed (including 7 new tests in `project-edit.int.test.ts`).
+  - `npm run build`: Succeeded (Next.js 16.3.5 client & server bundles generated cleanly).
 
 ## Review (Claude)
 <verdict, follow-ups>
+

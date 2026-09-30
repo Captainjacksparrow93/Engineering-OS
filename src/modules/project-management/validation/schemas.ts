@@ -40,7 +40,10 @@ export const baseProjectSchema = z.object({
 
 export const updateProjectSchema = baseProjectSchema
   .partial()
-  .omit({ code: true, managerId: true, sponsorId: true, departmentId: true });
+  .omit({ managerId: true, sponsorId: true, departmentId: true })
+  .extend({
+    panelDeliveryDates: z.record(z.string(), dateString).optional(),
+  });
 
 export const createProjectSchema = baseProjectSchema.superRefine((data, ctx) => {
   if (data.kind === 'WORK_ORDER' || !data.kind) {
