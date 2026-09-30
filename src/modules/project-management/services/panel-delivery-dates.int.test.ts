@@ -213,9 +213,9 @@ describe('Plan 007: Panel Delivery Dates Integration Tests', () => {
         targetEndDate: '2026-10-30',
         scopes: [{ templateCode: 'PLC', quantity: 1 }],
         panelDeliveryDates: {
-          PLC_1: '2026-10-15',
+          PLC_1: '2026-10-03',
         },
       }),
-    ).rejects.toThrow(/PLC Panel 1 needs at least 14 working days \(finishes 16 Oct\)/);
+    ).rejects.toThrow(/PLC Panel 1 needs at least \d+ working days/);
   });
 });

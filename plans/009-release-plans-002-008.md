@@ -63,7 +63,7 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
   4. Run the startup steps the entrypoint runs: `npx tsx prisma/seed.ts` and the three `prisma/scripts/grant-*.ts`. Expect no `ERROR`.
   5. Run `npm run build && npm start` against it and do the smoke test (step 6 list) locally with real data.
   6. Record any surprise here and **stop** if anything fails.
-- [ ] **3b. Fix the CI-only test failure (Antigravity), blocker.** On the first push, CI failed in `panel-delivery-dates.int.test.ts:219` (plan 007 F3 test): "rejects panel date with too few working days".
+- [x] **3b. Fix the CI-only test failure (Antigravity), blocker.** On the first push, CI failed in `panel-delivery-dates.int.test.ts:219` (plan 007 F3 test): "rejects panel date with too few working days".
   - **Cause:** the test assumes PLC = 14 working days. CI builds its database from the seed, where PLC is 13 steps × 8 h = 104 h (13 days). 1–15 Oct 2026 has exactly 13 working days, so the project is accepted. Local runs passed because the local database is a production copy, whose PLC template was edited to 112 h.
   - **Fix (test only; no app change):** make the test independent of template data. Pick a panel date clearly too short for any real template (e.g. start `2026-10-01`, PLC Panel 1 due `2026-10-03`), and assert the message pattern `/PLC Panel 1 needs at least \d+ working days/` instead of a fixed number and date. Check the other tests in that file and in `project-edit.int.test.ts` for the same hidden assumption (fixed hours or day counts).
   - **Verify like CI:** run the integration tests against a fresh database built exactly as CI does: an empty database, then `npx prisma migrate deploy`, `npm run db:seed`, then `npm run test:int`. Use a separate throwaway database (e.g. `engos_ci`) so the dev database is untouched. Paste the counts. Commit as `plan 009: step 3b ...`.
@@ -119,6 +119,14 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
   - `prisma/seed.ts`, `grant-commissioning-permissions.ts`, `grant-password-reset.ts` and `grant-read-permissions.ts`: all exit 0, no errors.
   - Counts after the startup scripts match production: 110 active users, 42 projects, 87 panels (the seed added nothing).
   - Browser click-through on the copy **not done by Claude**: it needs real employees' passwords, which Claude must not enter. The behaviour is covered by the 54 integration tests. The user may sign in to the copy themselves before pushing (optional). The full role click-through happens in step 6 on production.
+- **Step 3b (Antigravity):**
+  - Fixed `panel-delivery-dates.int.test.ts:219`: changed panel delivery date to `2026-10-03` with `startDate: '2026-10-01'` (2 working days) and regex to `/PLC Panel 1 needs at least \d+ working days/`, removing the fixed 14 days assumption.
+  - Checked `project-edit.int.test.ts`: dates used (`2026-10-25` target / panel dates) provide 17 working days, safely exceeding any template requirement in seed or prod.
+  - Verified against a fresh throwaway database `engos_ci` built exactly like CI (`npx prisma migrate deploy` + `npm run db:seed` + `grant-*.ts` scripts):
+    - `npm run test:int`: 12 test files passed, 54/54 tests passed.
+    - `npm run typecheck`: 0 errors.
+    - `npm test`: 12 test files passed, 140/140 tests passed.
+  - Dropped throwaway database `engos_ci`.
 
 ## Review (Claude)
 <verdict>
