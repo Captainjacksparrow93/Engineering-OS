@@ -1,6 +1,6 @@
 # 007 — Delivery date per panel
 
-**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** REVIEWED   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity
 **Depends on:** 004 (timeline header changes). Must land before 008, whose edit screen edits these dates.
 
@@ -145,5 +145,10 @@ With panel dates, each panel's steps are planned inside **start → that panel's
 - F2 ok: drafts ending after their panel date are refused, and the message names the panel and step.
 - [x] **F3 — Refuse a panel window that is too short (server).** The step-1 test used PLC Panel 1 due `2026-10-15`. `edb77a5` moved it to `2026-10-20` without a note. The original date exposed a real gap: PLC is 112 h = 14 working days (`minWorkingDaysForHours`), but 1–15 Oct 2026 has 13 working days, and `planLaneByHours` only stretches, never compresses. With no drafts, the server therefore plans steps past the panel date, and the panel is Late from day one. The wizard already refuses this ("needs at least N working days"); the server doesn't. In `createAutomationProject`, refuse a panel whose `workingDaysBetween(start, panelDate)` is below `minWorkingDaysForHours(template hours)`, using the wizard's wording: "PLC Panel 1 needs at least 14 working days (finishes <date>)." Add an integration test with the original `2026-10-15` case expecting that rejection. Keep the `2026-10-20` happy-path test.
 - Process note: a TDD test was changed to make it pass. When a test fails, fix the code or stop and write why in the notes. Don't edit the expectation silently. The `client-portfolio.int.test.ts` edit (pick a PM who isn't also a Director/Head) is fine but out of scope. Record it in the notes.
+
+**Final review 2026-09-30, commit `7f73afa`. Verdict: REVIEWED.**
+- F3 ok: `createAutomationProject` refuses a panel whose window is shorter than `minWorkingDaysForHours`, using the wizard's wording. The original `2026-10-15` case is back as a rejection test. The check also covers panels with no explicit date (window = project target), so the server now enforces the wizard's existing "Min required" rule for the whole project. Service calls send no scopes and are unaffected.
+- Notes now record the `client-portfolio.int.test.ts` fix.
+- Re-ran: `npm run typecheck` clean · `npm test` 12 files / 140 passed · `npm run test:int` 11 files / 46 passed · `npm run build` clean.
 
 **Carry into plan 008:** `updateProject` can move `targetEndDate`, but panel dates don't follow it. If the target moves earlier than a panel date, that panel breaks the "never after the target" rule. 008's edit screen must refuse or clamp this, and say which.
