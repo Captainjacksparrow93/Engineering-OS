@@ -193,3 +193,14 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - Cleanup removed the `06cdd68` images and kept `ccbdd71` (the rollback target), `current`, and the target's local and GHCR tags.
 - So the GHCR push, the VPS's GHCR login and `VPS_SSH_KEY` all work.
 - **Rollback drill (step 7) waits for the next deploy (F3).** The workflow pulls `ghcr.io/…:<sha>`, and `ccbdd71` was built locally and never pushed to GHCR, so a manual run with `ccbdd71` would stop at `docker pull` (safely, no change). After F3 deploys, drill with `3c63d19`, which is in GHCR. `scripts/rollback.sh` on the VPS already works now (`engineering-os:ccbdd71` is loaded).
+
+**F3 review (Claude, 2026-09-30, commit `9668f0b`): ok.**
+- `layout.tsx` uses `next/font/local` with Inter 400/500/600 and JetBrains Mono 400/500, and the same `--font-sans`/`--font-mono` variables and `display: 'swap'`. No `next/font/google`, `fonts.googleapis` or `fonts.gstatic` left in `src`/`public`. The two `OFL.txt` licences are committed.
+- All five files start with the `wOF2` magic.
+- **In the browser** (dev server, `/login`): all five faces load from `/_next/static/media/…woff2` and nothing from Google. `sans` 400/500/600 and `mono` 400/500 all report `loaded`, and the `h1` renders `sans` at weight 400.
+- Family names are now `sans`/`mono` instead of `Inter`/`JetBrains Mono`. That's fine: nothing in `src` names the families directly (checked with grep); everything goes through the CSS variables.
+- The implementer's before/after screenshots were not pasted. Claude's own check above replaces them.
+- Re-ran: typecheck clean · `npm test` 147 passed · `npm run build` clean. The implementer ran int 58/58 on a fresh CI-like database.
+- The files are full Latin fonts (~92–115 KB each, not Google's subset). That's a small first-load cost and acceptable.
+
+**Plan 010: only step 7 (rollback drill) is left, after the next push deploys `9668f0b`.**
