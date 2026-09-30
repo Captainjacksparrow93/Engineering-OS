@@ -4,8 +4,8 @@ import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { DomainError, ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
-import { addDays, addWorkingDays, startOfDay, workingDaysBetween } from '@/core/utils/dates';
-import { planLaneByHours } from '../domain/scheduling';
+import { addDays, addWorkingDays, formatDate, startOfDay, workingDaysBetween } from '@/core/utils/dates';
+import { minWorkingDaysForHours, planLaneByHours } from '../domain/scheduling';
 import { projectManagerPool } from './access';
 import { recomputeTaskDerivedState } from './task.service';
 import { nextClientProjectCode } from './project.service';
@@ -256,6 +256,11 @@ export async function createAutomationProject(principal: Principal, input: Creat
   const targetEndDay = startOfDay(targetEnd);
 
   for (const scope of scopes) {
+    const tpl = templateMap.get(scope.templateCode);
+    const stepHoursList = tpl ? tpl.items.map((item) => item.defaultDurationHours) : [];
+    const minDays = stepHoursList.length > 0 ? minWorkingDaysForHours(stepHoursList) : 0;
+    const minFinish = minDays > 0 ? addWorkingDays(startDay, minDays - 1) : startDay;
+
     for (let unit = 1; unit <= scope.quantity; unit++) {
       const panelKey = `${scope.templateCode}_${unit}`;
       const rawDate = input.panelDeliveryDates?.[panelKey];
@@ -270,6 +275,14 @@ export async function createAutomationProject(principal: Principal, input: Creat
         }
         if (panelDate.getTime() > targetEndDay.getTime()) {
           throw new DomainError(`${panelTitle} delivery date is after the project target date.`);
+        }
+      }
+      if (minDays > 0) {
+        const availableDays = workingDaysBetween(startDay, panelDate);
+        if (availableDays < minDays) {
+          throw new DomainError(
+            `${panelTitle} needs at least ${minDays} working days (finishes ${formatDate(minFinish)}).`
+          );
         }
       }
       panelDeliveryDatesMap.set(panelKey, panelDate);

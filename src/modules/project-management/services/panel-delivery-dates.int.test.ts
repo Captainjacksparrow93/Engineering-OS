@@ -199,4 +199,23 @@ describe('Plan 007: Panel Delivery Dates Integration Tests', () => {
       }),
     ).rejects.toThrow(/PLC Panel 1.*after.*panel delivery date/i);
   });
+
+  it('rejects panel date with too few working days naming the panel and required days (F3)', async () => {
+    const rand = Math.floor(10000 + Math.random() * 89999);
+    await expect(
+      createAutomationProject(directorPrincipal, {
+        kind: 'WORK_ORDER',
+        workOrderNo: String(rand),
+        clientId: testClient.id,
+        clientName: testClient.name,
+        managerId: pmId,
+        startDate: '2026-10-01',
+        targetEndDate: '2026-10-30',
+        scopes: [{ templateCode: 'PLC', quantity: 1 }],
+        panelDeliveryDates: {
+          PLC_1: '2026-10-15',
+        },
+      }),
+    ).rejects.toThrow(/PLC Panel 1 needs at least 14 working days \(finishes 16 Oct\)/);
+  });
 });
