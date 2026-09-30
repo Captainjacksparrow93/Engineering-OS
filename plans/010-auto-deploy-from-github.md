@@ -79,7 +79,7 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - [x] 3. Delete `scripts/deploy.sh`; update `PROJECT.md` and every other reference found by the text search.
 - [x] 4. Run the checks above, then commit locally (`plan 010: …`). **Do not push.**
 - [ ] 5. (Claude + user) One-time setup 1–3, then Claude reviews.
-- [ ] 6. (User) Push. Watch CI → publish → deploy go green. Claude verifies production: running image `engineering-os:<sha>`, `.deployed-sha`, health, and a new backup on the server.
+- [x] 6. (User) Push. Watch CI → publish → deploy go green. Claude verifies production: running image `engineering-os:<sha>`, `.deployed-sha`, health, and a new backup on the server.
 - [ ] 7. (Claude, after the user approves) **Rollback drill:** run the deploy workflow by hand with `sha` = the previous SHA and confirm it deploys and turns healthy. Then run it again with the latest SHA.
 
 ## Acceptance criteria
@@ -176,3 +176,11 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
     - `npm run typecheck && npm test && npm run build` pass;
     - `npm run test:int` passes on a fresh CI-like database;
     - a screenshot of the login page and a project page before and after shows the same typography (paste both).
+
+**First automatic deploy verified (Claude, 2026-09-30):**
+- After the re-run: CI → publish → Deploy green.
+- The VPS runs `engineering-os:3c63d19…` (= `origin/main`), healthy. `.deployed-sha` = `3c63d19`, `.previous-sha` = `ccbdd71`, checkout at `3c63d19`.
+- Pre-swap backup `backup_20260930_083125.sql.gz`. `engos_db` untouched (up 46 h). 0 startup `ERROR … failed`. Public `/api/health` ok.
+- Cleanup removed the `06cdd68` images and kept `ccbdd71` (the rollback target), `current`, and the target's local and GHCR tags.
+- So the GHCR push, the VPS's GHCR login and `VPS_SSH_KEY` all work.
+- **Rollback drill (step 7) waits for the next deploy (F3).** The workflow pulls `ghcr.io/…:<sha>`, and `ccbdd71` was built locally and never pushed to GHCR, so a manual run with `ccbdd71` would stop at `docker pull` (safely, no change). After F3 deploys, drill with `3c63d19`, which is in GHCR. `scripts/rollback.sh` on the VPS already works now (`engineering-os:ccbdd71` is loaded).
