@@ -57,6 +57,7 @@ export interface CreateAutomationProjectInput {
   departmentId?: string;
   scopes?: ScopeSelection[];
   tasks?: TaskAssignmentDraft[];
+  panelDeliveryDates?: Record<string, string>;
 }
 
 /** In-memory BFS to find all descendants of a manager given a map of direct reports */
@@ -249,6 +250,28 @@ export async function createAutomationProject(principal: Principal, input: Creat
   });
   const templateMap = new Map(templates.map((t) => [t.code, t]));
 
+  // Validate per-panel delivery dates
+  if (input.panelDeliveryDates) {
+    const startDay = startOfDay(start);
+    const targetEndDay = startOfDay(targetEnd);
+
+    for (const scope of scopes) {
+      for (let unit = 1; unit <= scope.quantity; unit++) {
+        const panelKey = `${scope.templateCode}_${unit}`;
+        const rawDate = input.panelDeliveryDates[panelKey];
+        if (!rawDate) continue;
+        const panelDate = startOfDay(new Date(rawDate));
+        const panelTitle = `${scope.templateCode} Panel ${unit}`;
+        if (panelDate.getTime() < startDay.getTime()) {
+          throw new DomainError(`${panelTitle} delivery date is before the project start date.`);
+        }
+        if (panelDate.getTime() > targetEndDay.getTime()) {
+          throw new DomainError(`${panelTitle} delivery date is after the project target date.`);
+        }
+      }
+    }
+  }
+
   const createdProject = await prisma.$transaction(async (tx) => {
     // 1. Create Project
     const project = await tx.project.create({
@@ -328,6 +351,10 @@ export async function createAutomationProject(principal: Principal, input: Creat
         const phaseCode = `${project.code}-PH${phaseCounter++}`;
         const panelHours = tpl.items.reduce((sum, item) => sum + item.defaultDurationHours, 0);
 
+        const panelKey = `${scope.templateCode}_${unit}`;
+        const rawPanelDate = input.panelDeliveryDates?.[panelKey];
+        const panelDeliveryDate = rawPanelDate ? new Date(rawPanelDate) : targetEnd;
+
         // Create Phase task (container node for this panel)
         const phaseTask = await tx.task.create({
           data: {
@@ -340,13 +367,13 @@ export async function createAutomationProject(principal: Principal, input: Creat
             estimatedHours: panelHours,
             createdById: principal.userId,
             plannedStart: start,
-            plannedEnd: targetEnd,
+            plannedEnd: panelDeliveryDate,
           },
         });
 
         // 1x template duration (multiplier removed)
         const stepHoursList = tpl.items.map((item) => item.defaultDurationHours);
-        const lanePlan = planLaneByHours(stepHoursList, start, workingDaysBetween(start, targetEnd));
+        const lanePlan = planLaneByHours(stepHoursList, start, workingDaysBetween(start, panelDeliveryDate));
 
         // Map stepNumber -> created task id for dependency wiring strictly within this panel
         const stepTaskIdMap = new Map<number, string>();

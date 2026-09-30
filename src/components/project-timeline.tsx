@@ -29,6 +29,8 @@ export interface TimelineStep {
 export interface TimelineLane {
   id: string;
   name: string;
+  deliveryDate?: Date | string | null;
+  isLate?: boolean;
   steps: TimelineStep[];
 }
 
@@ -294,14 +296,35 @@ export function ProjectTimeline({
           {data.lanes.map((lane) => (
             <div key={lane.id} className="relative flex items-center gap-3">
               {/* Lane Label */}
-              <div className="w-24 shrink-0 truncate text-caption font-medium text-muted" title={lane.name}>
-                {lane.name}
+              <div className="w-28 shrink-0 text-caption font-medium" title={lane.name}>
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate text-ink font-medium">{lane.name}</span>
+                  {lane.isLate ? (
+                    <span className="rounded bg-error-subtle px-1 py-0.5 text-[10px] font-semibold text-error shrink-0">
+                      Late
+                    </span>
+                  ) : null}
+                </div>
+                {lane.deliveryDate ? (
+                  <div className="text-[11px] text-muted truncate">
+                    Due {formatDate(lane.deliveryDate)}
+                  </div>
+                ) : null}
               </div>
 
               {/* Lane Track */}
               <div className="relative h-10 flex-1 flex items-center">
                 {/* Background track line */}
                 <div className="absolute inset-x-0 h-0.5 bg-hairline-strong" />
+
+                {/* Delivery Date vertical guideline */}
+                {lane.deliveryDate ? (
+                  <div
+                    className="absolute inset-y-1 w-px border-r border-dashed border-ink/30 pointer-events-none z-10"
+                    style={{ left: `${getXPercent(lane.deliveryDate)}%` }}
+                    title={`Delivery date: ${formatDate(lane.deliveryDate)}`}
+                  />
+                ) : null}
 
                 {/* Today vertical guideline */}
                 {todayMs >= startMs && todayMs <= maxMs ? (

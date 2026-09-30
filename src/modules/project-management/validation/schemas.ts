@@ -171,6 +171,7 @@ export const createAutomationProjectSchema = z
       )
       .max(500)
       .default([]),
+    panelDeliveryDates: z.record(z.string(), z.string()).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.kind === 'WORK_ORDER' || !data.kind) {

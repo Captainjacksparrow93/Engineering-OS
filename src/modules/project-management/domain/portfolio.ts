@@ -1,4 +1,4 @@
-import { addDays, addWorkingDays, startOfDay, workingDaysBetween } from '@/core/utils/dates';
+import { addDays, addWorkingDays, startOfDay, todayInIndia, workingDaysBetween } from '@/core/utils/dates';
 
 export interface ForecastStep {
   parentId?: string | null;
@@ -42,6 +42,27 @@ export function daysLate(forecast: Date, targetEndDate: Date | string, today: Da
   const byForecast = Math.round((startOfDay(forecast).getTime() - target) / dayMs);
   if (byForecast > 0) return byForecast;
   return health === 'LATE' ? Math.max(1, Math.round((today.getTime() - target) / dayMs)) : 0;
+}
+
+/**
+ * A lane is late when it has open steps and either today is past its delivery date
+ * or the lane's forecast finish is past its delivery date.
+ */
+export function isLaneLate(
+  steps: ForecastStep[],
+  deliveryDate: Date | string | null | undefined,
+  today: Date = todayInIndia(),
+): boolean {
+  if (!deliveryDate) return false;
+  const hasOpenSteps = steps.some((s) => s.status !== 'COMPLETED' && s.status !== 'CANCELLED');
+  if (!hasOpenSteps) return false;
+
+  const target = startOfDay(new Date(deliveryDate));
+  const todayStart = startOfDay(today);
+  if (todayStart.getTime() > target.getTime()) return true;
+
+  const forecast = forecastFinish(steps, target, today);
+  return forecast.getTime() > target.getTime();
 }
 
 export interface ProgressTask {

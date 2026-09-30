@@ -120,6 +120,7 @@ export function AutomationProjectWizard({
   // Step 3: Team assignments & dates (One engineer per panel)
   // key: `${templateCode}_${unitIndex}` e.g. "PLC_1"
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({});
+  const [panelDeliveryDates, setPanelDeliveryDates] = useState<Record<string, string>>({});
   const [rationales, setRationales] = useState<
     Record<string, { rationale: string; isWeakMatch: boolean; score: number }>
   >({});
@@ -285,15 +286,14 @@ export function AutomationProjectWizard({
     const map: Record<string, { plannedStart: string; plannedEnd: string; hours: number }> = {};
     if (!startDate) return map;
     const startDt = new Date(startDate);
-    const availableDays = targetEndDate ? workingDaysBetween(startDt, new Date(targetEndDate)) : undefined;
 
-    for (const scope of activeScopes) {
-      const tpl = templates.find((t) => t.code === scope.templateCode);
-      if (!tpl) continue;
-      const hours = tpl.items.map((item) => stepHours(item));
+    for (const panel of panelsList) {
+      const deliveryDate = panelDeliveryDates[panel.panelKey] || targetEndDate;
+      const availableDays = deliveryDate ? workingDaysBetween(startDt, new Date(deliveryDate)) : undefined;
+      const hours = panel.template.items.map((item) => stepHours(item));
       const plan = planLaneByHours(hours, startDt, availableDays);
-      tpl.items.forEach((item, idx) => {
-        map[`${scope.templateCode}_${item.stepNumber}`] = {
+      panel.template.items.forEach((item, idx) => {
+        map[`${panel.panelKey}_${item.stepNumber}`] = {
           plannedStart: plan[idx]!.plannedStart.toISOString().split('T')[0],
           plannedEnd: plan[idx]!.plannedEnd.toISOString().split('T')[0],
           hours: hours[idx]!,
@@ -301,7 +301,7 @@ export function AutomationProjectWizard({
       });
     }
     return map;
-  }, [startDate, targetEndDate, activeScopes, templates]);
+  }, [startDate, targetEndDate, panelsList, panelDeliveryDates]);
 
   interface EngineerGroup {
     id: string;
@@ -392,7 +392,7 @@ export function AutomationProjectWizard({
         if (!tpl) continue;
         for (let unit = 1; unit <= scope.quantity; unit++) {
           for (const item of tpl.items) {
-            const plan = stepPlanMap[`${scope.templateCode}_${item.stepNumber}`];
+            const plan = stepPlanMap[`${scope.templateCode}_${unit}_${item.stepNumber}`];
             if (!plan) continue;
             tasksPayload.push({
               templateCode: scope.templateCode,
@@ -551,6 +551,27 @@ export function AutomationProjectWizard({
       return;
     }
 
+    // Check per-panel delivery dates
+    for (const panel of panelsList) {
+      const pDelivery = panelDeliveryDates[panel.panelKey] || targetEndDate;
+      const pMinDays = minWorkingDaysForHours(panel.template.items.map((item) => stepHours(item)));
+      const pDays = startDate && pDelivery ? workingDaysBetween(new Date(startDate), new Date(pDelivery)) : 0;
+      const pFinish = startDate ? addWorkingDays(new Date(startDate), pMinDays - 1) : new Date();
+
+      if (pDays < pMinDays) {
+        setError(`${panel.title} needs at least ${pMinDays} working days (finishes ${formatDate(pFinish)}).`);
+        return;
+      }
+      if (startDate && pDelivery < startDate) {
+        setError(`${panel.title} delivery date cannot be before the start date.`);
+        return;
+      }
+      if (targetEndDate && pDelivery > targetEndDate) {
+        setError(`${panel.title} delivery date cannot be after the project target date.`);
+        return;
+      }
+    }
+
     // Build tasks payload: fans out panel's assigned engineer to all 13 steps of that panel
     const tasksPayload: Array<{
       templateCode: string;
@@ -563,15 +584,18 @@ export function AutomationProjectWizard({
       estimatedHours: number;
     }> = [];
 
+    const finalPanelDeliveryDates: Record<string, string> = {};
+
     for (const scope of activeScopes) {
       const tpl = templates.find((t) => t.code === scope.templateCode);
       if (!tpl) continue;
       for (let unit = 1; unit <= scope.quantity; unit++) {
         const panelKey = `${scope.templateCode}_${unit}`;
         const panelAssigneeId = taskAssignments[panelKey] || undefined;
+        finalPanelDeliveryDates[panelKey] = panelDeliveryDates[panelKey] || targetEndDate;
 
         for (const item of tpl.items) {
-          const plan = stepPlanMap[`${scope.templateCode}_${item.stepNumber}`];
+          const plan = stepPlanMap[`${panelKey}_${item.stepNumber}`];
           if (!plan) continue;
           tasksPayload.push({
             templateCode: scope.templateCode,
@@ -603,6 +627,7 @@ export function AutomationProjectWizard({
         managerId: selectedPMId,
         scopes: activeScopes,
         tasks: tasksPayload,
+        panelDeliveryDates: finalPanelDeliveryDates,
       });
 
       if (!res.success) {
@@ -1203,6 +1228,11 @@ export function AutomationProjectWizard({
               const isExpanded = expandedPanels.has(panel.panelKey);
               const assignedId = taskAssignments[panel.panelKey] || '';
               const rationale = rationales[panel.panelKey];
+              const panelDeliveryDate = panelDeliveryDates[panel.panelKey] || targetEndDate || '';
+              const panelMinDays = minWorkingDaysForHours(panel.template.items.map((item) => stepHours(item)));
+              const panelDays = startDate && panelDeliveryDate ? workingDaysBetween(new Date(startDate), new Date(panelDeliveryDate)) : 0;
+              const isPanelEarly = panelDays < panelMinDays;
+              const panelMinFinishObj = startDate ? addWorkingDays(new Date(startDate), panelMinDays - 1) : null;
 
               return (
                 <div
@@ -1227,15 +1257,47 @@ export function AutomationProjectWizard({
                           </span>
                         </div>
                         <p className="text-caption text-muted font-mono">
-                          {formatDate(startDate)} → {formatDate(targetEndDate)}
+                          {formatDate(startDate)} → {formatDate(panelDeliveryDate)}
                         </p>
+                        {isPanelEarly && panelMinFinishObj ? (
+                          <p className="text-[11px] text-error font-medium mt-0.5">
+                            Min required: {panelMinDays} working days (finishes {formatDate(panelMinFinishObj)})
+                          </p>
+                        ) : null}
                         {rationale ? (
                           <p className="text-[11px] text-primary mt-0.5">{rationale.rationale}</p>
                         ) : null}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <label
+                          htmlFor={`delivery-${panel.panelKey}`}
+                          className="text-caption text-muted font-medium whitespace-nowrap"
+                        >
+                          Delivery:
+                        </label>
+                        <input
+                          id={`delivery-${panel.panelKey}`}
+                          type="date"
+                          value={panelDeliveryDate}
+                          min={startDate}
+                          max={targetEndDate}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setPanelDeliveryDates((prev) => ({
+                              ...prev,
+                              [panel.panelKey]: val,
+                            }));
+                          }}
+                          className={clsx(
+                            'input text-xs py-1 px-2 font-mono w-36',
+                            isPanelEarly && 'border-error text-error'
+                          )}
+                        />
+                      </div>
+
                       <div className="w-56">
                         <select
                           value={assignedId}
@@ -1284,7 +1346,7 @@ export function AutomationProjectWizard({
                         </thead>
                         <tbody className="divide-y divide-hairline">
                           {panel.template.items.map((item) => {
-                            const plan = stepPlanMap[`${panel.templateCode}_${item.stepNumber}`];
+                            const plan = stepPlanMap[`${panel.panelKey}_${item.stepNumber}`];
                             return (
                               <tr key={item.id} className="hover:bg-canvas/50">
                                 <td className="py-2 px-2 font-mono font-semibold text-muted">

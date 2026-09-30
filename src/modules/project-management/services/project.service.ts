@@ -11,7 +11,7 @@ import { notify } from '@/core/notifications/notify';
 import { assertProjectPermission, assertProjectVisible, projectVisibilityWhere } from './access';
 import type { CreateProjectInput, UpdateProjectInput } from '../validation/schemas';
 import { computeSchedule, rollUpProgress, type Graph } from '../domain/scheduling';
-import { activeLeafTasks, forecastFinish, projectStepStats } from '../domain/portfolio';
+import { activeLeafTasks, forecastFinish, isLaneLate, projectStepStats } from '../domain/portfolio';
 import { formatName } from '@/core/utils/strings';
 import { todayInIndia } from '@/core/utils/dates';
 
@@ -899,86 +899,55 @@ export async function getProjectTimeline(principal: Principal, projectId: string
   const today = todayInIndia();
   const latestLeafEnd = forecastFinish(leafTasks, project.targetEndDate ?? today, today);
 
-  const lanes: Array<{
-    id: string;
-    name: string;
-    steps: Array<{
-      taskId: string;
-      stepNumber: number;
-      code: string;
-      title: string;
-      status: string;
-      plannedStart: Date | string | null;
-      plannedEnd: Date | string | null;
-      submittedAt: Date | string | null;
-      completedAt: Date | string | null;
-      completedBy: { id: string; fullName: string } | null;
-      assignee: { id: string; fullName: string; avatarColor?: string | null } | null;
-    }>;
-  }> = [];
+  const mapStep = (t: (typeof leafTasks)[number], idx: number) => ({
+    taskId: t.id,
+    stepNumber: idx + 1,
+    code: t.code,
+    title: t.title,
+    status: t.status,
+    plannedStart: t.plannedStart,
+    plannedEnd: t.plannedEnd,
+    submittedAt: t.submittedAt,
+    completedAt: t.completedAt,
+    completedBy: t.completedBy ? { id: t.completedBy.id, fullName: t.completedBy.fullName } : null,
+    assignee: t.assignments[0]?.user ?? null,
+  });
+
+  const lanes = [];
 
   if (phaseTasks.length > 0) {
     const phaseIds = new Set(phaseTasks.map((p) => p.id));
     for (const phase of phaseTasks) {
-      const steps = leafTasks
-        .filter((t) => t.parentId === phase.id)
-        .map((t, idx) => ({
-          taskId: t.id,
-          stepNumber: idx + 1,
-          code: t.code,
-          title: t.title,
-          status: t.status,
-          plannedStart: t.plannedStart,
-          plannedEnd: t.plannedEnd,
-          submittedAt: t.submittedAt,
-          completedAt: t.completedAt,
-          completedBy: t.completedBy ? { id: t.completedBy.id, fullName: t.completedBy.fullName } : null,
-          assignee: t.assignments[0]?.user ?? null,
-        }));
+      const steps = leafTasks.filter((t) => t.parentId === phase.id);
+      const deliveryDate = phase.plannedEnd ?? project.targetEndDate ?? null;
       lanes.push({
         id: phase.id,
         name: phase.title,
-        steps,
+        deliveryDate,
+        isLate: isLaneLate(steps, deliveryDate, today),
+        steps: steps.map(mapStep),
       });
     }
 
     const otherTasks = leafTasks.filter((t) => !t.parentId || !phaseIds.has(t.parentId));
     if (otherTasks.length > 0) {
+      const deliveryDate = project.targetEndDate ?? null;
       lanes.push({
         id: 'other',
         name: 'Other tasks',
-        steps: otherTasks.map((t, idx) => ({
-          taskId: t.id,
-          stepNumber: idx + 1,
-          code: t.code,
-          title: t.title,
-          status: t.status,
-          plannedStart: t.plannedStart,
-          plannedEnd: t.plannedEnd,
-          submittedAt: t.submittedAt,
-          completedAt: t.completedAt,
-          completedBy: t.completedBy ? { id: t.completedBy.id, fullName: t.completedBy.fullName } : null,
-          assignee: t.assignments[0]?.user ?? null,
-        })),
+        deliveryDate,
+        isLate: isLaneLate(otherTasks, deliveryDate, today),
+        steps: otherTasks.map(mapStep),
       });
     }
   } else {
+    const deliveryDate = project.targetEndDate ?? null;
     lanes.push({
       id: 'default',
       name: 'Deliverables',
-      steps: leafTasks.map((t, idx) => ({
-        taskId: t.id,
-        stepNumber: idx + 1,
-        code: t.code,
-        title: t.title,
-        status: t.status,
-        plannedStart: t.plannedStart,
-        plannedEnd: t.plannedEnd,
-        submittedAt: t.submittedAt,
-        completedAt: t.completedAt,
-        completedBy: t.completedBy ? { id: t.completedBy.id, fullName: t.completedBy.fullName } : null,
-        assignee: t.assignments[0]?.user ?? null,
-      })),
+      deliveryDate,
+      isLate: isLaneLate(leafTasks, deliveryDate, today),
+      steps: leafTasks.map(mapStep),
     });
   }
 

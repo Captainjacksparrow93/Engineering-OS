@@ -47,6 +47,26 @@ describe('createAutomationProjectSchema', () => {
     expect(parsed.tasks.length).toBe(1);
   });
 
+  it('accepts optional panelDeliveryDates mapping', () => {
+    const valid = {
+      workOrderNo: '4821',
+      clientId: 'client-1',
+      clientName: 'Client A',
+      managerId: 'pm-1',
+      scopes: [{ templateCode: 'PLC', name: 'PLC', quantity: 1 }],
+      panelDeliveryDates: {
+        PLC_1: '2026-10-15',
+        SCADA_1: '2026-10-20',
+      },
+      tasks: [],
+    };
+    const parsed = createAutomationProjectSchema.parse(valid);
+    expect(parsed.panelDeliveryDates).toEqual({
+      PLC_1: '2026-10-15',
+      SCADA_1: '2026-10-20',
+    });
+  });
+
   it('rejects non-numeric workOrderNo', () => {
     const invalid = {
       workOrderNo: 'WO-1234',

@@ -113,6 +113,10 @@ export async function updateTask(principal: Principal, taskId: string, input: Re
   const task = await assertTaskPermission(principal, taskId, 'pm.task.update');
   const before = await prisma.task.findUniqueOrThrow({ where: { id: taskId } });
 
+  if (before.type === 'PHASE' && (input.plannedStart !== undefined || input.plannedEnd !== undefined)) {
+    throw new DomainError('Panel dates cannot be modified directly.');
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
     const result = await tx.task.update({ where: { id: taskId }, data: input as never });
     await audit(

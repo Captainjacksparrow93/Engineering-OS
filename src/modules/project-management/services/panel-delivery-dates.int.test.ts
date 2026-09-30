@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@/core/db/prisma';
 import { loadPrincipal } from '@/core/rbac/principal';
-import { DomainError, ForbiddenError } from '@/core/rbac/errors';
 import { createAutomationProject, getPMTeamData } from './automation-project.service';
 import { updateTask } from './task.service';
 import type { Principal } from '@/core/rbac/types';
@@ -20,7 +19,7 @@ describe('Plan 007: Panel Delivery Dates Integration Tests', () => {
     if (!directorUser) throw new Error('No active DIRECTOR user found in database');
     directorPrincipal = (await loadPrincipal(directorUser.id))!;
 
-    const { managers, teamsByPM } = await getPMTeamData(directorPrincipal.companyId);
+    const { managers } = await getPMTeamData(directorPrincipal.companyId);
     if (managers.length === 0) throw new Error('No managers found');
 
     pmId = managers[0]!.id;
@@ -76,11 +75,11 @@ describe('Plan 007: Panel Delivery Dates Integration Tests', () => {
         PLC_1: panelDeliveryDate,
       },
     });
-    createdProjectIds.push(created.projectId);
+    createdProjectIds.push(created.id);
 
     // 1. Verify PHASE task has panel delivery date
     const phaseTask = await prisma.task.findFirst({
-      where: { projectId: created.projectId, type: 'PHASE', title: 'PLC Panel 1' },
+      where: { projectId: created.id, type: 'PHASE', title: 'PLC Panel 1' },
     });
     expect(phaseTask).not.toBeNull();
     const phaseEndStr = phaseTask!.plannedEnd?.toISOString().slice(0, 10);
@@ -88,7 +87,7 @@ describe('Plan 007: Panel Delivery Dates Integration Tests', () => {
 
     // 2. Verify all child steps end on or before panel delivery date
     const steps = await prisma.task.findMany({
-      where: { projectId: created.projectId, parentId: phaseTask!.id },
+      where: { projectId: created.id, parentId: phaseTask!.id },
     });
     expect(steps.length).toBeGreaterThan(0);
     const maxEnd = new Date(`${panelDeliveryDate}T23:59:59.999Z`);
@@ -151,10 +150,10 @@ describe('Plan 007: Panel Delivery Dates Integration Tests', () => {
       targetEndDate,
       scopes: [{ templateCode: 'PLC', quantity: 1 }],
     });
-    createdProjectIds.push(created.projectId);
+    createdProjectIds.push(created.id);
 
     const phaseTask = await prisma.task.findFirstOrThrow({
-      where: { projectId: created.projectId, type: 'PHASE' },
+      where: { projectId: created.id, type: 'PHASE' },
     });
 
     // PM tries to update plannedEnd on the PHASE task
