@@ -1,6 +1,6 @@
 # 010 — Automatic deploy from GitHub after green CI
 
-**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** REVIEWED   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity (workflow and script changes) · **Setup:** the user (GitHub secret) and Claude (VPS key, with approval)
 
 ## Goal
@@ -78,12 +78,12 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - [x] 2. Add `.github/workflows/deploy.yml` with the triggers, concurrency and remote steps 1–8 above.
 - [x] 3. Delete `scripts/deploy.sh`; update `PROJECT.md` and every other reference found by the text search.
 - [x] 4. Run the checks above, then commit locally (`plan 010: …`). **Do not push.**
-- [ ] 5. (Claude + user) One-time setup 1–3, then Claude reviews.
+- [x] 5. (Claude + user) One-time setup 1–3, then Claude reviews.
 - [x] 6. (User) Push. Watch CI → publish → deploy go green. Claude verifies production: running image `engineering-os:<sha>`, `.deployed-sha`, health, and a new backup on the server.
 - [x] 7. (Claude, after the user approves) **Rollback drill:** run the deploy workflow by hand with `sha` = the previous SHA and confirm it deploys and turns healthy. Then run it again with the latest SHA.
 
 ## Acceptance criteria
-- [ ] A push to `main` with green CI deploys that SHA to production with no manual step. A red CI deploys nothing. (Verified upon push)
+- [x] A push to `main` with green CI deploys that SHA to production with no manual step. A red CI deploys nothing. (Verified upon push)
 - [x] The job succeeds only when `engos_app` is healthy **and** runs `engineering-os:<sha>`.
 - [x] A failed health check rolls back to the previous image automatically, and the run is red.
 - [x] A backup is taken before every swap, and a failed backup stops the deploy.
@@ -203,7 +203,7 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - Re-ran: typecheck clean · `npm test` 147 passed · `npm run build` clean. The implementer ran int 58/58 on a fresh CI-like database.
 - The files are full Latin fonts (~92–115 KB each, not Google's subset). That's a small first-load cost and acceptable.
 
-**Plan 010: only F4 is left.**
+**Plan 010: complete.**
 
 **Second automatic deploy, 2026-09-30 (`b537744`: plan 011 + F3):**
 - CI and publish were green (the image is in GHCR), but Deploy run `36698319191` **failed before any change**: `dial tcp 72.62.248.38:22: i/o timeout` at 09:47:47 UTC.
@@ -224,3 +224,9 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - **Forward to the latest:** `gh workflow run Deploy` (empty `sha`, defaults to `main` = `b537744`) → run `36704384068`, green in 33 s. Backup `backup_20260930_104606.sql.gz`; healthy on check 4. VPS: `.deployed-sha` = `b537744`, `.previous-sha` = `3c63d19`, checkout `b537744`; `engos_db` untouched; `/api/health` ok.
 - Each swap caused about 20–30 s of restart. Two images are kept (current and previous), local and GHCR tags.
 - **Acceptance:** automatic deploy on green CI ✓; success needs healthy + correct image ✓; auto-rollback on failure (simulated locally, all three paths) ✓; backup before every swap ✓; `deploy.sh` gone and `rollback.sh` works ✓; cleanup limited to `engineering-os` ✓; full suite ✓. Tick after F4.
+
+**Final review 2026-09-30, commit `76aeaf1` (F4), deployed as `9d627f9`. Verdict: REVIEWED.**
+- F4: a "Wait for VPS SSH to be reachable" step (6 × `nc -z -w 10`, 20 s apart, then a clear error) runs before `appleboy/ssh-action`, and `timeout: 60s` is set. The remote script is unchanged.
+- Live run: CI `36705107611` (Build & Test + Build & Push both success) → Deploy `36705700065` green in 1 m 01 s. `Attempt 1/6 … reachable`; backup `backup_20260930_105906.sql.gz`; `OLD` = `b537744`; healthy on check 4 running `engineering-os:9d627f9…`.
+- VPS: `.deployed-sha` = `9d627f9`, `.previous-sha` = `b537744`, checkout `9d627f9`; `engos_db` untouched; 0 startup errors; `/api/health` ok.
+- **How deploys work from now on:** push to `main` → CI → GHCR → automatic deploy with a backup, a health + image check and auto-rollback. Roll back with `gh workflow run Deploy -f sha=<previous sha>` (or Actions → Deploy → Run workflow), or `./scripts/rollback.sh` on the VPS.
