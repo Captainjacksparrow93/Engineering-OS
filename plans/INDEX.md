@@ -14,5 +14,5 @@ Status: TODO → IN PROGRESS → DONE → REVIEWED (then moved to done/)
 | 007 | [Panel delivery dates](done/007-panel-delivery-dates.md) | REVIEWED | Per-panel date on `PHASE` `plannedEnd`, no schema change; Late per panel; server enforces date range, step ends and min window |
 | 008 | [Edit project and client](done/008-edit-project-and-client.md) | REVIEWED | Director/Head only via `pm.project.create` (closes PM edit via API); panel dates, client rename cascade; status stays with its buttons |
 | 009 | [Release plans 002–008](done/009-release-plans-002-008.md) | REVIEWED | Live 2026-09-30 on `ccbdd71`; `deploy.sh` stdin bug found (swap skipped, reported success); finished by hand |
-| 010 | [Automatic deploy from GitHub](010-auto-deploy-from-github.md) | DONE | Reviewed 2026-09-30: F1 roll back on any swap failure, F2 validate SHA; then push = first auto-deploy |
+| 010 | [Automatic deploy from GitHub](010-auto-deploy-from-github.md) | DONE | Code approved 2026-09-30 (rollback paths simulated); REVIEWED after first live deploy + rollback drill |
 | 011 | [PMs can take a panel](011-pms-can-take-panels.md) | TODO | PMs/Asst PMs pickable in the New project picker and in Auto-Assign via an `isPM` flag; `isExecutionStaff` unchanged |

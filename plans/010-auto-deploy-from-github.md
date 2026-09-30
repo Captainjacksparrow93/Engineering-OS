@@ -145,3 +145,14 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - [x] **F1 — A failed swap must also roll back.** The script runs under `set -euo pipefail`. If `docker compose up -d --no-build app` itself fails (not just an unhealthy container), the script exits at once. Compose may already have stopped and removed the old `engos_app`, and the failure branch never runs, so the app could be down with no rollback. Make every failure after step 3 (`OLD` recorded) go through the same rollback: e.g. a function called from an `ERR`/`EXIT` trap, or `if ! … ; then` around the swap. The rollback should also `git checkout "$OLD"` so compose and scripts on the server match the running image. Keep it short.
 - [x] **F2 — Validate the SHA first.** `TARGET_SHA` can come from the manual `sha` input. Before step 1, refuse anything that isn't 40 lowercase hex characters (`^[0-9a-f]{40}$`), with a clear message. A short SHA would pass `git checkout` and then fail at `docker pull`, because images are tagged with the full SHA. It also keeps free text out of the script.
 - Re-check with the same extraction + `bash -n`, and note it.
+
+**Re-review 2026-09-30, commit `d315a3e`. Verdict: code approved. The plan stays DONE until the first live deploy and the rollback drill (steps 6–7) pass; then REVIEWED.**
+- F2 ok: `TARGET_SHA` must match `^[0-9a-f]{40}$` before `cd`; tested: `abc123` is refused with a clear message.
+- F1 ok: `rollback()` runs from an `ERR` trap set after `OLD` is recorded, and from the unhealthy branch. It prints logs, checks out `OLD`, swaps back to `engineering-os:OLD`, waits for healthy and exits 1.
+- **Simulated all three paths locally**, running the real embedded script against stub `docker`/`git`:
+  - swap command fails → exit 1, running `OLD`, `.deployed-sha` unchanged, no cleanup;
+  - new container never healthy → exit 1, running `OLD`, `.deployed-sha` unchanged, no cleanup;
+  - healthy → exit 0, running the target, `.deployed-sha` = target, `.previous-sha` = `OLD`; cleanup removed only the stale tag and kept `current`, the target and `OLD`.
+- The remote script passes `bash -n`; root's login shell on the VPS is `/bin/bash`, so the bash-only syntax is fine.
+- Accepted as is: the manual `sha` input is substituted by GitHub before the regex check runs. Only people with write access can trigger `workflow_dispatch`, and they can already deploy by pushing. Passing it through `envs:` would close this; not needed now.
+- Not yet verified (steps 6–7): GHCR push permissions, the VPS's GHCR login still valid, and the real SSH login with `VPS_SSH_KEY`. The first push tests all three.
