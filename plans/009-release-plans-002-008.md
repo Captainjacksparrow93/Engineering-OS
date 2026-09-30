@@ -128,5 +128,7 @@ Ship everything reviewed since the last deploy (plans 002–008) to the live app
     - `npm test`: 12 test files passed, 140/140 tests passed.
   - Dropped throwaway database `engos_ci`.
 
+**Step 3b check (Claude, 2026-09-30, `6d1e436`):** test-only change. PLC Panel 1 is now due `2026-10-03` and the test asserts `/PLC Panel 1 needs at least \d+ working days/`. Verified exactly like CI (no `grant-*` scripts): fresh database `engos_ci_check` → `prisma migrate deploy` → `npm run db:seed` → `npm run test:int` = 12 files / 54 passed. Database dropped afterwards. Ready for step 4.
+
 ## Review (Claude)
 <verdict>
