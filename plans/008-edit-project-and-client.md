@@ -141,5 +141,17 @@ Client request 2026-09-29, item 9. Directors and Heads can correct a project's d
   - `npm run build`: Succeeded (Next.js 16.3.5 client & server bundles generated cleanly).
 
 ## Review (Claude)
-<verdict, follow-ups>
+**2026-09-30, commit `3b59442`. Verdict: the core works and matches the plan. Three small follow-ups before REVIEWED.**
+
+**Checked:**
+- Re-ran: `npm run typecheck` clean · `npm test` 12 files / 140 passed · `npm run test:int` 12 files / 53 passed · `npm run build` clean.
+- Graph: `callers_of updateProject` = `src/app/api/pm/projects/[id]/route.ts`, `updateProjectAction` and the new int tests. The PM hole is closed: the gate is now `pm.project.create` at the project's department. Blast radius vs `ab7edbd`: high, 12 files changed, 133 files within 2 hops (key: `AuditPage`, `DashboardPage`, `handleSelectProject`, `handleAssign`, `handleCloseCommissioning`). Expected: `actions/pm.ts` and `project.service.ts` are hubs, and only new exports were added to `actions/pm.ts`.
+- Panel dates: each `PHASE` row is checked against the new start/target, and moving the target before a panel date is refused, naming the panel. Changed panel dates are written in the same transaction and appear in the audit diff as `"PLC Panel 1 delivery": { from, to }`. Steps are not re-planned. ✓
+- `updateClient`: company-scoped lookup, friendly duplicate messages, `clientName` cascades to the client's projects in the same transaction, `client.updated` audited and shown in plain words. Project codes are untouched. ✓
+
+**Follow-ups (implementer):**
+- [ ] **F1 — Status must not be editable here.** `updateProjectSchema` is `baseProjectSchema.partial()` minus four fields, so it still accepts `status` (and `kind`), and `updateProject` still writes `status`, sets `actualEndDate` and publishes `PROJECT_STATUS_CHANGED`. A Director/Head can therefore change status through `updateProjectAction` or `PATCH /api/pm/projects/[id]`, bypassing Hold / Cancel / Complete. The plan says status is not editable here. Omit `status` and `kind` from `updateProjectSchema`, drop `status` from the `data` written by `updateProject` (along with the now-dead status branch there, if nothing else needs it; check with the graph), and add an int test showing a `status` in the input changes nothing.
+- [ ] **F2 — The page must show Edit details only to people the service lets save.** `page.tsx` shows the button when `can(principal, 'pm.project.create', { departmentId: project.departmentId })` **or** `hasPermissionAnywhere(...)`. The service checks only the department (`project.departmentId ?? principal.departmentId`). Heads are department-scoped (Technical Head: TECH + DESIGN; Service Head: TECH), so a Head sees the button on another department's project, and saving fails with "forbidden". Use the same department rule on the page as in the service, and drop the `hasPermissionAnywhere` fallback.
+- [ ] **F3 — Friendly errors from the two new actions.** `updateProjectAction` and `updateClientAction` return `err.message` raw. A Zod failure becomes a JSON blob in the form, and an unexpected Prisma error leaks its internals. Use the existing `toState` helper in `src/core/utils/actions.ts`, which formats Zod issues and passes only client-safe errors.
+- Nit (`AGENTS.md`: no `as unknown as`): `updateClient` adds `diffOf(before as unknown as Record<string, unknown>, …)`. Pass `{ name: before.name, refNumber: before.refNumber }` instead.
 
