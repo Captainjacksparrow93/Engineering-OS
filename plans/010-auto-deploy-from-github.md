@@ -203,4 +203,14 @@ It also removes a live bug. Release 009 showed that `scripts/deploy.sh` skips th
 - Re-ran: typecheck clean · `npm test` 147 passed · `npm run build` clean. The implementer ran int 58/58 on a fresh CI-like database.
 - The files are full Latin fonts (~92–115 KB each, not Google's subset). That's a small first-load cost and acceptable.
 
-**Plan 010: only step 7 (rollback drill) is left, after the next push deploys `9668f0b`.**
+**Plan 010: step 7 (rollback drill) and F4 are left.**
+
+**Second automatic deploy, 2026-09-30 (`b537744`: plan 011 + F3):**
+- CI and publish were green (the image is in GHCR), but Deploy run `36698319191` **failed before any change**: `dial tcp 72.62.248.38:22: i/o timeout` at 09:47:47 UTC.
+- Server side: no fail2ban, ufw inactive, iptables has only Docker's rules. sshd logged **no** connection attempt between 09:40 and 09:55, while the 08:31 deploy login is logged normally (GitHub key `SHA256:NYLPqWnY…` from `40.81.6.249`). So the connection was dropped on the network before reaching the server (GitHub/Azure → Hostinger), most likely a transient blip.
+- Claude re-ran the Deploy (`gh run rerun 36698319191`); green in 1 m 30 s.
+- Verified: `engineering-os:b537744…` healthy, `.deployed-sha` = `b537744`, `.previous-sha` = `3c63d19`, backup `backup_20260930_104113.sql.gz`, 0 startup errors, `/api/health` ok. `/login` serves the 5 local font files and makes 0 `fonts.gstatic` requests.
+- `engineering-os:ccbdd71` was cleaned up as expected. `scripts/rollback.sh` now targets `3c63d19`, which is loaded.
+
+**Follow-up (implementer):**
+- [ ] **F4 — Retry the SSH connection before failing.** A dropped connection should not need a manual re-run. In `deploy.yml`, before the `appleboy/ssh-action` step, add a short step that waits for `72.62.248.38:22` to accept TCP, e.g. up to 6 tries with `nc -z -w 10` 20 s apart, and fails with a clear message if it never does. Also set the action's `timeout` (SSH connect timeout) to `60s`. No change to the remote script.
