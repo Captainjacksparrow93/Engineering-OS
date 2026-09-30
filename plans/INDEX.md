@@ -1,7 +1,7 @@
-# Plans
+﻿# Plans
 
 Open plans live in `plans/`. Verified plans move to `plans/done/`. Plans written before 2026-09-26 are in `docs/`.
-Status: TODO → IN PROGRESS → DONE → REVIEWED (then moved to done/)
+Status: TODO â†’ IN PROGRESS â†’ DONE â†’ REVIEWED (then moved to done/)
 
 | # | Plan | Status | Notes |
 |---|---|---|---|
@@ -11,5 +11,5 @@ Status: TODO → IN PROGRESS → DONE → REVIEWED (then moved to done/)
 | 004 | [UI cleanup + progress fix](done/004-ui-cleanup-and-progress-fix.md) | REVIEWED | Project code on screen, fewer WO repeats, flat tiles, plain audit text, one progress number |
 | 005 | [Shared project code](done/005-shared-project-code.md) | REVIEWED | Drops unique on `Project.code` (migration, rehearsed on prod copy); pick-or-type code |
 | 006 | [All engineers on new project](006-all-engineers-on-new-project.md) | DONE | Grouped picker, PM's team first; F1 handover fix & tests done |
-| 007 | [Panel delivery dates](007-panel-delivery-dates.md) | IN PROGRESS | Stored on `PHASE` task `plannedEnd`, no schema change; Late per panel |
+| 007 | [Panel delivery dates](007-panel-delivery-dates.md) | IN PROGRESS | Reviewed 2026-09-30: F1 date validation, F2 server step-date check, step 6 + test:int open |
 | 008 | [Edit project and client](008-edit-project-and-client.md) | TODO | Director/Head only via `pm.project.create`; closes PM edit via API |

@@ -1,7 +1,7 @@
-# 007 — Delivery date per panel
+﻿# 007 â€” Delivery date per panel
 
-**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
-**Author:** Claude · **Implementer:** Antigravity
+**Status:** IN PROGRESS   <!-- TODO â†’ IN PROGRESS â†’ DONE â†’ REVIEWED -->
+**Author:** Claude Â· **Implementer:** Antigravity
 **Depends on:** 004 (timeline header changes). Must land before 008, whose edit screen edits these dates.
 
 ## Goal
@@ -22,16 +22,16 @@ Client request 2026-09-29, item 3. Each panel (PLC, SCADA and HMI; the panel as 
 - **Server:** `planLaneByHours(stepHoursList, start, workingDaysBetween(start, targetEnd))`.
 - **Wizard:** `stepPlanMap` in `automation-project-wizard.tsx` is keyed `${templateCode}_${stepNumber}`, so it is the same for every unit.
 
-With panel dates, each panel's steps are planned inside **start → that panel's delivery date**. The wizard's plan therefore becomes per panel (`panelKey`), not per template.
+With panel dates, each panel's steps are planned inside **start â†’ that panel's delivery date**. The wizard's plan therefore becomes per panel (`panelKey`), not per template.
 
 ## Affected code
 - `automation-project-wizard.tsx`:
   - Step 3: one date input per panel (default = target date; `min` = start, `max` = target).
-  - `stepPlanMap` becomes per panel; the minimum-days warning ("Min required …") is checked per panel.
+  - `stepPlanMap` becomes per panel; the minimum-days warning ("Min required â€¦") is checked per panel.
   - Send `deliveryDate` per panel in the payload.
 - `src/modules/project-management/validation/schemas.ts`: automation-project input accepts an optional per-panel delivery date keyed by `templateCode` + `unitIndex`.
 - `automation-project.service.ts`, `createAutomationProject`:
-  - Validate each panel date (start ≤ date ≤ target; error names the panel, e.g. "PLC Panel 2 delivery date is after the project target date.").
+  - Validate each panel date (start â‰¤ date â‰¤ target; error names the panel, e.g. "PLC Panel 2 delivery date is after the project target date.").
   - Set the `PHASE` task `plannedEnd` to it.
   - Plan that panel's steps within its window.
 - `project.service.ts`, `getProjectTimeline`:
@@ -59,7 +59,7 @@ With panel dates, each panel's steps are planned inside **start → that panel's
 - **Check first (graph):** callers of `createAutomationProject`, `getProjectTimeline`, `updateTask`, `planLaneByHours`, `forecastFinish`; blast radius of `automation-project.service.ts` and `project.service.ts`; affected flows for the wizard and service.
 - **Read (Token Savior):** `createAutomationProject`, `getProjectTimeline`, `forecastFinish`, `planLaneByHours`, `updateTask`. In the wizard, search `stepPlanMap`, `panelKey` and `Min required`; do not read the whole file.
 - **sequential-thinking:** required for step 3 (per-panel planning in the wizard and server must produce the same dates) and step 4 (the lane Late rule).
-- **Skills:** `ponytail` (full) · `tdd` · `impeccable` + `ux-writing` · `review-delta` (before DONE).
+- **Skills:** `ponytail` (full) Â· `tdd` Â· `impeccable` + `ux-writing` Â· `review-delta` (before DONE).
 - **Tests:** `npm run typecheck && npm test && npm run build` and `npm run test:int`. Run the full suite and paste pass/fail counts into Implementation notes.
 - If a tool is missing or fails, say so in Implementation notes. Never claim you used one when you didn't.
 
@@ -84,7 +84,7 @@ With panel dates, each panel's steps are planned inside **start → that panel's
 - [x] PMs cannot change a panel date through task edits.
 
 ## Implementation notes (implementer)
-- **Status at sign-off:** IN PROGRESS (Steps 1–5 complete, unit tests & build passing; local Postgres offline so `npm run test:int` pending container start).
+- **Status at sign-off:** IN PROGRESS (Steps 1â€“5 complete, unit tests & build passing; local Postgres offline so `npm run test:int` pending container start).
 - **Work completed:**
   - Step 1:
     - Added unit test suite for `isLaneLate` in `src/modules/project-management/domain/portfolio.test.ts` (all 5 test scenarios).
@@ -116,4 +116,20 @@ With panel dates, each panel's steps are planned inside **start → that panel's
   - `npm run test:int`: Docker Desktop service is stopped on this host, preventing container start at `localhost:5432`. Once Docker Desktop is launched by the user, `npm run test:int` can run against the local Postgres.
 
 ## Review (Claude)
-<verdict, follow-ups>
+**2026-09-30, commits `7833722` + `aca0f76`. Verdict: code matches the plan and is sound, but it is not REVIEWED yet. Step 6 and the integration run are still open, and F1 + F2 need fixing.**
+
+**Checked:**
+- Diff of both commits against the plan. Storage is on the `PHASE` `plannedEnd` with no schema change. The server validates each panel date and names the panel. Wizard and server plan each panel with the same `planLaneByHours(â€¦, workingDaysBetween(start, panelDate))`, so their dates agree. Auto-assign windows now follow the per-panel step dates.
+- `getProjectTimeline`: the mapper was folded into `mapStep`, and each lane gets `deliveryDate` + `isLate`.
+- `isLaneLate` matches the rule: open steps AND (today past the date OR the lane's forecast past it).
+- Graph: `callers_of updateTask` returns only `src/app/api/pm/tasks/[id]/route.ts` (PATCH) plus the new int test. No UI edits task dates, so the `PHASE` guard blocks nothing legitimate. Blast radius vs `8657f32`: high, 13 files changed, 129 files within 2 hops (key: `DashboardPage`, `ShellLayout`, `ApprovalsPage`, `MyWorkPage`, `ProjectPage`). Expected, because `project.service.ts` and `task.service.ts` are hubs.
+- Re-ran here: `npm run typecheck` clean Â· `npm test` 12 files / 139 passed Â· `npm run build` clean. `npm run test:int` **not run** (no Docker on the review host either).
+
+**Follow-ups (implementer):**
+- [ ] **F1 â€” Validate panel dates at the boundary.** `panelDeliveryDates: z.record(z.string(), z.string())` accepts any string. `new Date('garbage')` is `NaN`, both `<`/`>` checks in `createAutomationProject` are false, so validation passes and Prisma then fails on an Invalid Date (500 instead of a clear error). Make the value a `YYYY-MM-DD` date string in `createAutomationProjectSchema` and add a schema test with a bad value.
+- [ ] **F2 â€” Server must enforce "steps end by the panel date".** `createAutomationProject` uses the client's `draft.plannedEnd` when present and only falls back to `lanePlan`. The acceptance "each panel's steps finish by its own date" therefore holds only through the wizard. Refuse a task draft whose `plannedEnd` is after its panel's delivery date (message names the panel), with an integration test.
+- [ ] **Step 6 â€” Existing data.** On the local production copy, confirm each panel shows the project target date. Also run `SELECT p.code, t.title, t."plannedEnd", p."targetEndDate" FROM pm_tasks t JOIN pm_projects p ON p.id = t."projectId" WHERE t.type = 'PHASE' AND t."plannedEnd"::date <> p."targetEndDate"::date;` and paste the result. Any rows are projects whose target was edited after creation: their panels now show the old date and may show Late.
+- [ ] Run `npm run test:int` (start Docker Desktop, then `docker compose -f docker-compose.local.yml up -d`) and paste the counts.
+- Nit (optional, `ux-writing`): "Panel dates cannot be modified directly." â†’ "Panel delivery dates can't be changed from a task."
+
+**Carry into plan 008:** `updateProject` can move `targetEndDate`, but panel dates don't follow it. If the target moves earlier than a panel date, that panel breaks the "never after the target" rule. 008's edit screen must refuse or clamp this, and say which.
