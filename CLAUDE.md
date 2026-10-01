@@ -17,7 +17,12 @@ Everything in `AGENTS.md` applies to Claude too.
   - Sales Head and Directors create sales orders for now.
   - No VPS upgrade and no second server: ERPNext must fit on the current VPS (7.8 GB RAM, about 4.8 GB free, shared with Chatwoot, n8n, Supplychain).
   - Set up ERPNext with minimal defaults (company, INR, Apr–Mar FY, standard chart of accounts), no GSTIN for now.
-  - ERP screens are built in Engineering OS and follow `docs/design-system.md`; nobody uses ERPNext's own UI.
+  - ERP screens are built in Engineering OS and follow `docs/design-system.md` **exactly** (match the dashboard); nobody uses ERPNext's own UI.
+  - Sales order fields: client, client PO number (optional), WO number, panels (type × quantity, each with its delivery date), order value (optional), target delivery date.
+  - **Every work-order project originates from a confirmed ERP sales order.** The existing projects get sales orders backfilled in ERPNext (marked imported). Service calls stay PM-only.
+  - Order fields (client, WO, panels, order dates) are edited in ERP only, and PM updates itself. PM keeps editing its own fields (PM, engineers, task dates). Plan 008's Edit details stops editing order fields once ERP is live.
+  - If ERPNext is down, new projects wait for it; the rest of PM keeps working.
+  - Defaults (Claude): ERPNext is not exposed publicly (internal Docker network only). The API uses a dedicated ERPNext API user, with keys in the VPS `.env`; our audit trail records the real user. ERPNext's database is backed up with ours. Tests mock ERPNext (CI does not run it). Minimal `erp.*` permission keys arrive via SQL migration when the screens need them. ERPNext must be on the VPS before `erp` merges to `main`.
 - **Deploys (user decision 2026-09-30, option C; replaces the 2026-09-26 build-locally rule; live since 2026-09-30, plan 010):** a green CI on `main` deploys automatically (GitHub builds, private GHCR, SSH deploy with auto-rollback). A push is a production deploy, so Claude rehearses any migration on a production copy **before** the push. Backups stay on the VPS (14 days); copy them to the PC from time to time.
 - Production migration state (read-only check 2026-09-30): the R1 baseline cut-over is done. `_prisma_migrations` holds `20260925000000_baseline`, `20260925000001_service_call` and `20260926150000_revoke_pm_task_create`. Since 2026-09-30 production is deployed by GitHub Actions (plan 010) with all 4 migrations applied, including `20260929125414_project_code_shared` (release plan 009). `scripts/deploy.sh` (stdin bug: skipped the swap while reporting success, plan 009) is deleted by plan 010; deploys go through `.github/workflows/deploy.yml`.
 
