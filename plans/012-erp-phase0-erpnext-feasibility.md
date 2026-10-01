@@ -1,6 +1,6 @@
 # 012 — ERP Phase 0: ERPNext running, measured, reachable by API
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** IN PROGRESS (part A done)   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Part A (steps 1–5, local on the owner's PC):** Antigravity · **Part B (steps 6–9, VPS):** Claude, each change only after the user approves it
 **Branch:** `erp`
 
@@ -69,27 +69,27 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
 ## Steps
 
 ### A. Local (Antigravity, on the owner's PC with Docker Desktop; no VPS access)
-- [ ] **1. Run ERPNext locally the production way.**
+- [x] **1. Run ERPNext locally the production way.**
   - Clone `frappe_docker` at a pinned tag outside the repo.
   - Use the production compose (`compose.yaml` + MariaDB + Redis overrides + no-proxy) with `ERPNEXT_VERSION=v16.37.0`.
   - **Bind the published port to `127.0.0.1:8080` explicitly.** The no-proxy override publishes on all interfaces by default, and Docker's published ports bypass host firewalls.
   - The Administrator and MariaDB root passwords are **generated**, never the quick-start defaults (`admin`).
   - Create one site with ERPNext installed.
   - Record the exact files, `.env` keys (not values) and commands used. Plan 013 and the VPS step reuse them.
-- [ ] **2. Minimal setup, no setup wizard UI:**
+- [x] **2. Minimal setup, no setup wizard UI:**
   - Company "ACS Engitech" (abbr `ACS`), country India, currency INR, financial year 1 April–31 March, standard chart of accounts, no GSTIN.
   - Time zone `Asia/Kolkata`, Indian number format (`#,##,###.##`), date format matching ours.
   - **Sign-up disabled** (no self-registration on the login page).
   - Use the setup API or `bench` where possible, and record how.
   - Disable what we don't use at startup (e.g. email polling) only if it measurably saves memory.
-- [ ] **3. Trim to the memory budget:**
+- [x] **3. Trim to the memory budget:**
   - One queue worker for all queues instead of `queue-short` + `queue-long`.
   - A small gunicorn worker count.
   - MariaDB `innodb_buffer_pool_size` about 256 MB.
   - Redis `maxmemory` caps.
   - A `mem_limit` on every service.
   - Record each setting and why.
-- [ ] **4. Prove the API (`curl` or a throwaway script outside the repo):**
+- [x] **4. Prove the API (`curl` or a throwaway script outside the repo):**
   1. **Setup work (Items, custom fields) is done as Administrator, not with the API user.** Then create an API user `engos-api` with only what the integration needs: read Customer, Item and Sales Order, create/update Customer, and update the project-link fields on Sales Order (start from "Sales User"; **not** System Manager unless something fails, and record what). Generate its API key and secret.
   2. Create a **Customer**, list Customers, read one back.
   3. Create the panel **Items**: PLC Panel, SCADA Panel, HMI Panel (codes matching our checklist template codes), non-stock, UOM Nos.
@@ -102,7 +102,7 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
      - Then **cancel and amend** it: confirm the amended order (`…-1`) keeps the WO Number and has `amended_from` set.
   6. Record the **minimum mandatory fields** for Customer and Sales Order and one real **error response** (a missing field) as JSON in the notes. Plans 013–014 build on these.
   7. **List the orders that are waiting for a project:** submitted, not cancelled, with an empty Project link, filtered by API (for example `filters=[["docstatus","=",1],["project_link","is","not set"]]`). The New project form uses this list (pull design, decided).
-- [ ] **5. Measure (gate 1).**
+- [x] **5. Measure (gate 1).**
   - `docker stats` for every ERPNext container: at rest after 10 minutes, and peak while creating 50 customers and 50 submitted sales orders via the API.
   - Also measure while clicking through ERPNext's desk for 5 minutes (Selling workspace, Sales Order list and form, Customer list), because people will use ERPNext's own screens.
   - Gate: **total peak ≤ 2.5 GB** with the caps in place, and no container killed for running out of memory.
@@ -159,8 +159,138 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
   - Directors get System Manager, never Administrator.
 - **CI:** `ci.yml` runs only for `main` (pushes and PRs), so commits on `erp` get no CI. Add `erp` to the push branches in plan 013 (the publish/deploy jobs stay `main`-only).
 
+## Implementation notes (Antigravity, Part A)
+
+### 1. Stock ERPNext & production compose
+- **Working folder (outside repo):** `C:\Users\Dhruv-Home\erpnext-local`
+- **Repository cloned:** `https://github.com/frappe/frappe_docker.git` at pinned tag `v3.2.2` (commit `3061850feface8fbbad15b5dc08a110c596107cb`).
+- **Compose files used:**
+  - `compose.yaml` (base Frappe/ERPNext v16.37.0 services)
+  - `overrides/compose.mariadb.yaml` (MariaDB 11.8 service)
+  - `overrides/compose.redis.yaml` (Redis 8.6-alpine cache and queue)
+  - `overrides/compose.noproxy.yaml` (Direct access on published port)
+  - `overrides/compose.erp-phase0-trim.yaml` (Memory budget trims & per-service caps)
+- **Environment variables in `.env` (keys only, no values):**
+  - `ERPNEXT_VERSION` (pinned to `v16.37.0`)
+  - `DB_PASSWORD` (generated 24-character random alphanumeric password)
+  - `ADMIN_PASSWORD` (generated 24-character random alphanumeric password)
+  - `HTTP_PUBLISH_PORT` (set to `127.0.0.1:8080` to bind explicitly to localhost)
+  - `FRAPPE_SITE_NAME_HEADER` (set to `frontend`)
+  - `GUNICORN_WORKERS` (set to `1`)
+  - `GUNICORN_THREADS` (set to `2`)
+  - `GUNICORN_TIMEOUT` (set to `120`)
+  - `ERPNEXT_API_KEY` (generated for `engos-api`)
+  - `ERPNEXT_API_SECRET` (generated for `engos-api`)
+- **Commands used:**
+  - Launch stack:
+    `docker compose -f compose.yaml -f overrides/compose.mariadb.yaml -f overrides/compose.redis.yaml -f overrides/compose.noproxy.yaml -f overrides/compose.erp-phase0-trim.yaml up -d`
+  - Create site:
+    `docker compose ... exec -T backend bench new-site --mariadb-user-host-login-scope=% --mariadb-root-password "<db_pass>" --admin-password "<admin_pass>" --install-app erpnext --set-default frontend`
+  - Enable scheduler:
+    `docker compose ... exec -T backend bench --site frontend enable-scheduler`
+  - Verify HTTP access:
+    `curl.exe -I http://127.0.0.1:8080` -> HTTP 200 OK.
+
+### 2. Minimal setup without setup wizard UI
+- Executed via python using `frappe.desk.page.setup_wizard.setup_wizard.setup_complete`:
+  - **Company:** "ACS Engitech" (abbr `ACS`)
+  - **Country:** India
+  - **Currency:** INR
+  - **Fiscal year:** 2026-2027 (1 April 2026 – 31 March 2027)
+  - **Chart of accounts:** Standard Template
+  - **GSTIN:** None
+  - **System Settings:** `time_zone = 'Asia/Kolkata'`, `number_format = '#,##,###.##'`, `date_format = 'dd-mm-yyyy'`
+  - **Website Settings:** `disable_signup = 1` (self-registration disabled on login screen)
+  - **Email polling:** Checked `Email Account`; none configured, 0 incoming polling overhead.
+
+### 3. Memory budget trims & caps
+Defined in `overrides/compose.erp-phase0-trim.yaml`:
+1. **Queue workers:** Consolidated into a single worker: `queue-short` configured with `command: bench worker --queue short,default,long` (capped at `384m`); `queue-long` disabled via `profiles: [disabled]`. Saves an entire Python process (~75–120 MB).
+2. **Gunicorn workers:** Reduced to 1 worker process with 2 threads (`GUNICORN_WORKERS=1`, `GUNICORN_THREADS=2`, `GUNICORN_TIMEOUT=120`, mem_limit: `768m`).
+3. **MariaDB buffer pool:** Configured `--innodb-buffer-pool-size=256M`, mem_limit: `512m`.
+4. **Redis memory caps:**
+   - `redis-cache`: `--maxmemory 64mb --maxmemory-policy allkeys-lru`, mem_limit: `96m`.
+   - `redis-queue`: `--maxmemory 64mb --maxmemory-policy noeviction --appendonly yes`, mem_limit: `96m`.
+5. **Additional services:**
+   - `frontend` (nginx): mem_limit `128m`
+   - `websocket` (Node socketio): mem_limit `128m`
+   - `scheduler` (bench schedule): mem_limit `256m`
+- **Sum of all `mem_limit` caps:**
+  `512 + 96 + 96 + 768 + 128 + 128 + 256 + 384 = 2368 MiB (2.31 GiB)`.
+  This guarantees that even in the absolute worst-case container saturation, ERPNext cannot exceed 2.31 GB on the host.
+
+### 4. API verification
+- **Setup work (Administrator):**
+  - Panel Items created matching checklist template codes:
+    - `PLC` ("PLC Panel")
+    - `SCADA` ("SCADA Panel")
+    - `HMI` ("HMI Panel")
+    All created non-stock (`is_stock_item: 0`), UOM `Nos`.
+  - Custom fields created via `create_custom_fields`:
+    - On `Sales Order`:
+      - `custom_wo_number`: Data, `allow_on_submit: 1`, `unique: 0`.
+      - `custom_project_code`: Data, `read_only: 1`, `allow_on_submit: 1`.
+      - `custom_project_link`: Data, `read_only: 1`, `allow_on_submit: 1`.
+    - On `Customer`:
+      - `custom_acs_reference`: Data (e.g. `ACS-0001`).
+- **Least-privilege API user:**
+  - User `engos-api@acsengitech.com` created with single role `Sales User` (not System Manager).
+  - API keys generated and authenticated with `Authorization: token <key>:<secret>`.
+- **API calls proven:**
+  - **Customer:** POST `/api/resource/Customer` created `Adani Power Ltd` with `custom_acs_reference: "ACS-0001"`. Listed and read back successfully.
+  - **Item:** GET `/api/resource/Item/PLC`, `/SCADA`, `/HMI` verified.
+  - **Sales Order:** POST `/api/resource/Sales Order` created `SAL-ORD-2026-00001` with `po_no: "PO-2026-99"`, `custom_wo_number: "WO-4001"`, delivery date `2026-11-15`, and 2 items (`PLC`, `SCADA`).
+  - **Submit:** PUT `/api/resource/Sales Order/SAL-ORD-2026-00001` with `{"docstatus": 1}` submitted successfully.
+  - **Project Link update:** PUT on submitted order updated `custom_project_code: "ACS-0001-P01"` and `custom_project_link: "/pm/projects/prj_123"` successfully with `engos-api` credentials.
+  - **Zero/No rate test:** Created and submitted `SAL-ORD-2026-00002` with `rate` omitted. ERPNext accepted zero rate without blocking (`net_total = 0.0`).
+  - **Cancel and amend test:** `SAL-ORD-2026-00001` cancelled (`docstatus: 2`), amended order `SAL-ORD-2026-00001-1` created with `amended_from: "SAL-ORD-2026-00001"` and retained `custom_wo_number: "WO-4001"`, and submitted successfully.
+  - **Waiting for a project query:**
+    `GET /api/resource/Sales Order?filters=[["docstatus","=",1],["custom_project_link","is","not set"]]` returned open submitted unlinked orders (`SAL-ORD-2026-00001-1` and `SAL-ORD-2026-00002`), while excluding cancelled and linked orders.
+- **Minimum mandatory fields:**
+  - `Customer`: `customer_name` (string).
+  - `Sales Order`: `customer` (string), `delivery_date` (date string `YYYY-MM-DD`), `items` (array with `item_code`, `qty`, `delivery_date`).
+- **Real error response recorded (missing mandatory field on Sales Order):**
+```json
+{
+  "exception": "TypeError: bad operand type for abs(): 'NoneType'",
+  "exc_type": "TypeError",
+  "_exc_source": "erpnext (app)",
+  "exc": "[\"Traceback (most recent call last):\\n  File \\\"apps/frappe/frappe/app.py\\\", line 158, in application\\n    response = frappe.api.handle(request)... TypeError: bad operand type for abs(): 'NoneType'\\n\"]"
+}
+```
+
+### 5. Memory measurement (Gate 1 results)
+- **Host info:** Windows host, Docker Desktop (Total Memory limit: 11.68 GiB).
+- **At rest (after 10+ minutes):** 802.28 MiB (0.78 GiB).
+- **Peak under load:** Tested by creating 50 Customers + 50 submitted Sales Orders via API (completed in 7.7s total), followed by 300 seconds (5 minutes) of continuous Desk browsing simulation (workspace sidebar, desktop page, reportview lists, form loads, search links).
+
+| Service Container | Memory at Rest | Measured Peak | Memory Cap (`mem_limit`) |
+|---|---|---|---|
+| `erpnext-local-backend-1` | 285.00 MiB | 305.70 MiB | 768.00 MiB |
+| `erpnext-local-db-1` | 269.90 MiB | 273.40 MiB | 512.00 MiB |
+| `erpnext-local-frontend-1` | 14.86 MiB | 16.82 MiB | 128.00 MiB |
+| `erpnext-local-queue-short-1` | 76.53 MiB | 123.10 MiB | 384.00 MiB |
+| `erpnext-local-redis-cache-1` | 12.69 MiB | 16.85 MiB | 96.00 MiB |
+| `erpnext-local-redis-queue-1` | 10.06 MiB | 11.14 MiB | 96.00 MiB |
+| `erpnext-local-scheduler-1` | 109.60 MiB | 110.40 MiB | 256.00 MiB |
+| `erpnext-local-websocket-1` | 23.64 MiB | 23.71 MiB | 128.00 MiB |
+| **TOTAL** | **802.28 MiB (0.78 GiB)** | **881.12 MiB (0.86 GiB)** | **2368.00 MiB (2.31 GiB)** |
+
+- **Gate 1 check:**
+  - Total measured peak: **881.12 MiB (0.86 GiB)** ≤ **2.50 GiB** gate.
+  - Worst-case sum of caps: **2368.00 MiB (2.31 GiB)** ≤ **2.50 GiB** gate.
+  - Restarts or OOM kills: **0** (all containers up 30+ minutes continuously).
+  - **Verdict: GATE 1 PASSED.**
+
+### Tool & repo status
+- `sequential-thinking`: Server registered but tool execution threw invalid tool call / not enabled; reasoning steps performed directly.
+- Engineering OS repository verification: `npm run typecheck; npm test` ran cleanly with 0 modifications to `src/`:
+  - `tsc --noEmit`: 0 errors.
+  - Vitest: 12 test files passed, 147 tests passed (0 failed).
+
 ## Notes (Claude, per step)
 <commands, file names, .env keys (not values), memory numbers, payloads, gate results>
 
 ## Review (Claude)
 <verdict>
+
