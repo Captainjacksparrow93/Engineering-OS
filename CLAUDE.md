@@ -9,7 +9,15 @@ Everything in `AGENTS.md` applies to Claude too.
 - **Permission model (user direction 2026-09-30, deferred, not to be planned yet):** Directors get every module (PM, ERP, HRMS, CRM, …). A department head gets read/write on their department's module; that department's staff get read. Open question for later: engineers still need to log progress on their own tasks.
 - **ERP (user decision 2026-09-30):** ERPNext on the same VPS, integrated over its REST API (no stack change), on branch `erp`, phases 0–2 first (`docs/archive/erp-integration-plan.md`). Once integrated, all clients and orders come from ERPNext. **Do not start ERP planning until every earlier plan (007, 008) is done and live.** HRMS and Gate stay parked.
 - **Test branch (deferred 2026-09-30, not planned yet):** branch `test` = `main` + a password-free quick role login, run locally only against the local DB with seed + demo data. It never merges into `main` and is never deployed. Design notes for when it's planned: put it on its own route (e.g. `/test-login`), because `src/middleware.ts` rate-limits POST `/login` to 15 per 15 min; it reuses `createSession(userId)` (called today only by `signIn` and `api/auth/login`); guard both page and action with an env flag **and** `NODE_ENV !== 'production'`.
-- **Order (user decision 2026-09-30):** 002–008 are live (plan 009). Next: 010 (auto-deploy), 011 (PMs take panels), then the test branch, then ERP.
+- **Order (user decision 2026-10-01):** 002–011 are live. ERP now; the test branch waits until after ERP.
+- **ERP requirements (user, 2026-10-01):**
+  - No Tally/Zoho/other accounting integration.
+  - All ERPNext modules eventually (customers, quotations, sales/purchase orders, suppliers, items and stock, BOM, invoices, payments); phases 0–2 first.
+  - The sales order carries the WO number, and New project picks it up.
+  - Sales Head and Directors create sales orders for now.
+  - No VPS upgrade and no second server: ERPNext must fit on the current VPS (7.8 GB RAM, about 4.8 GB free, shared with Chatwoot, n8n, Supplychain).
+  - Set up ERPNext with minimal defaults (company, INR, Apr–Mar FY, standard chart of accounts), no GSTIN for now.
+  - ERP screens are built in Engineering OS and follow `docs/design-system.md`; nobody uses ERPNext's own UI.
 - **Deploys (user decision 2026-09-30, option C; replaces the 2026-09-26 build-locally rule; live since 2026-09-30, plan 010):** a green CI on `main` deploys automatically (GitHub builds, private GHCR, SSH deploy with auto-rollback). A push is a production deploy, so Claude rehearses any migration on a production copy **before** the push. Backups stay on the VPS (14 days); copy them to the PC from time to time.
 - Production migration state (read-only check 2026-09-30): the R1 baseline cut-over is done. `_prisma_migrations` holds `20260925000000_baseline`, `20260925000001_service_call` and `20260926150000_revoke_pm_task_create`. Since 2026-09-30 production is deployed by GitHub Actions (plan 010) with all 4 migrations applied, including `20260929125414_project_code_shared` (release plan 009). `scripts/deploy.sh` (stdin bug: skipped the swap while reporting success, plan 009) is deleted by plan 010; deploys go through `.github/workflows/deploy.yml`.
 
