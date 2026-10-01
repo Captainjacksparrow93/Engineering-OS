@@ -1,0 +1,139 @@
+# 013 — ERP access: one-click sign-in, restyled ERPNext, ERP entry in our app (local)
+
+**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Author:** Claude · **Implementer:** Antigravity · **Branch:** `erp`
+**Depends on:** 012 part A (local ERPNext at `C:\Users\Dhruv-Home\erpnext-local`, v16.37.0, on `127.0.0.1:8080`).
+**Where it runs:** **local only** (user decision 2026-10-01: all ERP development is done and tested locally first; the VPS comes after plan 015). Nothing in this plan touches the VPS.
+
+## Goal
+A Director or the Sales Head clicks **ERP** in Engineering OS and lands in ERPNext, **already signed in as themselves**, on screens restyled to our look. Nobody else sees ERP. Deactivating a user in our app also disables them in ERPNext.
+
+Decisions this builds on (`CLAUDE.md`, "ERP"):
+- ERPNext's own screens, restyled by our custom Frappe app `acs_erp` ("same family", not pixel-identical).
+- One login via a signed, single-use pass.
+- ERP access for Directors and the Sales Head.
+- Don't embed ERPNext in an iframe.
+
+## How it works
+1. **Our side.** `/erp` (new **ERP** sidebar item and launcher tile) shows one card with an **Open ERP** button. It opens `/erp/open` in a new tab. That route handler:
+   - checks the session and `erp.access`;
+   - builds a **pass** for the signed-in user;
+   - returns a tiny HTML page whose form **auto-submits by POST** to `${ERPNEXT_PUBLIC_URL}/api/method/acs_erp.sso.login` with one field, `pass`.
+
+   The pass is never put in a URL.
+2. **The pass format** (both sides must match exactly; cover it with the shared test vector):
+   - `pass = base64url(payloadJSON) + "." + base64url(HMAC_SHA256(secret, base64url(payloadJSON)))`
+   - Payload: `{ "v": 1, "act": "login" | "disable", "email": string, "name": string, "roles": string[], "iat": unixSeconds, "exp": iat + 30, "nonce": 16 random bytes as hex }`
+   - The secret is `ERP_SSO_SECRET` (our env) and `acs_erp_sso_secret` (ERPNext `site_config.json`): the same random value of at least 32 bytes, never committed.
+3. **ERPNext side (`acs_erp.sso.login`, guest-allowed, POST only).** In this order, failing safely and returning a plain "Sign-in link expired. Open ERP again from Engineering OS." page on any failure:
+   1. Verify the HMAC with a constant-time compare.
+   2. Check `act == "login"`, `exp` not passed (allow ≤ 5 s clock skew), `v == 1`.
+   3. Make the **nonce single-use** (store it in Frappe's cache for 120 s; reject if already there).
+   4. **Get or create the User** by email (enabled, System User, no welcome email, **no password set**).
+   5. **Set the user's roles to exactly the managed roles in the pass.** "Managed" = an allowlist in `acs_erp` (below). Remove managed roles not in the pass, never touch roles outside the allowlist, and **never** allow `Administrator` or `Guest`.
+   6. Log in as that user and redirect to `/app`.
+4. **Role mapping** (decided in our app; `acs_erp` enforces the allowlist):
+   - Our `DIRECTOR` or `SUPER_ADMIN` → `System Manager`, `Sales Manager`, `Sales User`, `Purchase Manager`, `Stock Manager`, `Accounts Manager`, `Item Manager`.
+   - Our `SALES_HEAD` → `Sales Manager`, `Sales User`.
+   - Anyone else → no pass (no `erp.access`).
+5. **Disable on deactivate.** When `setUserStatus` sets a user to `SUSPENDED` or `EXITED`, our app POSTs a pass with `act: "disable"` (server to server, to `ERPNEXT_URL`) to `acs_erp.sso.disable_user`, which disables that ERPNext user and ends their sessions. This is best effort: on failure, record it in our audit trail and carry on. **Never block** the status change because ERPNext is down.
+6. **The look.** `acs_erp` adds `app_include_css` (desk) and `web_include_css` (login page) pointing to one CSS file, plus our font files. It follows `docs/design-system.md` → "ERP (ERPNext, restyled)".
+
+## Affected code
+**Engineering OS (TypeScript):**
+- `src/core/rbac/permissions.ts`: new key `'erp.access': 'Open ERP with single sign-on'`; add it to `SYSTEM_ROLES.DIRECTOR` and `SYSTEM_ROLES.SALES_HEAD` (`SUPER_ADMIN` gets everything already).
+- **New SQL migration** (`npx prisma migrate dev --create-only --name erp_access_permission`): insert `erp.access` into `core_permissions` (`ON CONFLICT (key) DO NOTHING`) and grant it to roles `DIRECTOR`, `SALES_HEAD` and `SUPER_ADMIN`, joining by `key`, never by ID, and idempotent. No schema change.
+- `src/core/modules/registry.ts`, entry `erp`:
+  - `status: 'LIVE'`, `route: '/erp'`, `requires: 'erp.access'`;
+  - replace the `scope` lines with today's reality (orders, customers and all ERPNext modules in ERPNext; projects come from orders, in plan 014).
+- `src/components/shell/sidebar.tsx`: an **ERP** nav item, `href: '/erp'`, `requires: 'erp.access'`, in the same section as Projects/Clients.
+- `src/app/(shell)/erp/page.tsx`: replace `<ComingSoon moduleKey="erp" />` with:
+  - a `PageHeader` ("ERP", one line saying it opens in a new tab and you'll be signed in);
+  - a `.card` with one `.btn-primary` link "Open ERP" (`target="_blank"`, `rel="noopener"`) to `/erp/open`;
+  - an `Alert` instead of the button when the ERP settings are missing.
+  - Gate the page on `erp.access`.
+- `src/app/erp/open/route.ts` (new route handler, **outside** the `(shell)` group, so it renders no app chrome): `GET` → session, `erp.access`, build the pass, return the auto-submit HTML (`Cache-Control: no-store`, `Referrer-Policy: no-referrer`). Without a session → redirect to `/login`; without the permission → 403.
+- `src/modules/erp/sso.ts` (new): `buildPass(user, act, now?)` and `rolesFor(roleKeys)`, using Node `crypto` only. **No new npm dependency.**
+- `src/modules/admin/services/admin.service.ts`, `setUserStatus`: after a successful change to `SUSPENDED`/`EXITED`, a best-effort `disable` call (short timeout, about 5 s); failures audited, never thrown.
+- `.env.example`: `ERPNEXT_PUBLIC_URL`, `ERPNEXT_URL`, `ERP_SSO_SECRET` (no values).
+- `docker-compose.yml`: pass those three to `app` (empty is fine; nothing reads them until set).
+- `.github/workflows/ci.yml`: `on.push.branches` gets `erp` next to `main`. `publish` stays `main`-only, so no deploy happens from `erp`. Add a dummy `ERP_SSO_SECRET` to the test env.
+
+**ERPNext app (new folder `erp/acs_erp/` in this repo, plus `erp/Dockerfile`):**
+- A minimal installable Frappe app `acs_erp` (`hooks.py`, package metadata, `modules.txt`, `patches.txt`, module folder). Version `0.1.0`.
+- `hooks.py`:
+  - `app_include_css` and `web_include_css` → `/assets/acs_erp/css/acs_theme.css`;
+  - `fixtures` for the four custom fields from 012 (`custom_wo_number`, `custom_project_code`, `custom_project_link` on Sales Order; `custom_acs_reference` on Customer) and for an **`EngOS Integration`** role with only what the integration needs: read Customer, Item and Sales Order; create/write Customer; write the two project-link fields on submitted Sales Orders;
+  - `doc_events` → Sales Order `validate`: `custom_wo_number`, when set, must be digits only ("WO number must contain digits only.");
+  - `after_install`: session expiry `08:00`, sign-up disabled, "login with email link" off, items `PLC`/`SCADA`/`HMI` exist (create if missing), and navbar logo and title "Engineering OS · ERP".
+- `acs_erp/sso.py`: `login` and `disable_user` as above. The pass decode/verify lives in a **Frappe-free** helper module (`acs_erp/passcodec.py`) so it can be unit-tested with plain Python.
+- `acs_erp/public/css/acs_theme.css` + `acs_erp/public/fonts/` (copy the five `.woff2` files and both `OFL.txt` from `src/app/fonts/`).
+- `erp/Dockerfile`: `FROM frappe/erpnext:v16.37.0`, add `acs_erp` into the bench `apps/`, install it, register it in `sites/apps.txt`, build its assets. Local tag `acs-erpnext:v16.37.0-acs1`.
+- Local switch (outside the repo, in `erpnext-local`): point the compose image to `acs-erpnext:v16.37.0-acs1`, recreate the containers (volumes kept), `bench --site frontend install-app acs_erp`, `bench --site frontend migrate`, and put `acs_erp_sso_secret` in the site config. Move the API user `engos-api` from `Sales User` to `EngOS Integration` only.
+
+**Blast radius** (code-review-graph on branch `erp`, graph at `eb9fb57`):
+- Blast radius of `permissions.ts`, `registry.ts`, `sidebar.tsx`, `admin.service.ts` and `(shell)/erp/page.tsx`: **high**, 20 nodes changed, 119 files within 2 hops (key: `AuditPage`, `RolesPage`, `UsersPage`, `ShellLayout`, `assignRoleAction`). Expected: `permissions.ts` is imported by 12 files and the sidebar sits in every page. The change is additive (a new key, a new nav item).
+- `callers_of setUserStatus`: only `setUserStatusAction` (`src/app/actions/admin.ts`).
+- `importers_of registry.ts`: 3 files: `prisma/seed.ts` (upserts module rows), `src/app/(shell)/modules/page.tsx` (launcher) and `src/components/coming-soon.tsx` (no longer used by `/erp`, still used by the other coming-soon modules).
+- `get_affected_flows` for `admin.service.ts` + `sidebar.tsx`: 0 flows.
+
+## Constraints
+- The app is LIVE, but **nothing here reaches production**: branch `erp`, no push, no VPS. A merge to `main` happens only after plan 015 and the VPS steps.
+- The permission change goes through a **hand-written SQL migration** only (`AGENTS.md`). Never edit `entrypoint.sh` for it.
+- Never commit a secret: not `ERP_SSO_SECRET`, not `acs_erp_sso_secret`, not API keys. The test vector uses an obvious test secret.
+- No new npm dependency. No Python dependency beyond what the ERPNext image already has.
+- `acs_erp` must not change ERPNext business logic beyond the WO-digits check and the setup items above.
+- UI per `ux-writing` and `impeccable`; the ERP theme per `docs/design-system.md` → "ERP (ERPNext, restyled)".
+
+## Tools & skills (implementer: follow these)
+- **Setup:** `git checkout erp`; read `AGENTS.md` → "ERP work"; point Token Savior at this project and update the code-review-graph; load `ponytail` (full) and the skills below.
+- **Check first (graph):** callers of `setUserStatus`; importers of `src/core/rbac/permissions.ts` and `src/core/modules/registry.ts`; blast radius of `permissions.ts`, `sidebar.tsx`, `admin.service.ts`.
+- **Read (Token Savior):** `setUserStatus`, `SYSTEM_ROLES`, `MODULES`, `Sidebar`, `requirePrincipal`, `getPrincipal`, `hasPermissionAnywhere`. Read the existing permission migration `prisma/migrations/20260926150000_revoke_pm_task_create/migration.sql` as the pattern.
+- **Next.js:** route handlers changed in this version; read `node_modules/next/dist/docs/` on route handlers before writing `src/app/erp/open/route.ts`.
+- **Frappe:** official docs for hooks (`app_include_css`, `web_include_css`, `fixtures`, `doc_events`, `after_install`), whitelisted methods (`allow_guest`, `methods=["POST"]`), `frappe.cache`, and `login_manager.login_as`. Record the URLs used.
+- **sequential-thinking:** required for step 3 (the order of checks in `acs_erp.sso.login`: signature → expiry → nonce → user → roles → session) and step 4 (where the disable call sits so it can never block or undo the status change).
+- **Skills:** `ponytail` (full) · `tdd` · `ux-writing` + `impeccable` (ERP page + theme) · `review-delta` (before DONE).
+- **Tests:**
+  - `npm run typecheck && npm test && npm run build`, and `npm run test:int` on a **fresh CI-like database** (empty DB → `npx prisma migrate deploy` → `npm run db:seed`).
+  - Python: `python -m unittest` for `passcodec` (plain Python, no Frappe).
+  - Paste all counts.
+- If a tool is missing or fails, say so in Implementation notes.
+
+## Steps (hand over one at a time)
+- [ ] **1. Tests first (red):**
+  - **TS unit** (`src/modules/erp/sso.test.ts`): `buildPass` makes the exact format; `rolesFor` maps Director, Super Admin and Sales Head as above and returns `[]` for everyone else.
+  - **One shared test vector:** a fixed secret, payload and time give a fixed `pass` string, saved as `erp/acs_erp/acs_erp/tests/pass_vector.json`. Both the TS and the Python tests read it.
+  - **TS integration:**
+    - `/erp/open` with no session → redirect to `/login`;
+    - an Engineer (no `erp.access`) → 403;
+    - a Director → 200 HTML with a POST form to `${ERPNEXT_PUBLIC_URL}/api/method/acs_erp.sso.login`, a `pass` that verifies, and `Cache-Control: no-store`;
+    - after the migration, `erp.access` is held by `DIRECTOR`, `SALES_HEAD` and `SUPER_ADMIN` and nobody else;
+    - `setUserStatus` to `EXITED` succeeds and is audited even when ERPNext is unreachable.
+  - **Python** (`passcodec`): accepts the vector (with the clock fixed); rejects a bad signature, expired, wrong `v`, wrong `act`, and malformed input.
+- [ ] **2. Our app:** permission key + SQL migration, `SYSTEM_ROLES`, registry, sidebar item, `/erp` page, `/erp/open`, `sso.ts`, env names, compose pass-through, CI `erp` branch.
+- [ ] **3. `acs_erp`:** app skeleton, `passcodec` + `sso.login` + `sso.disable_user`, role allowlist, fixtures (custom fields + `EngOS Integration` role), WO-digits validation, `after_install` settings, theme CSS + fonts, `erp/Dockerfile`. Build the image locally, switch `erpnext-local` to it, install, migrate, set the secret, and move `engos-api` to `EngOS Integration`.
+- [ ] **4. Disable on deactivate** in `setUserStatus` (best effort, audited).
+- [ ] **5. Check it end to end locally:**
+  - Run `npm run dev` on port 3001 with `ERPNEXT_PUBLIC_URL=http://127.0.0.1:8080`, `ERPNEXT_URL=http://127.0.0.1:8080` and the shared secret.
+  - Sign in as a seeded Director → ERP → Open ERP → you land on ERPNext `/app` signed in as that Director, with the mapped roles. Repeat as the Sales Head (Sales roles only) and an Engineer (no ERP item; `/erp/open` → 403).
+  - Replaying the same pass → refused. A pass older than 30 s → refused.
+  - Set the Sales Head to `EXITED` in People → their ERPNext user is disabled and their session ended.
+  - A Sales Order with WO `WO-4001` → refused; `4001` → saved.
+  - The API user can no longer create or submit a Sales Order, but can still read and write the link fields.
+  - **Screenshots** (paste in the notes): ERPNext Selling workspace, Sales Order list, Sales Order form, Customer form and the login page, next to our Director dashboard and Clients page.
+- [ ] **6. Full suite (CI-like database) + Python tests; record counts.** Commit locally on `erp`. Don't push.
+
+## Acceptance criteria
+- [ ] Directors and the Sales Head see **ERP** and land in ERPNext signed in with the mapped roles; nobody else sees it, and `/erp/open` refuses them.
+- [ ] The pass travels only in a POST body, is single-use, expires in 30 s, and is verified constant-time. Our app and ERPNext agree on the shared test vector.
+- [ ] SSO-created ERPNext users have no usable password; only Administrator can sign in on the ERPNext login page.
+- [ ] Deactivating a user disables their ERPNext user (best effort; never blocks the change).
+- [ ] ERPNext looks like the same family as our app (screenshots), with no Google font requests.
+- [ ] WO numbers in ERPNext must be digits.
+- [ ] `erp.access` arrives by SQL migration; CI runs on `erp`; full suite and Python tests pass (counts pasted).
+
+## Implementation notes (implementer)
+<per step: commits, graph output, docs URLs, test counts, screenshots, deviations>
+
+## Review (Claude)
+<verdict, follow-ups>

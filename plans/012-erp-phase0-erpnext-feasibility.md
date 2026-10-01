@@ -109,6 +109,7 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
   - If it fails, try the trims again once; if it still fails, stop and report.
 
 ### B. VPS (Claude only, each step after the user approves it). Antigravity: stop after step 5
+**Deferred (user decision 2026-10-01): all ERP development is done and tested locally first (plans 013–015). Part B runs after plan 015 is reviewed, using the `acs-erpnext` image from plan 013 instead of the stock one, and adds the public HTTPS route (Traefik) at that point.**
 - [ ] **6. Check headroom (gate 2, read-only).**
   - Record `free -m` and `docker stats --no-stream` at 3 different times of a working day.
   - Gate: available memory minus the **sum of the ERPNext `mem_limit` caps** (the most ERPNext can ever take, not the measured peak) must leave **≥ 1.5 GB**.
