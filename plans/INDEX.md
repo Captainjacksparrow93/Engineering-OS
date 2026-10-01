@@ -3,6 +3,29 @@
 Open plans live in `plans/`. Verified plans move to `plans/done/`. Plans written before 2026-09-26 are in `docs/`.
 Status: TODO → IN PROGRESS → DONE → REVIEWED (then moved to done/)
 
+## Implementer: start here (the user only says "continue")
+When the user says **"continue"** (or "next", or "go"), do this without asking:
+
+1. **Branch:**
+   - Plans marked "Branch `erp`" in the table → `git checkout erp`.
+   - All others → `main`.
+   - Never switch with uncommitted changes, never merge branches, never push.
+2. **Pick the work:** the **first** plan in the table below whose Status isn't `REVIEWED`, `DONE`, or "waiting for Claude", and whose part is yours (a plan or step marked "Claude" or "VPS" is not).
+3. **Inside that plan:** do the next item that isn't ticked. Open review follow-ups (`- [ ] F1 …` under "Review (Claude)") come first, then the next unticked **Step**. Do **exactly one step** (one follow-up, or one numbered step), then stop.
+4. **Before you code:** read `AGENTS.md` (and "ERP work" for ERP plans), then the plan's "Tools & skills" section, and follow it: graph checks, Token Savior reads, skills and test commands.
+5. **When the step is done:**
+   - tick its box;
+   - fill in "Implementation notes" (what changed, commands, test counts, deviations);
+   - set Status to `IN PROGRESS`, or `DONE` if every step and acceptance box is ticked;
+   - update this table's Status;
+   - commit locally (`plan NNN: step N …`) and leave the tree clean.
+6. **Reply to the user in two lines:**
+   - what you did and the test counts;
+   - the exact sentence to send Claude: **"Plan NNN step N done, review."**
+7. **Stop** if a step is wrong, blocked, or needs the VPS or a secret you don't have. Write why in "Implementation notes", set the table's Status to "blocked: <reason>", commit, and tell the user. Don't improvise.
+
+Claude (reviewer): when the user says **"review"** or **"check"**, review the latest implementer commits against their plan, write the verdict and any `- [ ] F…` follow-ups under "Review (Claude)", and update Status. The implementer's next "continue" then picks those follow-ups up automatically.
+
 | # | Plan | Status | Notes |
 |---|---|---|---|
 | 001 | [Build image locally, ship to VPS](done/001-local-image-build-deploy.md) | REVIEWED | Replaces GHCR build + auto-deploy; owner runs `scripts/deploy.sh` |
@@ -17,4 +40,4 @@ Status: TODO → IN PROGRESS → DONE → REVIEWED (then moved to done/)
 | 010 | [Automatic deploy from GitHub](done/010-auto-deploy-from-github.md) | REVIEWED | Live 2026-09-30: green CI on `main` → GHCR → SSH deploy (reachability retry, backup, health + image check, auto-rollback); rollback drill passed; `deploy.sh` removed |
 | 011 | [PMs can take a panel](done/011-pms-can-take-panels.md) | REVIEWED | PMs/Asst PMs pickable in the New project picker and in Auto-Assign via an `isPM` flag; `isExecutionStaff` unchanged |
 | 012 | [ERP Phase 0: ERPNext feasibility](012-erp-phase0-erpnext-feasibility.md) | IN PROGRESS (part A done) | Branch `erp`. Part A done (gate 1 passed); part B (VPS) deferred until after 015. ERPNext v16.37.0 as a separate, memory-capped, private compose project on the VPS; API + webhook proven; gates on memory |
-| 013 | [ERP access: sign-in, theme, ERP entry](013-erp-access-sso-theme.md) | TODO | Branch `erp`, local only. `erp.access` (SQL migration), `/erp` + `/erp/open` POST pass, `acs_erp` app (SSO, role allowlist, fixtures, WO digits, theme), custom image, disable on deactivate, CI on `erp` |
+| 013 | [ERP access: sign-in, theme, ERP entry](013-erp-access-sso-theme.md) | IN PROGRESS | Branch `erp`, local only. `erp.access` (SQL migration), `/erp` + `/erp/open` POST pass, `acs_erp` app (SSO, role allowlist, fixtures, WO digits, theme), custom image, disable on deactivate, CI on `erp` |
