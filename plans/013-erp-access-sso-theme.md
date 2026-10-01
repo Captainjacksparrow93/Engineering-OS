@@ -1,6 +1,6 @@
 # 013 — ERP access: one-click sign-in, restyled ERPNext, ERP entry in our app (local)
 
-**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity · **Branch:** `erp`
 **Depends on:** 012 part A (local ERPNext at `C:\Users\Dhruv-Home\erpnext-local`, v16.37.0, on `127.0.0.1:8080`).
 **Where it runs:** **local only** (user decision 2026-10-01: all ERP development is done and tested locally first; the VPS comes after plan 015). Nothing in this plan touches the VPS.
@@ -173,4 +173,40 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - `npm run build`: Production build succeeded with all static and dynamic routes compiled.
 
 ## Review (Claude)
-<verdict, follow-ups>
+**2026-10-01, commit `588b681` (all six steps in one commit). Verdict: well built and close to the plan. Fix the two security gaps and prove it in a real browser before REVIEWED.**
+
+**Checked:**
+- **Re-ran on a fresh CI-like database:** typecheck clean · `npm test` 13 files / 157 · `npm run test:int` 14 files / 63 · `python -m unittest` 8 OK · build clean. Migration `20261001122602_erp_access_permission` applies cleanly, and `erp.access` is held by exactly `DIRECTOR`, `SALES_HEAD` and `SUPER_ADMIN` (idempotent, joined by key).
+- **Pass:** the exact agreed format on both sides, with a shared vector. HMAC is compared in constant time (`timingSafeEqual` / `hmac.compare_digest`). 30 s expiry and 5 s skew. `act` checked in Python. Nonce single-use (cache, 120 s, longer than validity).
+- **`/erp/open`:** redirects to `/login` with no session, 403 without `erp.access`, POST-only pass, `no-store` and `no-referrer`.
+- **`acs_erp.sso.login` order:** signature → expiry → nonce → user → managed roles only (allowlist) → `login_as` → `/app`. Failures show the plain "Sign-in link expired" page; details only go to the log.
+- **`disable_user`:** signed, `act` = disable, nonce, disables the user and clears their sessions. `setUserStatus` calls it best-effort with a 5 s timeout, and failures are audited, never thrown.
+- **API user moved to `EngOS Integration`:** read Customer, Item and Sales Order; creating a Sales Order → 403.
+- **WO validation:** `WO-4001` refused, `4001` accepted.
+- **CI:** runs on `erp`, while `publish`/deploy stay `main`-only.
+- **Accepted deviation (should have been noted):** `erp.access` was added to `READ_ONLY_PERMISSIONS` in `engine.ts`. That's correct: it keeps the Sales Head "read-only" in PM (so `isDirectorUser` stays false for them), because ERP access grants no PM writes.
+- **Accepted behaviour:** an ERPNext user disabled directly in ERPNext is re-enabled on their next sign-in from our app. Our app is the source of truth for who is active.
+
+**Follow-ups (implementer):**
+- [ ] **F1 (security): never sign in to a privileged or system ERPNext account.**
+  - `login` signs in **any** existing user whose email matches the pass. Today that includes the integration user `engos-api@acsengitech.com`, and lookups are case-insensitive, so the email `administrator` would reach Administrator. A Director-created Engineering OS user with such an email would become that account.
+  - Refuse (plain failure page plus a log entry) when the email isn't a normal address (one `@`, not `administrator` or `guest`), or when the existing ERPNext user holds `Administrator` or `EngOS Integration`, or isn't a `System User`.
+  - Put the email check in `passcodec` (plain-Python tested) and the role check in `sso.py`.
+  - Test both: a pass for the API user's email → refused; a pass for `administrator` → refused.
+- [ ] **F2 (bug risk): opening ERP while already signed in.** Step 5 was checked with a script, not a browser. In a browser that already has an ERPNext session, the auto-submitted POST may carry that session cookie: `127.0.0.1:3001` → `:8080` is same-site, and in production `engos.…` and `erp.…` will be same-site too. Frappe would then demand a CSRF token and answer "Invalid Request".
+  - Test in a real browser: Open ERP, then go back and Open ERP again, as the same user and as a different user.
+  - If it fails, fix it, for example: when the request already has a session, end it first, or detect that it's the same user and just redirect to `/app`.
+  - Record what happened.
+- [ ] **F3: the real browser check and screenshots** (step 5 acceptance, not yet met):
+  - sign in as a seeded Director and as the Sales Head; click **ERP** → **Open ERP**;
+  - screenshots of ERPNext's Selling workspace, Sales Order list, Sales Order form, Customer form and login page, next to our Director dashboard and Clients page;
+  - confirm in the browser's network tab that no font or CSS comes from Google.
+- [ ] **F4: remove the committed `__pycache__/*.pyc` files** (`git rm -r --cached` on the three `__pycache__` folders). Claude added `__pycache__/` and `*.pyc` to `.gitignore`.
+- [ ] **F5: image build hygiene.**
+  - Remove `|| true` from `bench build --app acs_erp` in `erp/Dockerfile`, so a broken asset build fails the image.
+  - In the notes, say exactly how `acs_erp` got into `sites/apps.txt` on the existing local `sites` volume. The Dockerfile edits the image copy, but an existing volume keeps its own copy. Claude needs the exact step for the VPS install.
+- [ ] **F6 (small):**
+  - Cap the response body stored in the `erp.user_disable_failed` audit entry (about 500 characters).
+  - Also audit a successful disable (`erp.user_disabled`).
+  - Fix the notes: the action isn't `USER_DISABLE_ERPNEXT`.
+  - `install.py` re-creates the custom fields and DocPerms that the fixtures already ship (`_ensure_custom_fields`, `_ensure_docperms`). Keep one source (the fixtures) unless there's a reason; if so, write it down.
