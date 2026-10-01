@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - erp
   pull_request:
     branches:
       - main
@@ -33,6 +34,7 @@ jobs:
       DIRECT_URL: "postgresql://engos:engos_local_password@localhost:5432/engineering_os?schema=public"
       AUTH_SECRET: "acs-engitech-super-secret-key-32chars-min"
       SEED_PASSWORD: "ACSengi@2026"
+      ERP_SSO_SECRET: "ci-dummy-erp-sso-secret-at-least-32-chars-long"
       NODE_ENV: "test"
 
     steps:

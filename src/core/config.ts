@@ -12,6 +12,9 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   VERTEX_AI_SERVICE_ACCOUNT_JSON: z.string().optional(),
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
+  ERPNEXT_PUBLIC_URL: z.string().url().optional(),
+  ERPNEXT_URL: z.string().url().optional(),
+  ERP_SSO_SECRET: z.string().min(32).optional(),
 });
 
 let cached: z.infer<typeof schema> | null = null;

@@ -53,6 +53,9 @@ export const PERMISSIONS = {
   'pm.oversight': 'Kept informed about all project activity in scope',
   'pm.resource.read': 'See who is available and how loaded they are',
   'pm.report.read': 'Open portfolio dashboards and reports',
+
+  // -- ERP / Finance -----------------------------------------------------------
+  'erp.access': 'Open ERP with single sign-on',
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;
@@ -117,6 +120,7 @@ export const SYSTEM_ROLES: Record<
       'pm.handover.decide',
       'pm.resource.read',
       'pm.report.read',
+      'erp.access',
     ],
   },
   TECHNICAL_HEAD: {
@@ -257,6 +261,7 @@ export const SYSTEM_ROLES: Record<
       'pm.report.read',
       'pm.commissioning.read',
       'pm.template.read',
+      'erp.access',
     ],
   },
 };

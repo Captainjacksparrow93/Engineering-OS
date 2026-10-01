@@ -1,0 +1,213 @@
+/* ==========================================================================
+   Engineering OS · ERP (ERPNext Theme)
+   Follows docs/design-system.md -> "ERP (ERPNext, restyled)"
+   ========================================================================== */
+
+/* 1. Local Fonts */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/acs_erp/fonts/Inter-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/assets/acs_erp/fonts/Inter-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/assets/acs_erp/fonts/Inter-SemiBold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/acs_erp/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/assets/acs_erp/fonts/JetBrainsMono-Medium.woff2') format('woff2');
+}
+
+/* 2. Frappe / ERPNext Design Tokens Override */
+:root,
+[data-theme="light"],
+body {
+  /* Typography */
+  --font-stack: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  --font-mono: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-family: var(--font-stack) !important;
+
+  /* Surfaces & Floor */
+  --bg-color: #f7f7f4 !important;
+  --fg-color: #1a1a19 !important;
+  --text-color: #1a1a19 !important;
+  --text-muted: #6b6b66 !important;
+  --text-light: #9e9e98 !important;
+
+  --card-bg: #ffffff !important;
+  --control-bg: #ffffff !important;
+  --control-bg-on-gray: #ffffff !important;
+  --modal-bg: #ffffff !important;
+
+  /* Borders & Hairlines */
+  --border-color: #e5e5df !important;
+  --subtle-border-color: #f0f0ea !important;
+  --dark-border-color: #d8d8d0 !important;
+
+  /* Primary Accent: Cursor Orange (One CTA per screen) */
+  --primary-color: #e3441a !important;
+  --primary: #e3441a !important;
+  --primary-hover: #cf3a13 !important;
+
+  /* Semantic Hues */
+  --error-color: #d93025 !important;
+  --success-color: #0f9d58 !important;
+  --warning-color: #d93025 !important;
+
+  /* Corner Radii: 8px controls, 12px cards/modals, 9999px pills */
+  --border-radius-xs: 4px !important;
+  --border-radius-sm: 4px !important;
+  --border-radius: 8px !important;
+  --border-radius-md: 8px !important;
+  --border-radius-lg: 12px !important;
+  --border-radius-full: 9999px !important;
+  --btn-border-radius: 8px !important;
+  --card-border-radius: 12px !important;
+  --modal-border-radius: 12px !important;
+
+  /* Shadows: Completely eliminated (hairlines only) */
+  --shadow-xs: none !important;
+  --shadow-sm: none !important;
+  --shadow-base: none !important;
+  --shadow-md: none !important;
+  --shadow-lg: none !important;
+  --shadow-xl: none !important;
+  --shadow-2xl: none !important;
+  --card-shadow: none !important;
+  --btn-shadow: none !important;
+  --modal-shadow: none !important;
+  --dropdown-shadow: none !important;
+}
+
+/* 3. Surface & Layout Refinements */
+body {
+  background-color: #f7f7f4 !important;
+  color: #1a1a19 !important;
+  -webkit-font-smoothing: antialiased;
+}
+
+.layout-main-section,
+.page-container,
+.main-section {
+  background-color: transparent !important;
+}
+
+.desk-page,
+.standard-filter-section,
+.form-section,
+.layout-side-section {
+  background-color: transparent !important;
+}
+
+/* Cards & Modals: 12px radius, hairline border, no shadow */
+.card,
+.desk-card,
+.modal-content,
+.form-page,
+.form-layout,
+.workspace-sidebar,
+.widget-group,
+.dashboard-widget-box {
+  box-shadow: none !important;
+  border: 1px solid #e5e5df !important;
+  border-radius: 12px !important;
+}
+
+.modal-content {
+  border-radius: 12px !important;
+}
+
+/* 4. Controls: 8px radius, clean borders */
+.form-control,
+.input-with-feedback,
+.custom-actions,
+.btn {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.form-control:focus {
+  border-color: #1a1a19 !important;
+  box-shadow: 0 0 0 1px #1a1a19 !important;
+}
+
+/* Buttons */
+.btn-primary {
+  background-color: #e3441a !important;
+  border-color: #e3441a !important;
+  color: #ffffff !important;
+  font-weight: 500 !important;
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+  background-color: #cf3a13 !important;
+  border-color: #cf3a13 !important;
+}
+
+.btn-default,
+.btn-secondary {
+  background-color: #ffffff !important;
+  border: 1px solid #e5e5df !important;
+  color: #1a1a19 !important;
+}
+
+.btn-default:hover,
+.btn-secondary:hover {
+  background-color: #f0f0ea !important;
+  border-color: #d8d8d0 !important;
+}
+
+/* 5. Monospace font for document numbers and codes */
+.indicator-pill,
+.badge {
+  border-radius: 9999px !important;
+}
+
+.ellipsis[title*="SO-"],
+.ellipsis[title*="WO-"],
+.ellipsis[title*="ACS-"],
+.ellipsis[title*="MAT-"],
+.ellipsis[title*="ITEM-"],
+.data-row .list-row-col:first-child .ellipsis {
+  font-family: var(--font-mono) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 6. Navbar styling: clean, warm floor */
+.navbar {
+  background-color: #ffffff !important;
+  border-bottom: 1px solid #e5e5df !important;
+  box-shadow: none !important;
+}
+
+.navbar .navbar-brand {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}

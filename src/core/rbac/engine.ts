@@ -61,6 +61,7 @@ const READ_ONLY_PERMISSIONS: ReadonlySet<PermissionKey> = new Set<PermissionKey>
   'pm.report.read',
   'pm.commissioning.read',
   'pm.template.read',
+  'erp.access',
 ]);
 
 /** True when every grant is a pure read, e.g. the Sales Head. Such users cannot post or change anything. */

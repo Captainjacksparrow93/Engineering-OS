@@ -1,0 +1,44 @@
+[
+  {
+    "doctype": "Custom Field",
+    "name": "Sales Order-custom_wo_number",
+    "dt": "Sales Order",
+    "fieldname": "custom_wo_number",
+    "label": "WO Number",
+    "fieldtype": "Data",
+    "insert_after": "customer",
+    "allow_on_submit": 0
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Sales Order-custom_project_code",
+    "dt": "Sales Order",
+    "fieldname": "custom_project_code",
+    "label": "Project Code",
+    "fieldtype": "Data",
+    "insert_after": "custom_wo_number",
+    "read_only": 1,
+    "allow_on_submit": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Sales Order-custom_project_link",
+    "dt": "Sales Order",
+    "fieldname": "custom_project_link",
+    "label": "Project Link",
+    "fieldtype": "Data",
+    "insert_after": "custom_project_code",
+    "read_only": 1,
+    "allow_on_submit": 1
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Customer-custom_acs_reference",
+    "dt": "Customer",
+    "fieldname": "custom_acs_reference",
+    "label": "ACS Reference",
+    "fieldtype": "Data",
+    "insert_after": "customer_name",
+    "allow_on_submit": 0
+  }
+]

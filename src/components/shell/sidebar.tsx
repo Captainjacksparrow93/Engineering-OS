@@ -103,6 +103,12 @@ const Icons = {
       <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
     </svg>
   ),
+  ERP: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18" />
+      <path d="m19 9-5 5-4-4-3 3" />
+    </svg>
+  ),
 };
 
 const WORKSPACE_NAV: NavItem[] = [
@@ -117,6 +123,7 @@ const WORKSPACE_NAV: NavItem[] = [
 const MANAGEMENT_NAV: NavItem[] = [
   { label: 'Projects', href: '/pm/projects', requires: 'pm.project.read', icon: Icons.Projects },
   { label: 'Clients', href: '/pm/clients', requires: 'pm.project.read', icon: Icons.Projects },
+  { label: 'ERP', href: '/erp', requires: 'erp.access', icon: Icons.ERP },
   { label: 'Site Commissioning', href: '/pm/commissioning', requires: 'pm.commissioning.read', icon: Icons.Commissioning },
   { label: 'Team load', href: '/pm/resources', requires: 'pm.resource.read', icon: Icons.Resources },
 ];

@@ -47,6 +47,9 @@ services:
       PORT: '3000'
       HOSTNAME: '0.0.0.0'
       SEED_PASSWORD: ${SEED_PASSWORD:?set SEED_PASSWORD in .env}
+      ERPNEXT_PUBLIC_URL: ${ERPNEXT_PUBLIC_URL:-}
+      ERPNEXT_URL: ${ERPNEXT_URL:-}
+      ERP_SSO_SECRET: ${ERP_SSO_SECRET:-}
     networks:
       - engos_internal_net # Talks to private PostgreSQL DB
       - n8n_default       # Joins central Traefik network for automated HTTPS

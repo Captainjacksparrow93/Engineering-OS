@@ -1,0 +1,22 @@
+{
+  "secret": "secret-key-for-testing-acs-erp-sso-at-least-32-chars",
+  "payload": {
+    "v": 1,
+    "act": "login",
+    "email": "director@acsengitech.com",
+    "name": "Jane Director",
+    "roles": [
+      "System Manager",
+      "Sales Manager",
+      "Sales User",
+      "Purchase Manager",
+      "Stock Manager",
+      "Accounts Manager",
+      "Item Manager"
+    ],
+    "iat": 1700000000,
+    "exp": 1700000030,
+    "nonce": "0123456789abcdef0123456789abcdef"
+  },
+  "pass": "eyJ2IjoxLCJhY3QiOiJsb2dpbiIsImVtYWlsIjoiZGlyZWN0b3JAYWNzZW5naXRlY2guY29tIiwibmFtZSI6IkphbmUgRGlyZWN0b3IiLCJyb2xlcyI6WyJTeXN0ZW0gTWFuYWdlciIsIlNhbGVzIE1hbmFnZXIiLCJTYWxlcyBVc2VyIiwiUHVyY2hhc2UgTWFuYWdlciIsIlN0b2NrIE1hbmFnZXIiLCJBY2NvdW50cyBNYW5hZ2VyIiwiSXRlbSBNYW5hZ2VyIl0sImlhdCI6MTcwMDAwMDAwMCwiZXhwIjoxNzAwMDAwMDMwLCJub25jZSI6IjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVmIn0.XaghwpQ-xggJ2bvEde4VvMawfBI_5nkwpTe6Seuf6AE"
+}
