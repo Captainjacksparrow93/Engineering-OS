@@ -292,5 +292,40 @@ Defined in `overrides/compose.erp-phase0-trim.yaml`:
 <commands, file names, .env keys (not values), memory numbers, payloads, gate results>
 
 ## Review (Claude)
-<verdict>
+**Part A review, 2026-10-01, commit `3263fbf`. Verdict: part A accepted; gate 1 passed.**
+
+**Verified on the PC by Claude:**
+- `frappe/erpnext:v16.37.0`; all 8 containers up 33 min, `db` healthy; `/api/method/ping` → `pong`.
+- `frontend` publishes **only** `127.0.0.1:8080`, unreachable from the LAN address.
+- `HostConfig.Memory` caps sum to exactly **2,368 MiB**.
+- The commit touches only the plan and the index: no secrets, no `erpnext-local` files.
+
+**Accepted:**
+- `frappe_docker` v3.2.2 production compose and overrides plus a trim override (one worker for all queues, gunicorn 1×2, `innodb_buffer_pool_size` 256M, Redis maxmemory).
+- Minimal setup through the setup API: Asia/Kolkata, `#,##,###.##`, sign-up disabled.
+- Items `PLC`/`SCADA`/`HMI` (= checklist template codes).
+- Custom fields: `custom_wo_number` (not unique), `custom_project_code` / `custom_project_link` (read-only, allow on submit), `custom_acs_reference`.
+- API user with `Sales User` only.
+- Proven:
+  - create, list and read Customer;
+  - create and submit a Sales Order;
+  - write the link fields on a submitted order;
+  - an order with no rate is accepted (`net_total` 0);
+  - cancel and amend keeps the WO and sets `amended_from`;
+  - the "waiting for a project" filter returns exactly the open, unlinked orders.
+- Memory: rest 802 MiB, peak 881 MiB (API load plus 5 min of desk browsing), caps 2,368 MiB, 0 out-of-memory kills.
+
+**Carry into later plans:**
+- **(014) WO format:** ERPNext accepted `WO-4001`, but PM's WO is digits only (`^\d+$`, globally unique in `pm_projects`). The New project form must refuse an order whose WO isn't digits, with a message naming the order. Plan 013's `acs_erp` app should also validate it in ERPNext on save, so the Sales Head sees the error while typing.
+- **(014) ERPNext errors aren't friendly:** a missing mandatory field returned **500 `TypeError`**, not a validation message. Our ERP client must check inputs before writing, and show a generic "ERP couldn't save this, try again" for 5xx responses. Never show `exc` to users.
+- **(013) Least privilege:** `Sales User` can also create, submit and cancel Sales Orders, which the integration never needs with the pull design (only the 015 backfill creates orders). Consider a custom "EngOS Integration" role (read Customer, Item and Sales Order; write Customer; write the link fields) when building `acs_erp`.
+- **(014) Project link:** store an absolute URL to our project page in `custom_project_link`, so ERPNext users can open it.
+- **(B or later) Fiscal year:** only FY 2026-27 exists. Before 1 April 2027, check that ERPNext creates FY 2027-28 by itself, or add it.
+- **Desk speed:** gunicorn has 1 worker and 2 threads. Fine for about 5 users; if the desk feels slow, raise it to 2 workers (still within the 768 MiB cap).
+- Antigravity could not use the sequential-thinking tool (noted in its implementation notes).
+
+**Part B, gate 2 (Claude, read-only):**
+- Sample 1, 2026-10-01 17:40 IST: `available` 5,070 MiB → 5,070 − 2,368 (ERPNext caps) = **2,702 MiB ≥ 1,536**. Pass so far.
+- Samples 2 and 3 still to take (a morning and another afternoon).
+- Risk outside this project: several neighbours are uncapped (`n8n-n8n-1` 657 MiB, `pcpt-crawler` 591 MiB, `quote-builder`, `supplychain_app`, `sm_posting_app`, `n8n-traefik-1`). Engineering OS and ERPNext are each capped, so they can't starve each other, but an uncapped neighbour can still squeeze the whole box. Capping them is the user's call (other projects).
 
