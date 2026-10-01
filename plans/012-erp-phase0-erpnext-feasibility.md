@@ -92,8 +92,7 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
      - Also test one order with **no rate** (order value is optional): does ERPNext accept a zero or blank rate, and with what warning?
      - Then **cancel and amend** it: confirm the amended order (`…-1`) keeps the WO Number and has `amended_from` set.
   6. Record the **minimum mandatory fields** for Customer and Sales Order and one real **error response** (a missing field) as JSON in the notes. Plans 013–014 build on these.
-  7. **List the orders that are waiting for a project:** submitted, not cancelled, with an empty Project link, filtered by API (for example `filters=[["docstatus","=",1],["project_link","is","not set"]]`). The New project form uses this list, if the pull design below is confirmed.
-     - (Only if the user keeps "create the project automatically": also prove a Webhook on `on_submit`, and record that Frappe webhooks have no durable retry.)
+  7. **List the orders that are waiting for a project:** submitted, not cancelled, with an empty Project link, filtered by API (for example `filters=[["docstatus","=",1],["project_link","is","not set"]]`). The New project form uses this list (pull design, decided).
 - [ ] **5. Measure (gate 1).**
   - `docker stats` for every ERPNext container: at rest after 10 minutes, and peak while creating 50 customers and 50 submitted sales orders via the API.
   - Also measure while clicking through ERPNext's desk for 5 minutes (Selling workspace, Sales Order list and form, Customer list), because people will use ERPNext's own screens.
@@ -135,13 +134,13 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
 6. Time zone, number format and sign-up setting added.
 7. Order without a rate tested.
 
-**Integration design, waiting for the user (affects plans 014–015):**
-- **A. Pull instead of push.** "A confirmed order creates the project automatically" conflicts with "New project picks up the order". An order has no PM, engineers or start date, so an auto-created project would be half-finished. Frappe webhooks are also fire-and-forget, and every deploy restarts our app for 20–30 s, so an order confirmed during a deploy would silently never become a project. **Proposal:** the New project form starts by picking a confirmed order that has no project yet (pulled live from ERPNext). It prefills client, WO, panels and dates, and on save writes the project code back to the order. No webhook, nothing to lose. The "orders waiting for a project" list is the to-do.
+**Integration design: decided by the user 2026-10-01, all as proposed (recorded in `CLAUDE.md`; affects plans 014–015):**
+- **A. Pull instead of push.** "A confirmed order creates the project automatically" conflicts with "New project picks up the order". An order has no PM, engineers or start date, so an auto-created project would be half-finished. Frappe webhooks are also fire-and-forget, and every deploy restarts our app for 20–30 s, so an order confirmed during a deploy would silently never become a project. **Decided:** the New project form starts by picking a confirmed order that has no project yet (pulled live from ERPNext). It prefills client, WO, panels and dates, and on save writes the project code back to the order. No webhook, nothing to lose. The "orders waiting for a project" list is the to-do.
 - **B. Changes to an order after the project exists.**
-  - Proposed: client PO, dates and client name update PM automatically.
+  - Decided: client PO, dates and client name update PM automatically.
   - Added panels → appended to the project.
   - Removed panels and cancelled orders → only flagged ("Order changed: review") for a Director, never deleting work.
-- **C. Client reference numbers.** Customers created in ERPNext have no `ACS-0001` ref, but our project codes are built from it. Proposed: our app assigns the next ref the first time a customer is used and writes it back to the Customer's "ACS reference" field.
+- **C. Client reference numbers.** Customers created in ERPNext have no `ACS-0001` ref, but our project codes are built from it. Decided: our app assigns the next ref the first time a customer is used and writes it back to the Customer's "ACS reference" field.
 
 **Also flagged:**
 - **Single sign-on (plan 013):**
