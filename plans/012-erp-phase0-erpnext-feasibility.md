@@ -1,7 +1,7 @@
 # 012 — ERP Phase 0: ERPNext running, measured, reachable by API
 
 **Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
-**Author:** Claude · **Runs it:** Claude (local and VPS steps; every VPS change only after the user approves it) · **Implementer:** none (no app code in this phase)
+**Author:** Claude · **Part A (steps 1–5, local on the owner's PC):** Antigravity · **Part B (steps 6–9, VPS):** Claude, each change only after the user approves it
 **Branch:** `erp`
 
 ## Goal
@@ -51,15 +51,24 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
 - Local experiments live **outside** the repo (e.g. `C:\Users\Dhruv-Home\erpnext-local`). Nothing ERPNext-related is added to this repo in phase 0 except this plan and its notes.
 - **Stop rule:** if a gate below fails, stop, write down the numbers, and report to the user before touching the VPS.
 
-## Tools & skills
+## Tools & skills (Antigravity: part A)
+- **Before you start:**
+  - `git checkout erp`.
+  - Read `AGENTS.md` → "ERP work".
+  - Work folder for ERPNext: `C:\Users\Dhruv-Home\erpnext-local` (outside the repo).
+  - Docker Desktop must be running.
+- **What you commit:** only edits to **this plan file**: tick the boxes and fill **Implementation notes** with commands, `.env` key **names**, settings, JSON payloads (without secrets) and memory numbers. **No files from `erpnext-local` go into the repo**, and there's no app code in this phase.
+- **Docs to follow:** the official `frappe_docker` repository and docs (production compose with overrides) and the Frappe REST API docs (token auth `Authorization: token <key>:<secret>`, `/api/resource/<DocType>`). Record the URLs you used.
+- **Memory numbers:** `docker stats --no-stream` (paste the table). Note Docker Desktop's own memory limit (Settings → Resources), because it caps what the containers can use.
 - **No app code changes**, so the code-review-graph and Token Savior have nothing to check this phase. Blast radius on Engineering OS: none (separate compose project, no shared files). Plan 013 runs the graph on the code it touches.
-- **sequential-thinking:** required for step 5 (the memory budget and the go/no-go call).
+- **sequential-thinking:** required for step 3 (choosing the trims) and step 5 (the memory gate and the go/no-go call).
 - **Skills:** `ponytail` (full). Use stock `frappe_docker` and change only what the memory budget needs; no custom image in this phase (plan 013 builds the `acs_erp` image).
-- **Tests:** none for the app here (nothing in `src/` changes). The proof is the recorded API calls and memory numbers below.
+- **Tests:** no app tests (nothing in `src/` changes). Still run `npm run typecheck && npm test` once at the end to confirm the repo is untouched, and paste the counts. The proof is the recorded API calls and memory numbers.
+- **When done with step 5:** set Status to `IN PROGRESS (part A done)`, commit locally on `erp` (`plan 012: part A ...`), leave the tree clean, and stop. Don't push.
 
 ## Steps
 
-### A. Local (Claude, on the owner's PC with Docker Desktop)
+### A. Local (Antigravity, on the owner's PC with Docker Desktop; no VPS access)
 - [ ] **1. Run ERPNext locally the production way.**
   - Clone `frappe_docker` at a pinned tag outside the repo.
   - Use the production compose (`compose.yaml` + MariaDB + Redis overrides + no-proxy) with `ERPNEXT_VERSION=v16.37.0`.
@@ -99,7 +108,7 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
   - Gate: **total peak ≤ 2.5 GB** with the caps in place, and no container killed for running out of memory.
   - If it fails, try the trims again once; if it still fails, stop and report.
 
-### B. VPS (Claude, each step only after the user approves it)
+### B. VPS (Claude only, each step after the user approves it). Antigravity: stop after step 5
 - [ ] **6. Check headroom (gate 2, read-only).**
   - Record `free -m` and `docker stats --no-stream` at 3 different times of a working day.
   - Gate: available memory minus the **sum of the ERPNext `mem_limit` caps** (the most ERPNext can ever take, not the measured peak) must leave **≥ 1.5 GB**.

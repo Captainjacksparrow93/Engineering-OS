@@ -51,7 +51,7 @@ Real employees of ACS Engitech use it every day at the VPS (`72.62.248.38`, `/ro
 - `ux-writing` for UI text and `impeccable` for UI/visual changes (see Coding Standards).
 
 ## Two-Agent Workflow (you = implementer)
-- Claude (Claude Desktop) writes plans in `plans/NNN-*.md`. You (Antigravity or another implementer AI) implement them. Parked modules: ERP, HRMS and Gate. Do not start them.
+- Claude (Claude Desktop) writes plans in `plans/NNN-*.md`. You (Antigravity or another implementer AI) implement them. Parked modules: HRMS and Gate. Do not start them. **ERP is active** (plans 012 onward), under the rules in "ERP work" below.
 - Never touch `plans/done/` (verified plans). Do not write or restructure plans. You may only tick checkboxes, change **Status**, and fill "Implementation notes".
 - Pick plans in order from `plans/INDEX.md`. Update the Status there as well as in the plan file.
 - Set Status to IN PROGRESS when starting, DONE when finished. Follow the plan; if it's wrong, stop and note why in "Implementation notes" instead of improvising.
@@ -67,4 +67,13 @@ Real employees of ACS Engitech use it every day at the VPS (`72.62.248.38`, `/ro
   - Setup: `npm install`, then `docker compose -f docker-compose.local.yml up -d` for Postgres, then `npx prisma migrate dev`.
   - Start: `npm run dev`
   - Tests: `npm run typecheck && npm test && npm run build`, plus `npm run test:int`
-- Other Docker use ONLY when the user explicitly says so.
+- Other Docker use ONLY when the user explicitly says so, or when an ERP plan step tells you to run the local ERPNext stack.
+
+## ERP work (branch `erp`)
+ERPNext (v16.37.0) runs as a **separate** set of containers next to Engineering OS, never inside `engos_app`. People use ERPNext's own screens (restyled by our custom Frappe app `acs_erp`) and reach them from our app with one-click sign-in. Our app talks to ERPNext over its REST API. The full decisions are in `CLAUDE.md` ("ERP").
+- **Branch:** every ERP commit goes on `erp` (`git checkout erp` before you start). Never merge `erp` into `main`, never merge `main` into `erp`, and never push; the user and Claude do that. A merge to `main` deploys to production.
+- **Local ERPNext only:** run ERPNext on this PC with the official `frappe_docker` (pinned tag, `ERPNEXT_VERSION=v16.37.0`) in a folder **outside the repo**: `C:\Users\Dhruv-Home\erpnext-local`. Bind its port to `127.0.0.1` only. Don't use `pwd.yml` (evaluation only) unless the plan says so.
+- **Never touch the VPS** (no SSH, nothing on `72.62.248.38`). VPS steps in ERP plans belong to Claude.
+- **Secrets:** generate ERPNext passwords and API keys yourself. Keep them only in `C:\Users\Dhruv-Home\erpnext-local\.env`, never in the repo, plan notes, commits or chat. In notes, write the `.env` **key names**, never values.
+- **Follow the official docs** for `frappe_docker` and the Frappe REST API (current versions). If a plan step doesn't match what ERPNext actually does, stop and write what you found in Implementation notes instead of improvising.
+- **Don't stop the live-app pieces** you share the PC with: leave `engos_local_db` / `engos_local_app` running, and never run `docker compose down -v`, `docker system prune` or `docker volume rm`.
