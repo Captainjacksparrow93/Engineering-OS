@@ -188,7 +188,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
 - **Accepted behaviour:** an ERPNext user disabled directly in ERPNext is re-enabled on their next sign-in from our app. Our app is the source of truth for who is active.
 
 **Follow-ups (implementer):**
-- [ ] **F1 (security): never sign in to a privileged or system ERPNext account.**
+- [x] **F1 (security): never sign in to a privileged or system ERPNext account.**
   - `login` signs in **any** existing user whose email matches the pass. Today that includes the integration user `engos-api@acsengitech.com`, and lookups are case-insensitive, so the email `administrator` would reach Administrator. A Director-created Engineering OS user with such an email would become that account.
   - Refuse (plain failure page plus a log entry) when the email isn't a normal address (one `@`, not `administrator` or `guest`), or when the existing ERPNext user holds `Administrator` or `EngOS Integration`, or isn't a `System User`.
   - Put the email check in `passcodec` (plain-Python tested) and the role check in `sso.py`.
@@ -210,3 +210,16 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - Also audit a successful disable (`erp.user_disabled`).
   - Fix the notes: the action isn't `USER_DISABLE_ERPNEXT`.
   - `install.py` re-creates the custom fields and DocPerms that the fixtures already ship (`_ensure_custom_fields`, `_ensure_docperms`). Keep one source (the fixtures) unless there's a reason; if so, write it down.
+- [ ] **F7: role mapping (user decision 2026-10-01).**
+  - **Directors (and Super Admin):** `System Manager` **plus every ERPNext module role**.
+  - **Sales Head:** **every ERPNext module role, without `System Manager`** (they work in every module but can't change ERPNext settings, users or customisation).
+  - "Every module role" = the business roles ERPNext v16 installs for its modules: Selling, Buying, Stock, Accounts, Manufacturing, Quality, Assets, Support/Maintenance, and the master-data roles (e.g. `Sales Manager`, `Sales User`, `Sales Master Manager`, `Purchase Manager`, `Purchase User`, `Purchase Master Manager`, `Stock Manager`, `Stock User`, `Item Manager`, `Accounts Manager`, `Accounts User`, `Manufacturing Manager`, `Manufacturing User`, `Quality Manager`, `Maintenance Manager`, `Maintenance User`). **Check the real list on the local site** and paste it into the notes.
+  - Leave out: `Projects Manager`, `Projects User` (see F8), `Administrator`, `Guest`, `System Manager` for the Sales Head, and any HR roles (HRMS isn't installed).
+  - Update `rolesFor`/the role constants in `sso.ts` and `MANAGED_ROLES` in `sso.py` to match exactly. Update the unit tests (Director has `System Manager`; Sales Head has every module role but not `System Manager`; Engineer has none).
+  - Re-check in the browser: the Sales Head can open Buying/Stock/Accounts/Manufacturing, but not System Settings or User management.
+- [ ] **F8: hide ERPNext's own Projects module (user decision 2026-10-01).** Projects live only in PM. In `acs_erp` (fixtures or `after_install`, idempotent):
+  - hide the **Projects** workspace for everyone;
+  - give no user `Projects Manager`/`Projects User` (they stay out of the managed roles, and the sign-in removes them if present);
+  - remove *create* on the `Project` DocType for every role, `System Manager` included;
+  - hide the `project` link field on Sales Order (and on Quotation, Sales Invoice and Purchase Order if present) with Property Setters, so nobody links an order to an ERPNext Project by mistake.
+  - Check in the browser as a Director: no Projects workspace in the sidebar, no Project field on the Sales Order form, and `/app/project/new` refuses to create one.
