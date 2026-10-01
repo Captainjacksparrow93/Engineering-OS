@@ -115,6 +115,42 @@ everywhere.
 | `.stat` / `.stat-label` / `.stat-value` | KPI tiles |
 | `.code` / `.code-chip` / `.code-block` | Identifiers and payloads |
 
+## ERP screens (`/erp`)
+
+User decision 2026-10-01: ERP pages **match the dashboard exactly**. ERPNext's own UI is never shown, and ERP adds no new tokens, components or colours. Every ERP screen is one of three patterns, built from the same pieces as PM's Clients pages (`src/app/(shell)/pm/clients/`), which are the reference.
+
+**1. Document list** (e.g. Customers, Sales orders)
+- `PageHeader`: title in plural nouns ("Sales orders"), one-line description, and the create action in `actions` as the screen's only `.btn-primary` ("New sales order").
+- `DataTable` in a `.card`. Columns: the document number first in `.code` (e.g. `SO-0042`, WO `8871`), then the client name, then dates (`formatDate`), then the status badge **last**, then amounts right-aligned (when shown).
+- Filters above the table as `.select`/`.input` in one row: status and date range only. No saved views, no column pickers.
+- An `EmptyState` that says what goes here and offers the create action.
+
+**2. Document page** (e.g. `/erp/sales-orders/[id]`)
+- `PageHeader`: the document number as the title (`.code` inside the title is fine), the client as the description, status badge beside the title, and actions on the right. At most one `.btn-primary` (the next step, e.g. "Confirm order"); everything else `.btn-secondary`, and destructive actions `.btn-danger` behind `ConfirmDialog`.
+- Body: a `.card` of key facts as label/value pairs (`.label` + `body` text) in two columns, then a `.card` with a `.table` of lines (panels: type, quantity, delivery date).
+- Links to related records:
+  - **Customer** → `/pm/clients/[id]`.
+  - **Project created from this order** → `/pm/projects/[id]`, shown as the project code chip.
+  - **And back:** the project page shows "From sales order `SO-0042`".
+
+**3. Document form** (create / edit)
+- A `.card` with `form.tsx` primitives: `.label`, `.input`/`.select`, `.hint` under a field when needed, `FormMessage` for server errors, and `SubmitButton` as the primary action.
+- One column on narrow screens, two at `md`+. Line items (panels) are a small editable `.table`: add a row with a `.btn-text`, remove with an icon button.
+- Copy per `ux-writing`: labels are nouns ("Client PO number"), errors say what to fix ("Pick a client"), and nothing names ERPNext.
+
+**Document status → badge** (add to the one status map in `src/components/ui.tsx`; no new colours):
+
+| ERPNext state | Label | Treatment |
+|---|---|---|
+| Draft (`docstatus` 0) | Draft | `badge-neutral` |
+| Submitted, to deliver | Confirmed | `stage-thinking` pill (it is a work stage) |
+| Completed / Closed | Completed | `success` |
+| Cancelled (`docstatus` 2) | Cancelled | `badge-outline` |
+| On hold | On hold | `badge-neutral` |
+| Overdue delivery | Late | `error` |
+
+**When ERPNext can't be reached:** show an `Alert` on the ERP page ("Orders can't be loaded right now. Try again in a few minutes."). Don't show a raw error or a blank table, and never block the rest of the app.
+
 ## Checklist before shipping a UI change
 
 - [ ] No `shadow-*`, no raw hex, no stock palette classes.
