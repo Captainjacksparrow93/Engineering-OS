@@ -38,7 +38,7 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
 ## Deployment shape (answer to "separate or same container?")
 - ERPNext is a **separate deployment on the same VPS**: its own folder (`/root/erpnext-docker`), its own Docker Compose project, its own containers and its own MariaDB.
 - **Nothing goes into `engos_app`**, and our GitHub deploy workflow (plan 010) never touches ERPNext. Engineering OS deploys and ERPNext upgrades are independent.
-- **Private:** ERPNext gets **no public address**.
+- **Private for now:** ERPNext gets **no public address in this phase**. Plan 013 adds its public HTTPS address together with single sign-on and the `acs_erp` theme (user decision 2026-10-01: people use ERPNext's own screens, restyled).
   - Its web container listens only on `127.0.0.1` for this phase's checks.
   - From plan 013 on, it joins a private Docker network that `engos_app` also joins.
   - No Traefik route and no public port.
@@ -86,6 +86,7 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
   7. **Webhook:** configure an ERPNext Webhook on Sales Order `on_submit` that posts to a local listener with a shared-secret header. Confirm it fires and record the payload shape. Plan 014 uses it to create the project.
 - [ ] **5. Measure (gate 1).**
   - `docker stats` for every ERPNext container: at rest after 10 minutes, and peak while creating 50 customers and 50 submitted sales orders via the API.
+  - Also measure while clicking through ERPNext's desk for 5 minutes (Selling workspace, Sales Order list and form, Customer list), because people will use ERPNext's own screens.
   - Gate: **total peak ≤ 2.5 GB** with the caps in place, and no container killed for running out of memory.
   - If it fails, try the trims again once; if it still fails, stop and report.
 

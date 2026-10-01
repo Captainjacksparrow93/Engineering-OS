@@ -115,49 +115,23 @@ everywhere.
 | `.stat` / `.stat-label` / `.stat-value` | KPI tiles |
 | `.code` / `.code-chip` / `.code-block` | Identifiers and payloads |
 
-## ERP screens (`/erp`)
+## ERP (ERPNext, restyled)
 
-User decision 2026-10-01: ERP pages **match the dashboard exactly**. ERPNext's own UI is never shown, and ERP adds no new tokens, components or colours. Every ERP screen is one of three patterns, built from the same pieces as PM's Clients pages (`src/app/(shell)/pm/clients/`), which are the reference.
+User decision 2026-10-01: people use **ERPNext's own screens and dashboards** (all modules), restyled to belong to Engineering OS. The look comes from the custom Frappe app `acs_erp` (CSS only, loaded on ERPNext's desk via the app's `app_include_css` hook). ERPNext's layouts and widgets stay ERPNext's; **the target is "same family", not pixel-identical** (accepted by the user).
 
-**1. Document list** (e.g. Customers, Sales orders)
-- `PageHeader`: title in plural nouns ("Sales orders"), one-line description, and the create action in `actions` as the screen's only `.btn-primary` ("New sales order").
-- `DataTable` in a `.card`. Columns: the document number first in `.code` (e.g. `SO-0042`, WO `8871`), then the client name, then dates (`formatDate`), then the status badge **last**, then amounts right-aligned (when shown).
-- Filters above the table as `.select`/`.input` in one row: status and date range only. No saved views, no column pickers.
-- An `EmptyState` that says what goes here and offers the create action.
+**Map our tokens onto ERPNext's desk** (override Frappe's CSS variables first, and write selectors only where a variable doesn't exist):
+- **Floor:** page background → `canvas` #f7f7f4; cards, forms and list rows → `surface` (white).
+- **Type:** Inter for UI text, page and section titles at weight 400 with negative tracking. JetBrains Mono for document numbers (`SO-…`, WO, item codes) wherever ERPNext renders them as names or IDs. Ship the font files in the app (same files as `src/app/fonts/`), with no Google Fonts.
+- **Depth:** remove shadows (cards, dropdowns, modals use 1px `hairline` borders instead). Radius: 8px for controls, 12px for cards and modals, 9999px for pills.
+- **Orange is scarce:** ERPNext's primary button (the one main action per page) uses `primary`. Every other button is secondary/ink. Links and the active sidebar item use ink weight and `surface-strong`, not orange or blue.
+- **Status colours:** ERPNext indicators map to ours: green → `success`, red → `error`, blue and other neutrals → neutral `surface-strong`/ink. Don't introduce amber; "warning" indicators use the `error` tint, as in our app.
+- **Branding:** our ACS logo and "Engineering OS · ERP" in ERPNext's navbar and on its (Administrator-only) login page. Hide ERPNext's "Help" menu and onboarding banners where config allows.
 
-**2. Document page** (e.g. `/erp/sales-orders/[id]`)
-- `PageHeader`: the document number as the title (`.code` inside the title is fine), the client as the description, status badge beside the title, and actions on the right. At most one `.btn-primary` (the next step, e.g. "Confirm order"); everything else `.btn-secondary`, and destructive actions `.btn-danger` behind `ConfirmDialog`.
-- Body: a `.card` of key facts as label/value pairs (`.label` + `body` text) in two columns, then a `.card` with a `.table` of lines (panels: type, quantity, delivery date).
-- Links to related records:
-  - **Customer** → `/pm/clients/[id]`.
-  - **Project created from this order** → `/pm/projects/[id]`, shown as the project code chip.
-  - **And back:** the project page shows "From sales order `SO-0042`".
+**Getting there from Engineering OS:** an **ERP** item in our sidebar and in the module launcher (registry entry `erp` → live, opening ERPNext's address in a new tab). It signs the user in automatically (see `CLAUDE.md`, "One login"). Don't embed ERPNext in an iframe.
 
-**3. Document form** (create / edit)
-- A `.card` with `form.tsx` primitives: `.label`, `.input`/`.select`, `.hint` under a field when needed, `FormMessage` for server errors, and `SubmitButton` as the primary action.
-- One column on narrow screens, two at `md`+. Line items (panels) are a small editable `.table`: add a row with a `.btn-text`, remove with an icon button.
-- Copy per `ux-writing`: labels are nouns ("Client PO number"), errors say what to fix ("Pick a client"), and nothing names ERPNext.
+**Links between the two:** our project page shows "From sales order `SO-0042`" linking to that order in ERPNext. The order in ERPNext shows the project code with a link back to `/pm/projects/[id]` (a field set by the integration).
 
-**4. ERP dashboard** (`/erp`, the module's landing page; Directors and Sales Head)
-- Same layout and pieces as `src/app/(shell)/dashboard/director-dashboard.tsx`: a row of `Stat` tiles, a "Needs attention" card, then list cards. No charts in v1.
-- **Tiles:** Orders this month · Order value this month (₹, `en-IN` grouping, e.g. ₹12,40,000) · Due this month · Late deliveries (`error` only when > 0) · Active customers.
-- **Needs attention:** drafts older than 3 days; orders with Late panels; confirmed orders whose project failed to create.
-- **Cards:** Recent orders (last 10) · Upcoming deliveries (next 30 days, per panel, linking to the project) · Top clients by value (financial year April–March to date).
-- Orders with no value count as ₹0 and show a "value missing" `badge-outline`, so totals are never silently wrong.
-- Later modules add their own tiles and cards to this page. They don't get separate dashboards.
-
-**Document status → badge** (add to the one status map in `src/components/ui.tsx`; no new colours):
-
-| ERPNext state | Label | Treatment |
-|---|---|---|
-| Draft (`docstatus` 0) | Draft | `badge-neutral` |
-| Submitted, to deliver | Confirmed | `stage-thinking` pill (it is a work stage) |
-| Completed / Closed | Completed | `success` |
-| Cancelled (`docstatus` 2) | Cancelled | `badge-outline` |
-| On hold | On hold | `badge-neutral` |
-| Overdue delivery | Late | `error` |
-
-**When ERPNext can't be reached:** show an `Alert` on the ERP page ("Orders can't be loaded right now. Try again in a few minutes."). Don't show a raw error or a blank table, and never block the rest of the app.
+**Checking it:** before shipping a theme change, screenshot ERPNext's Selling workspace, a Sales Order list, a Sales Order form and a Customer form next to our Director dashboard and Clients page, and check the checklist below where it applies.
 
 ## Checklist before shipping a UI change
 
