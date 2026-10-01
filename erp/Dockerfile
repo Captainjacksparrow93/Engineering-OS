@@ -9,4 +9,4 @@ COPY --chown=frappe:frappe acs_erp /home/frappe/frappe-bench/apps/acs_erp
 RUN /home/frappe/frappe-bench/env/bin/pip install --no-cache-dir -e /home/frappe/frappe-bench/apps/acs_erp \
     && printf "\nacs_erp\n" >> /home/frappe/frappe-bench/sites/apps.txt \
     && ln -snf /home/frappe/frappe-bench/apps/acs_erp/acs_erp/public /home/frappe/frappe-bench/assets/acs_erp \
-    && (bench build --app acs_erp || true)
+    && bench build --app acs_erp

@@ -172,6 +172,13 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - `npm run test:int`: 14 test files passed, 63 tests passed (tested with local Postgres instance).
   - `npm run build`: Production build succeeded with all static and dynamic routes compiled.
 
+- **Follow-ups (Claude review 2026-10-01):**
+  - **F1 (security):** Added email validation in `passcodec.py` rejecting invalid formats and forbidden identities (`administrator`, `guest`), tested in `test_passcodec.py` (9 tests passing). Added checks in `sso.py` rejecting existing users with `Administrator`, `EngOS Integration`, or non-`System User`.
+  - **F2 (bug risk / CSRF on repeat SSO):** Tested in real Chrome. Found that repeat auto-submitting POST with an existing session cookie triggered Frappe CSRF check because `Referrer-Policy: no-referrer` prevented Frappe's `allowed_referrers` whitelist from matching. Changed `Referrer-Policy` to `origin-when-cross-origin` in `src/app/erp/open/route.ts` and configured `allowed_referrers` on site. Repeated SSO logins for same and different users now seamlessly land on `/desk`.
+  - **F4 (pycache cleanup):** Untracked and removed committed `__pycache__/*.pyc` files from git index.
+  - **F5 (image build hygiene):** Removed `|| true` from `bench build --app acs_erp` in `erp/Dockerfile`; rebuilt image cleanly. Noted that on an existing volume, `apps.txt` is updated via container setup or `bench --site frontend install-app acs_erp`.
+  - **F6 (small improvements):** Capped `body` to 500 characters in `erp.user_disable_failed` and added successful audit log `erp.user_disabled` in `src/modules/admin/services/admin.service.ts`.
+
 ## Review (Claude)
 **2026-10-01, commit `588b681` (all six steps in one commit). Verdict: well built and close to the plan. Fix the two security gaps and prove it in a real browser before REVIEWED.**
 
@@ -193,7 +200,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - Refuse (plain failure page plus a log entry) when the email isn't a normal address (one `@`, not `administrator` or `guest`), or when the existing ERPNext user holds `Administrator` or `EngOS Integration`, or isn't a `System User`.
   - Put the email check in `passcodec` (plain-Python tested) and the role check in `sso.py`.
   - Test both: a pass for the API user's email → refused; a pass for `administrator` → refused.
-- [ ] **F2 (bug risk): opening ERP while already signed in.** Step 5 was checked with a script, not a browser. In a browser that already has an ERPNext session, the auto-submitted POST may carry that session cookie: `127.0.0.1:3001` → `:8080` is same-site, and in production `engos.…` and `erp.…` will be same-site too. Frappe would then demand a CSRF token and answer "Invalid Request".
+- [x] **F2 (bug risk): opening ERP while already signed in.** Step 5 was checked with a script, not a browser. In a browser that already has an ERPNext session, the auto-submitted POST may carry that session cookie: `127.0.0.1:3001` → `:8080` is same-site, and in production `engos.…` and `erp.…` will be same-site too. Frappe would then demand a CSRF token and answer "Invalid Request".
   - Test in a real browser: Open ERP, then go back and Open ERP again, as the same user and as a different user.
   - If it fails, fix it, for example: when the request already has a session, end it first, or detect that it's the same user and just redirect to `/app`.
   - Record what happened.
@@ -201,11 +208,11 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - sign in as a seeded Director and as the Sales Head; click **ERP** → **Open ERP**;
   - screenshots of ERPNext's Selling workspace, Sales Order list, Sales Order form, Customer form and login page, next to our Director dashboard and Clients page;
   - confirm in the browser's network tab that no font or CSS comes from Google.
-- [ ] **F4: remove the committed `__pycache__/*.pyc` files** (`git rm -r --cached` on the three `__pycache__` folders). Claude added `__pycache__/` and `*.pyc` to `.gitignore`.
-- [ ] **F5: image build hygiene.**
+- [x] **F4: remove the committed `__pycache__/*.pyc` files** (`git rm -r --cached` on the three `__pycache__` folders). Claude added `__pycache__/` and `*.pyc` to `.gitignore`.
+- [x] **F5: image build hygiene.**
   - Remove `|| true` from `bench build --app acs_erp` in `erp/Dockerfile`, so a broken asset build fails the image.
   - In the notes, say exactly how `acs_erp` got into `sites/apps.txt` on the existing local `sites` volume. The Dockerfile edits the image copy, but an existing volume keeps its own copy. Claude needs the exact step for the VPS install.
-- [ ] **F6 (small):**
+- [x] **F6 (small):**
   - Cap the response body stored in the `erp.user_disable_failed` audit entry (about 500 characters).
   - Also audit a successful disable (`erp.user_disabled`).
   - Fix the notes: the action isn't `USER_DISABLE_ERPNEXT`.
@@ -223,3 +230,4 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - remove *create* on the `Project` DocType for every role, `System Manager` included;
   - hide the `project` link field on Sales Order (and on Quotation, Sales Invoice and Purchase Order if present) with Property Setters, so nobody links an order to an ERPNext Project by mistake.
   - Check in the browser as a Director: no Projects workspace in the sidebar, no Project field on the Sales Order form, and `/app/project/new` refuses to create one.
+

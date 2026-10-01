@@ -80,8 +80,19 @@ def login(token: str = None):
         user_doc.insert(ignore_permissions=True)
     else:
         user_doc = frappe.get_doc("User", email)
+        # Security check: never allow SSO into privileged system/integration accounts or non-System User
+        existing_roles = {r.role for r in user_doc.roles}
+        if "Administrator" in existing_roles or "EngOS Integration" in existing_roles:
+            frappe.logger("acs_erp").error(f"SSO refused for privileged/integration user: {email}")
+            return _fail_login()
+
+        if user_doc.user_type != "System User":
+            frappe.logger("acs_erp").error(f"SSO refused for non-System User: {email} (type: {user_doc.user_type})")
+            return _fail_login()
+
         if not user_doc.enabled:
             user_doc.enabled = 1
+
 
     # Map roles: strictly within MANAGED_ROLES, never Administrator or Guest
     pass_roles = set(payload.get("roles", []))

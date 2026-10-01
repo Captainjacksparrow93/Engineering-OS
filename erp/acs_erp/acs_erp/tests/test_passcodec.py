@@ -79,6 +79,15 @@ class TestPassCodec(unittest.TestCase):
             with self.assertRaises(PassError):
                 decode_and_verify(bad, self.secret, expected_act='login', now=1700000010)
 
+    def test_forbidden_emails_rejected(self):
+        for forbidden in ['administrator', 'Administrator', 'ADMINISTRATOR', 'guest', 'Guest', 'noatsign', 'two@@atsigns.com', '@nodomain.com', 'nouser@']:
+            payload = dict(self.payload)
+            payload['email'] = forbidden
+            token = encode_pass(payload, self.secret)
+            with self.assertRaises(PassError):
+                decode_and_verify(token, self.secret, expected_act='login', now=1700000010)
+
 
 if __name__ == '__main__':
     unittest.main()
+

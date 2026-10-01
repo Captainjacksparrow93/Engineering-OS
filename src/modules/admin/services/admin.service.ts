@@ -187,7 +187,16 @@ export async function setUserStatus(principal: Principal, userId: string, status
             action: 'erp.user_disable_failed',
             entityType: 'User',
             entityId: userId,
-            diff: { status: res.status, statusText: res.statusText, body: text },
+            diff: { status: res.status, statusText: res.statusText, body: text.slice(0, 500) },
+          });
+        } else {
+          await audit({
+            actorId: principal.userId,
+            module: 'admin',
+            action: 'erp.user_disabled',
+            entityType: 'User',
+            entityId: userId,
+            diff: { email: user.email, status: res.status },
           });
         }
       } catch (err) {

@@ -91,6 +91,18 @@ def decode_and_verify(
         if required not in payload:
             raise PassError(f"Missing required field in payload: {required}")
 
+    email = payload.get("email")
+    if not isinstance(email, str) or not email.strip():
+        raise PassError("Invalid or missing email.")
+
+    clean_email = email.strip().lower()
+    if clean_email in ("administrator", "guest"):
+        raise PassError(f"Email '{clean_email}' is not allowed for SSO.")
+
+    at_parts = clean_email.split('@')
+    if len(at_parts) != 2 or not at_parts[0] or not at_parts[1]:
+        raise PassError(f"Email '{clean_email}' is not a valid email address.")
+
     current_time = now if now is not None else int(time.time())
     exp = payload.get("exp", 0)
     iat = payload.get("iat", 0)
@@ -102,3 +114,4 @@ def decode_and_verify(
         raise PassError("Pass issued in the future.")
 
     return payload
+
