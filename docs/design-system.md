@@ -138,6 +138,14 @@ User decision 2026-10-01: ERP pages **match the dashboard exactly**. ERPNext's o
 - One column on narrow screens, two at `md`+. Line items (panels) are a small editable `.table`: add a row with a `.btn-text`, remove with an icon button.
 - Copy per `ux-writing`: labels are nouns ("Client PO number"), errors say what to fix ("Pick a client"), and nothing names ERPNext.
 
+**4. ERP dashboard** (`/erp`, the module's landing page; Directors and Sales Head)
+- Same layout and pieces as `src/app/(shell)/dashboard/director-dashboard.tsx`: a row of `Stat` tiles, a "Needs attention" card, then list cards. No charts in v1.
+- **Tiles:** Orders this month · Order value this month (₹, `en-IN` grouping, e.g. ₹12,40,000) · Due this month · Late deliveries (`error` only when > 0) · Active customers.
+- **Needs attention:** drafts older than 3 days; orders with Late panels; confirmed orders whose project failed to create.
+- **Cards:** Recent orders (last 10) · Upcoming deliveries (next 30 days, per panel, linking to the project) · Top clients by value (financial year April–March to date).
+- Orders with no value count as ₹0 and show a "value missing" `badge-outline`, so totals are never silently wrong.
+- Later modules add their own tiles and cards to this page. They don't get separate dashboards.
+
 **Document status → badge** (add to the one status map in `src/components/ui.tsx`; no new colours):
 
 | ERPNext state | Label | Treatment |
