@@ -54,7 +54,7 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
 ## Tools & skills
 - **No app code changes**, so the code-review-graph and Token Savior have nothing to check this phase. Blast radius on Engineering OS: none (separate compose project, no shared files). Plan 013 runs the graph on the code it touches.
 - **sequential-thinking:** required for step 5 (the memory budget and the go/no-go call).
-- **Skills:** `ponytail` (full). Use stock `frappe_docker` and change only what the memory budget needs; no custom images.
+- **Skills:** `ponytail` (full). Use stock `frappe_docker` and change only what the memory budget needs; no custom image in this phase (plan 013 builds the `acs_erp` image).
 - **Tests:** none for the app here (nothing in `src/` changes). The proof is the recorded API calls and memory numbers below.
 
 ## Steps
@@ -62,11 +62,15 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
 ### A. Local (Claude, on the owner's PC with Docker Desktop)
 - [ ] **1. Run ERPNext locally the production way.**
   - Clone `frappe_docker` at a pinned tag outside the repo.
-  - Use the production compose (`compose.yaml` + MariaDB + Redis overrides + no-proxy) with `ERPNEXT_VERSION=v16.37.0`, published on `127.0.0.1:8080`.
+  - Use the production compose (`compose.yaml` + MariaDB + Redis overrides + no-proxy) with `ERPNEXT_VERSION=v16.37.0`.
+  - **Bind the published port to `127.0.0.1:8080` explicitly.** The no-proxy override publishes on all interfaces by default, and Docker's published ports bypass host firewalls.
+  - The Administrator and MariaDB root passwords are **generated**, never the quick-start defaults (`admin`).
   - Create one site with ERPNext installed.
   - Record the exact files, `.env` keys (not values) and commands used. Plan 013 and the VPS step reuse them.
 - [ ] **2. Minimal setup, no setup wizard UI:**
   - Company "ACS Engitech" (abbr `ACS`), country India, currency INR, financial year 1 April–31 March, standard chart of accounts, no GSTIN.
+  - Time zone `Asia/Kolkata`, Indian number format (`#,##,###.##`), date format matching ours.
+  - **Sign-up disabled** (no self-registration on the login page).
   - Use the setup API or `bench` where possible, and record how.
   - Disable what we don't use at startup (e.g. email polling) only if it measurably saves memory.
 - [ ] **3. Trim to the memory budget:**
@@ -77,13 +81,19 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
   - A `mem_limit` on every service.
   - Record each setting and why.
 - [ ] **4. Prove the API (`curl` or a throwaway script outside the repo):**
-  1. Create an API user `engos-api` with only the roles needed for Customer, Item and Sales Order (start from "Sales User"/"Sales Manager"; **not** System Manager unless something fails, and record what). Generate its API key and secret.
+  1. **Setup work (Items, custom fields) is done as Administrator, not with the API user.** Then create an API user `engos-api` with only what the integration needs: read Customer, Item and Sales Order, create/update Customer, and update the project-link fields on Sales Order (start from "Sales User"; **not** System Manager unless something fails, and record what). Generate its API key and secret.
   2. Create a **Customer**, list Customers, read one back.
   3. Create the panel **Items**: PLC Panel, SCADA Panel, HMI Panel (codes matching our checklist template codes), non-stock, UOM Nos.
-  4. Add a custom field **WO Number** on Sales Order (Data, unique if ERPNext allows).
-  5. Create a **Sales Order**: customer, `po_no`, WO number, `delivery_date`, and two item rows with their own `delivery_date`, plus an optional rate. Then **submit** it (`docstatus` 1) and read it back.
+  4. Add custom fields:
+     - **WO Number** on Sales Order (Data, **not unique**: ERPNext's cancel-and-amend creates a new order with the same WO, which a unique field would block; our app enforces one active order per WO).
+     - **Project code** and **Project link** on Sales Order (read-only in ERPNext, written by our app).
+     - **ACS reference** on Customer (`ACS-0001` style, written by our app).
+  5. Create a **Sales Order**: customer, `po_no`, WO number, `delivery_date`, and two item rows with their own `delivery_date`. Then **submit** it (`docstatus` 1) and read it back.
+     - Also test one order with **no rate** (order value is optional): does ERPNext accept a zero or blank rate, and with what warning?
+     - Then **cancel and amend** it: confirm the amended order (`…-1`) keeps the WO Number and has `amended_from` set.
   6. Record the **minimum mandatory fields** for Customer and Sales Order and one real **error response** (a missing field) as JSON in the notes. Plans 013–014 build on these.
-  7. **Webhook:** configure an ERPNext Webhook on Sales Order `on_submit` that posts to a local listener with a shared-secret header. Confirm it fires and record the payload shape. Plan 014 uses it to create the project.
+  7. **List the orders that are waiting for a project:** submitted, not cancelled, with an empty Project link, filtered by API (for example `filters=[["docstatus","=",1],["project_link","is","not set"]]`). The New project form uses this list, if the pull design below is confirmed.
+     - (Only if the user keeps "create the project automatically": also prove a Webhook on `on_submit`, and record that Frappe webhooks have no durable retry.)
 - [ ] **5. Measure (gate 1).**
   - `docker stats` for every ERPNext container: at rest after 10 minutes, and peak while creating 50 customers and 50 submitted sales orders via the API.
   - Also measure while clicking through ERPNext's desk for 5 minutes (Selling workspace, Sales Order list and form, Customer list), because people will use ERPNext's own screens.
@@ -93,11 +103,11 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
 ### B. VPS (Claude, each step only after the user approves it)
 - [ ] **6. Check headroom (gate 2, read-only).**
   - Record `free -m` and `docker stats --no-stream` at 3 different times of a working day.
-  - Gate: available memory minus the ERPNext peak from step 5 must leave **≥ 1.5 GB**.
+  - Gate: available memory minus the **sum of the ERPNext `mem_limit` caps** (the most ERPNext can ever take, not the measured peak) must leave **≥ 1.5 GB**.
   - If not, stop and report: options then are trimming other services on the box, or a user decision.
 - [ ] **7. Install ERPNext on the VPS.**
   - Folder `/root/erpnext-docker`, the same pinned `frappe_docker` tag and the compose from step 1 with the step 3 trims and caps.
-  - `restart: unless-stopped`; listening only on `127.0.0.1:8080`.
+  - `restart: unless-stopped`; listening only on `127.0.0.1:8080` (checked free on 2026-10-01; `0.0.0.0:8000` is already used by another app on the box, which is fine because ERPNext uses 8000 only inside its own network).
   - `.env` with generated secrets, mode 600.
   - Then repeat step 2 (minimal setup) and steps 4.1–4.4 (API user, Items, WO Number field). Store the API key and secret only in `/root/engos-docker/.env` as `ERPNEXT_URL`, `ERPNEXT_API_KEY` and `ERPNEXT_API_SECRET`.
 - [ ] **8. Backups.**
@@ -111,9 +121,35 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
 ## Acceptance criteria
 - [ ] Gates 1–3 passed, with numbers in the notes.
 - [ ] ERPNext v16.37.0 runs on the VPS in its own compose project, memory-capped, not reachable from the internet (checked from outside: port 8080 closed).
-- [ ] From the VPS: with the `engos-api` key, Customer, Item and Sales Order create/read/submit work, and the webhook fires.
+- [ ] From the VPS, with the `engos-api` key: create/read Customer works, Items and Sales Orders can be read, the project-link fields can be set, and the "orders waiting for a project" query returns the right orders.
 - [ ] A daily ERPNext backup exists and its restore is documented.
 - [ ] Engineering OS unaffected: health ok, no restarts or out-of-memory kills, same response times.
+
+## Review findings (Claude, 2026-10-01): fixed above, or waiting for a decision
+**Fixed in this plan:**
+1. Port binding: explicit `127.0.0.1`. Docker would otherwise publish ERPNext on every interface, bypassing the host firewall.
+2. Generated passwords, never the quick-start `admin`.
+3. Setup done as Administrator; the API user gets least privilege.
+4. WO Number not unique in ERPNext, because cancel-and-amend reuses it. Amendment tested.
+5. The memory gate uses the sum of the caps (worst case), not the measured peak.
+6. Time zone, number format and sign-up setting added.
+7. Order without a rate tested.
+
+**Integration design, waiting for the user (affects plans 014–015):**
+- **A. Pull instead of push.** "A confirmed order creates the project automatically" conflicts with "New project picks up the order". An order has no PM, engineers or start date, so an auto-created project would be half-finished. Frappe webhooks are also fire-and-forget, and every deploy restarts our app for 20–30 s, so an order confirmed during a deploy would silently never become a project. **Proposal:** the New project form starts by picking a confirmed order that has no project yet (pulled live from ERPNext). It prefills client, WO, panels and dates, and on save writes the project code back to the order. No webhook, nothing to lose. The "orders waiting for a project" list is the to-do.
+- **B. Changes to an order after the project exists.**
+  - Proposed: client PO, dates and client name update PM automatically.
+  - Added panels → appended to the project.
+  - Removed panels and cancelled orders → only flagged ("Order changed: review") for a Director, never deleting work.
+- **C. Client reference numbers.** Customers created in ERPNext have no `ACS-0001` ref, but our project codes are built from it. Proposed: our app assigns the next ref the first time a customer is used and writes it back to the Customer's "ACS reference" field.
+
+**Also flagged:**
+- **Single sign-on (plan 013):**
+  - Send the pass as an auto-submitted POST, not in the URL (URLs land in proxy logs and browser history). Single-use and about 30 s expiry.
+  - Re-sync roles on every sign-in, so demotions apply.
+  - Deactivating a user in our app also disables their ERPNext user.
+  - Directors get System Manager, never Administrator.
+- **CI:** `ci.yml` runs only for `main` (pushes and PRs), so commits on `erp` get no CI. Add `erp` to the push branches in plan 013 (the publish/deploy jobs stay `main`-only).
 
 ## Notes (Claude, per step)
 <commands, file names, .env keys (not values), memory numbers, payloads, gate results>
