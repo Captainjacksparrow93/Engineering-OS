@@ -412,3 +412,20 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - `act: "disable"` disables the user;
   - `_hide_projects_module` leaves the `project` field hidden on Sales Order (so a silent failure shows up).
   - Paste the pass counts. Re-check the API-key refusal with curl and record the real status code.
+
+**Re-review 2026-10-02, commit `79876e6` (F12). Verdict: F12 mostly accepted; two leftovers in F12b.** Claude checked in the browser, signed in through SSO as the Sales Head on `acs3` (running, created 12:07 IST).
+- **OK:**
+  - Sales Order form: inputs have a 1px `#d8d8d0` border, 8px radius, white surface; child-table rows are white, the heading row is cream (no more black rows).
+  - The page floor is cream; "Getting Started" is in the page but `display: none`.
+  - The Projects tile is gone from `/desk`.
+  - The login page uses the ACS logo.
+- **Not fixed:**
+  - **The desk tiles and the sidebar workspace icon are still bright blue.** They are `<img class="app-icon">` files (`/assets/erpnext/icons/desktop_icons/solid/*.svg`) with the blue baked in, so the CSS `color` and the container background don't reach them. Only the container behind them turned neutral.
+  - **The Sales Order Trends chart line is ink now, but the area under it is still pink.**
+
+**New follow-up:**
+- [ ] **F12b: blue icons and chart fill.**
+  - Make the desk tiles and sidebar workspace icons neutral: either a CSS `filter` on `img.app-icon` and the sidebar header icon (e.g. grayscale, darkened toward ink), or point each Desktop Icon at neutral copies shipped in `acs_erp`. Say which, and that new modules' icons are covered too.
+  - Chart area fill: neutral (`#f0f0ea` / ink at low opacity), not pink.
+  - Verify in the browser at desktop width (desk, Selling workspace, Sales Order form) and say in the notes what you looked at. Keep screenshots out of git (F14).
+- Note for F13: the login page still includes `/assets/erpnext/images/erpnext-logo.svg` (the loading splash). It's part of F13's logo item.
