@@ -544,3 +544,13 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
 - `docs/screenshots/` is untracked and ignored. The 10 PNGs stay on disk only.
 - Both still exist in older `erp` commits (`ec349f4`). `erp` has never been pushed, and `SEED_PASSWORD` is the local seed value already in `.env.example`, `ci.yml` and `docker-compose.local.yml`, so no history rewrite is needed.
 - **Next: F15** (`sso.login` tests), then re-shoot F3 (screenshots stay local), then plan 014.
+
+**Re-review 2026-10-02, commit `9e4defa` (F15). Verdict: F15 accepted.**
+- Claude ran `python -m unittest discover -s erp/acs_erp`: **23 passed**.
+- The tests use a fake `frappe` (they run without a bench), but they call the real `sso.login` with real signed passes.
+- **Mutation check on a scratch copy:**
+  - removing the F11 fix (`user_doc = frappe.get_doc(...)` on the returning-user path) makes **4 tests error**;
+  - disabling the API-key guard makes **1 test fail**.
+  So the tests catch both bugs found earlier.
+- The real API-key refusal returns **401** on the running `acs5`, and the log line confirms the guard.
+- **Left in plan 013:** re-shoot the F3 screenshots (local only, never in git), then set 013 to DONE. F12c moved to plan 016 step 1.
