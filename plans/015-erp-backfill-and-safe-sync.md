@@ -83,7 +83,7 @@ Plan 014 links new projects to orders (`Project.erpSalesOrder`, `Task.erpOrderIt
 - [x] **1. Mark imported orders, and add the alert columns.**
   - `acs_erp` adds `custom_imported` (Check, read-only, "Imported from Engineering OS") to Sales Order. Rebuild the image as the next tag, recreate, migrate, and confirm the field exists.
   - Add the migration `erp_order_alerts` (`Project.erpOrderAlert`, `Project.erpOrderAlertAt`).
-- [ ] **2. Backfill script `prisma/scripts/erp-backfill.ts`.**
+- [x] **2. Backfill script `prisma/scripts/erp-backfill.ts`.**
   1. **Clients:** for each client without `erpCustomer`, find an ERPNext customer whose `custom_acs_reference` equals the client's `refNumber`, or else whose name matches. If none, create one (name = client name, `custom_acs_reference` = `refNumber`). Then set `Client.erpCustomer`.
   2. **Projects:** for each `WORK_ORDER` project without `erpSalesOrder`, except `CANCELLED`:
      - create a sales order with:
@@ -170,5 +170,55 @@ Plan 014 links new projects to orders (`Project.erpSalesOrder`, `Task.erpOrderIt
     ```
     Applied to the dev DB with `npx prisma migrate dev --name erp_order_alerts`; `prisma migrate diff` (migrations vs schema): no difference. (`prisma format` re-aligned 115 unrelated schema lines; reverted, only the two new lines are in the diff.)
   - **Test counts:** typecheck clean; `npm test` 14 files / 165 passed; `npm run test:int` 17 files / 95 passed; build clean; `python3 -m unittest discover -s erp/acs_erp` 25 tests OK.
+- **Step 2 (backfill script):**
+  - **Shape:** the logic is in `src/modules/erp/backfill.ts` (`runBackfill({ companyId, apply, log })`, plus `planOrderRows`), so the integration test can run it with ERPNext mocked. `prisma/scripts/erp-backfill.ts` is the thin CLI: dry run by default, `--apply` to write, `--company=ACS` (default). It refuses to start without `ERPNEXT_URL` / `ERPNEXT_API_KEY` / `ERPNEXT_API_SECRET` (env only) and uses `APP_URL` for the project links. It is never called from `entrypoint.sh`. Exit code 1 if anything failed.
+  - **Clients:** for each client without `erpCustomer`: customer by `custom_acs_reference` = `refNumber`, else by `customer_name` = client name (skipped, not linked, if that customer carries a **different** ACS reference), else create one (`customer_name`, `customer_type` Company, `custom_acs_reference`). An empty reference on a matched customer is filled. A customer already linked to another client → skipped with reason. Then `Client.erpCustomer`.
+  - **Projects:** `WORK_ORDER`, no `erpSalesOrder`, not `CANCELLED`. Skipped with a reason: no WO, WO not digits only, no client (by `clientId`, else by name like the project page), client without an ERP customer, no panels. Rows: one per panel type with the quantity; one row per panel when panels of that type have different dates (`plannedEnd`, else the target date). Order: the only ERPNext company, customer, `transaction_date` = project created date, `delivery_date` = the later of target and the last row date (ERPNext requires header ≥ rows), `po_no` (if any), `custom_wo_number`, `custom_project_code`, `custom_project_link`, `custom_imported` = 1, rate 0; then submitted (`docstatus` 1). COMPLETED / CLOSED → `update_status` Closed **before** our DB is linked. Then, in one transaction: `erpSalesOrder`, `erpOrderModified`, each panel's `erpOrderItem` (`<row>#<unit>`). It checks that the order's rows still match the panels (item code + qty, by `idx`) before linking; if not, that project fails with a reason (no guessing).
+  - **Resume (ordering):** find/create → submit → close → link in our DB. A crash at any point leaves the order findable on re-run by **`custom_project_link`** (the plan says `custom_project_code`; project codes can be shared since plan 005, the link holds the project id, so it is the safe key). A draft is submitted, a submitted one reused, a closed one left closed, then linked. A crash after linking: the project has `erpSalesOrder` and is skipped.
+  - **ERP client** (`client.ts`): new `erpInsert` (POST `/api/resource/<doctype>`) and `erpCall` (POST `/api/method/<method>`, returns `message`; `{}` → undefined). **Also:** HTTP **417** (ERPNext refused a save, e.g. a validation) now becomes `DomainError("ERP refused this: <ERPNext's message>")` instead of "ERP isn't responding." That was wrong for refusals and would have made the backfill report useless. 5xx / 401 / 403 / network are unchanged. `order.service.ts`: `projectLink(id)` extracted and reused by `writeProjectToOrder`.
+  - **ERPNext check as `engos-api` (Sales User only, no new roles):** create Customer with `custom_acs_reference` ✔; insert Sales Order with read-only `custom_imported` = 1 (kept) ✔; PUT `docstatus: 1` ✔; `erpnext.selling.doctype.sales_order.sales_order.update_status` Closed ✔ (returns `{}`). (Probe records left in the local ERPNext: customer "Probe Customer Ltd" ACS-9999 and closed SAL-ORD-2026-00003.)
+  - **Tests (`src/modules/erp/backfill.int.test.ts`, 4; own company so seed data is never touched; an in-memory fake ERPNext behind the mocked client):** dry run writes nothing and reports; `--apply` links by reference, by name (fills the reference), creates, skips a reference clash, creates/submits imported orders with the right rows (grouped vs per-panel), closes the completed one, links PM (`erpOrderItem`s) and leaves cancelled, service-call and skipped projects alone; a second `--apply` creates nothing; resume after a crash submits and links the existing draft, no duplicate. `client.test.ts` +3 (insert, call incl. empty reply, 417 message). **Written code-first by mistake**, so I checked the tests bite: removing the close, the per-panel split, or the resume lookup each turns exactly one test red.
+  - **Local stack (dev DB with seed + demo, local ERPNext acs7):** the demo projects use an older panel title (`PLC × 1: PLC Programming + Simulation`), not `PLC Panel 1`, so they are skipped "no panels named …" (per the plan: skipped, not guessed). **Planner: production may have projects with that older title; the dry run on the production copy (016) will show how many.** To have real panels to import, I created three pre-ERP work orders with `createAutomationProject` (ERP off, as production did), one marked COMPLETED. I also unlinked one project and client from my earlier mock check (they pointed at an order that only existed in the mock), and deleted leftover test projects from old interrupted runs (the step 5 test now fails loudly instead of swallowing a cleanup error).
+    - Dry run (DEMO lines omitted):
+      ```
+ERP backfill for ACS Engitech Pvt Ltd: dry run (no writes; add --apply to write)
+client ACS-0004 "Nirma Chemicals Ltd": would create a customer
+client ACS-0006 "Reliance Petrochem": would create a customer
+client ACS-0007 "UltraTech Cement": would create a customer
+client ACS-0008 "Amul Dairy": would create a customer
+client ACS-0009 "Tata Power": would create a customer
+client ACS-0010 "Adani Ports": would create a customer
+client ACS-0011 "JSW Steel": would create a customer
+client ACS-0012 "Asian Paints": would create a customer
+client ACS-0013 "Larsen & Toubro": would create a customer
+project ACS-0004-0001 (WO 8101): would create an imported order for "Nirma Chemicals Ltd": 1 × PLC 2027-01-30, 1 × PLC 2027-03-01
+project ACS-0006-0001 (WO 7001): would create an imported order for "Reliance Petrochem": 2 × PLC 2027-01-15, 1 × HMI 2027-02-10
+project ACS-0009-0001 (WO 7002): would create an imported order for "Tata Power": 1 × SCADA 2027-01-20, 1 × SCADA 2027-02-25
+project ACS-0008-0001 (WO 7003): would create an imported order for "Amul Dairy": 1 × PLC 2027-01-05, then close it
+Clients: 9 to create, 0 to link, 0 skipped, 0 failed (dry run)
+Projects: 4 to create, 0 to link, 8 skipped, 0 failed (dry run)
+      ```
+    - `--apply`:
+      ```
+ERP backfill for ACS Engitech Pvt Ltd: APPLY (writes)
+client ACS-0004 "Nirma Chemicals Ltd": created customer "Nirma Chemicals Ltd"
+client ACS-0006 "Reliance Petrochem": created customer "Reliance Petrochem"
+client ACS-0007 "UltraTech Cement": created customer "UltraTech Cement"
+client ACS-0008 "Amul Dairy": created customer "Amul Dairy"
+client ACS-0009 "Tata Power": created customer "Tata Power"
+client ACS-0010 "Adani Ports": created customer "Adani Ports"
+client ACS-0011 "JSW Steel": created customer "JSW Steel"
+client ACS-0012 "Asian Paints": created customer "Asian Paints"
+client ACS-0013 "Larsen & Toubro": created customer "Larsen & Toubro"
+project ACS-0004-0001 (WO 8101): created SAL-ORD-2026-00004: 1 × PLC 2027-01-30, 1 × PLC 2027-03-01
+project ACS-0006-0001 (WO 7001): created SAL-ORD-2026-00005: 2 × PLC 2027-01-15, 1 × HMI 2027-02-10
+project ACS-0009-0001 (WO 7002): created SAL-ORD-2026-00006: 1 × SCADA 2027-01-20, 1 × SCADA 2027-02-25
+project ACS-0008-0001 (WO 7003): created SAL-ORD-2026-00007: 1 × PLC 2027-01-05, closed
+Clients: 9 created, 0 linked, 0 skipped, 0 failed
+Projects: 4 created, 0 linked, 8 skipped, 0 failed
+      ```
+    - Second `--apply`: `Clients: 0 created, 0 linked, 0 skipped, 0 failed` / `Projects: 0 created, 0 linked, 8 skipped, 0 failed`
+    - In ERPNext (desk, Director via SSO): SAL-ORD-2026-00005 (To Deliver, ACS-0006-0001, 2 × PLC + 1 × HMI), SAL-ORD-2026-00006 (To Deliver, ACS-0009-0001, SCADA rows with two dates), SAL-ORD-2026-00007 (**Closed**, ACS-0008-0001): each shows "Imported from Engineering OS" ticked, WO, project code and link.
+  - **Test counts:** typecheck clean; `npm test` 14 files / 168 passed; `npm run test:int` 18 files / 99 passed; build clean; acs_erp 25 OK.
 
 ## Review (Claude)
