@@ -86,7 +86,7 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
   - `Client.erpCustomer` (unique per company; the ERPNext Customer name);
   - `Task.erpOrderItem` on panel (`PHASE`) tasks: the order item row name plus the unit number, e.g. `a1b2c3#2` (used by plan 015 to match panels).
   - Run the migration on the dev DB and on a fresh CI-like DB; paste the SQL into notes.
-- [ ] **3. Order service.**
+- [x] **3. Order service.**
   - `listWaitingOrders(principal)` (needs `pm.project.create`): submitted orders (`docstatus = 1`, status not Closed or Cancelled) whose `custom_project_code` is empty **and** whose name isn't already on a `Project.erpSalesOrder`. Return customer name, order name, WO, client PO, panels summary and delivery date, newest first.
   - `getOrderForProject(principal, orderName)` returns the order as our input shape:
     - client (ERPNext customer name + `custom_acs_reference`);
@@ -205,6 +205,17 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
     - `npm run typecheck`: clean (0 errors).
     - `npm test`: 14 test files passed, 163 tests passed.
     - `npm run test:int`: 14 test files passed, 63 tests passed.
+    - `npm run build`: clean.
+- **Step 3 (Order service):**
+  - Created `src/modules/erp/order.service.ts` with `listWaitingOrders(principal)` and `getOrderForProject(principal, orderName)`.
+  - Enforced permission checks gated on `pm.project.create` using `hasPermissionAnywhere`.
+  - Implemented `listWaitingOrders`: queries submitted orders (`docstatus = 1`, not Closed or Cancelled), filters out orders with `custom_project_code` or existing `Project.erpSalesOrder`, fetches items via `erpGet` to summarize panel scopes (e.g. `2 × PLC, 1 × SCADA`), and returns newest first.
+  - Implemented `getOrderForProject`: fetches order, validates draft/cancelled/closed, validates against existing linked project in ERPNext and Engineering OS, validates numeric WO number, validates active checklist templates (`PLC`, `SCADA`, `HMI`), looks up `custom_acs_reference` on ERP Customer, computes scopes and per-unit delivery dates, and maps `Task.erpOrderItem` row references (`${row.name}#${unitInRow}`).
+  - Added integration tests in `src/modules/erp/order.service.int.test.ts` (12 tests) covering allow, deny (engineer lacking `pm.project.create`), happy paths for both functions, and all refusal cases (draft, cancelled, closed, already linked in ERPNext, already linked in DB, missing WO, non-digit WO, invalid checklist item code).
+  - **Test counts:**
+    - `npm run typecheck`: clean (0 errors).
+    - `npm test`: 14 test files passed, 163 tests passed.
+    - `npm run test:int`: 15 test files passed, 75 tests passed.
     - `npm run build`: clean.
 
 ## Review (Claude)
