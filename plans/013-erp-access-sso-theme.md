@@ -261,3 +261,35 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
 **Follow-ups (implementer):**
 - [x] **F9: make the F2 setting reproducible.** Nothing in the repo sets `allowed_referrers` today, so the VPS install would bring back the "Invalid Request" bug. In `acs_erp`'s `after_install`/`after_migrate`, read the Engineering OS origin from a site-config key (e.g. `acs_erp_engos_origin`, such as `http://127.0.0.1:3001` locally) and make sure it is in `allowed_referrers` (idempotent, never removing other entries). Write the exact key and the local value in the notes. Claude will set the production origin in plan 012 part B.
 - F3 is still open: the browser check with screenshots (Director and Sales Head, the five ERPNext screens next to our Director dashboard and Clients page, and the network tab showing nothing from Google).
+
+**Re-review 2026-10-02, commit `8ad0714` (F9), plus Claude's own browser check of the local ERPNext. Verdict: F9 code ok, but the browser check found a critical permission bug, and the local stack is running stale code. Not REVIEWED.**
+
+**How Claude checked:** F3 was skipped twice. Claude signed in to the local ERPNext **through the real SSO endpoint** (a pass built with `acs_erp.passcodec` and the local site secret; test users `review.director@acsengitech.local` / `review.saleshead@acsengitech.local`, local only), then looked at the desk, Selling, Sales Order and the login page.
+
+**Findings:**
+1. **Critical: Directors and Sales users can't open Customers, Items or Sales Orders.**
+   - As the test Director (holding `Sales Manager`), the desk shows "Insufficient Permission for Sales Order", and `frappe.model.can_read` is **false** for Sales Order, Customer and Item (true for Quotation).
+   - **Cause:** the `custom_docperm.json` fixture creates Custom DocPerm rows for `EngOS Integration` on exactly those three DocTypes. **In Frappe, once a DocType has any Custom DocPerm, its standard DocPerms are ignored**, so every standard role lost access.
+2. **The local ERPNext runs stale code.** The image `acs-erpnext:v16.37.0-acs1` was rebuilt on 2026-10-02 under the **same tag**, but the containers were created 2026-10-01 and never recreated. The `sso.py` inside the container has 7 managed roles; the repo has 21. So the test Director got only 7 roles, and the F7/F8/F9 verifications in the notes can't have run against this code.
+3. **F8 not visible:** the **Projects** tile still shows on the `/desk` home screen. It may be the stale code, or ERPNext v16's desk tiles aren't controlled by `Workspace.is_hidden`; check after the rebuild.
+4. **Login page:** ERPNext's blue logo is still shown (not ours), and a **"Login with Email Link"** button is visible, although `after_install` should turn email-link login off.
+5. **Theme gap:** the desk home screen's app tiles and the workspace icons are ERPNext's **bright blue**. `docs/design-system.md` → "ERP" maps blue to neutral/ink; the theme doesn't cover these yet.
+
+**Follow-ups (implementer), in this order:**
+- [ ] **F10 (critical): give the standard roles their access back.**
+  - Drop the `EngOS Integration` role and its Custom DocPerm fixture.
+  - Ship a migration patch in `acs_erp` (listed in `patches.txt`, idempotent) that deletes the Custom DocPerm rows with `role = 'EngOS Integration'`, then the role.
+  - Give `engos-api` the standard **`Sales User`** role. It covers reading Customer, Item and Sales Order, creating and writing Customer, and writing the allow-on-submit link fields. Accept that it could also create Sales Orders: the key lives only on our server.
+  - Update F1's guard: instead of "has `EngOS Integration`", refuse SSO into **any user that has an API key** (integration users), plus the existing `Administrator` / non-`System User` checks.
+  - Prove it: as a Director and as the Sales Head (via SSO), Customer, Item, Sales Order and Quotation lists open, and a Sales Order can be created and submitted. `engos-api` can still read and write the link fields. Paste `frappe.model.can_read` results for the four DocTypes.
+- [ ] **F11: stop testing stale code.**
+  - Every image rebuild gets a **new tag** (`acs-erpnext:v16.37.0-acs2`, `-acs3`, …).
+  - Recreate the containers on it (volumes kept), then run `bench --site frontend migrate`.
+  - In the notes, record the tag running and `docker inspect` creation times of image and container.
+  - Re-check F7 (Director 21 roles, Sales Head 20 without `System Manager`), F8 and F9 **on the running containers**.
+- [ ] **F12: login page and desk look.**
+  - Our ACS logo instead of ERPNext's on the login page and the desk top bar.
+  - Hide the "Login with Email Link" button (turn the setting off for real, and confirm the button is gone).
+  - Make sure F8 hides the **Projects** tile on the `/desk` home screen in v16 (whatever setting drives it), and record which one.
+  - Restyle the blue desk tiles and workspace icons to the design system (neutral/ink; no blue).
+- [ ] **F3 (still open):** the browser screenshots, **after F10–F12**: login page, desk home, Selling workspace, Sales Order list, Sales Order form, Customer form, next to our Director dashboard and Clients page. Plus the network tab showing nothing from Google.
