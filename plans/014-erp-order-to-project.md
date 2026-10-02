@@ -79,7 +79,7 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
     - `erpGet(doctype, name)`, `erpList(doctype, {filters, fields, limit})` and `erpUpdate(doctype, name, fields)`, using token auth and a 10 s timeout.
   - ERPNext failures (network, timeout, 5xx, 401/403) become one `DomainError`: "ERP isn't responding. Try again in a minute." Log the details server-side, never the secret.
   - Unit tests: auth header built correctly, timeout → that error, a 404 is reported distinctly.
-- [ ] **2. Schema (one additive migration `erp_order_links`).** All nullable:
+- [x] **2. Schema (one additive migration `erp_order_links`).** All nullable:
   - `Project.erpSalesOrder` (unique; the ERPNext order name, e.g. `SAL-ORD-2026-00052`);
   - `Project.clientPoNumber`;
   - `Project.erpOrderModified` (the order's `modified` timestamp when last read; used by plan 015);
@@ -168,6 +168,39 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
 - **F1 (one source for ERP settings, and no test switch in production code):**
   - Updated `readErpConfig()` in `src/modules/erp/client.ts` to read solely from `config()` without `try/catch` or `process.env` fallbacks.
   - Restored `if (cached) return cached;` in `src/core/config.ts` and exported `resetConfigCache()` for tests (`src/modules/erp/client.test.ts` uses `vi.stubEnv` + `resetConfigCache()`).
+  - **Test counts:**
+    - `npm run typecheck`: clean (0 errors).
+    - `npm test`: 14 test files passed, 163 tests passed.
+    - `npm run test:int`: 14 test files passed, 63 tests passed.
+    - `npm run build`: clean.
+- **Step 2 (Schema: additive migration `erp_order_links`):**
+  - Added 5 nullable columns and 2 unique constraints in `prisma/schema.prisma`:
+    - `Project.erpSalesOrder` (`String? @unique`)
+    - `Project.clientPoNumber` (`String?`)
+    - `Project.erpOrderModified` (`String?`)
+    - `Client.erpCustomer` (`String?` + `@@unique([companyId, erpCustomer])`)
+    - `Task.erpOrderItem` (`String?`)
+  - Created and applied migration `prisma/migrations/20261002090500_erp_order_links/migration.sql`:
+    ```sql
+    -- AlterTable
+    ALTER TABLE "pm_clients" ADD COLUMN     "erpCustomer" TEXT;
+
+    -- AlterTable
+    ALTER TABLE "pm_projects" ADD COLUMN     "clientPoNumber" TEXT,
+    ADD COLUMN     "erpOrderModified" TEXT,
+    ADD COLUMN     "erpSalesOrder" TEXT;
+
+    -- AlterTable
+    ALTER TABLE "pm_tasks" ADD COLUMN     "erpOrderItem" TEXT;
+
+    -- CreateIndex
+    CREATE UNIQUE INDEX "pm_clients_companyId_erpCustomer_key" ON "pm_clients"("companyId", "erpCustomer");
+
+    -- CreateIndex
+    CREATE UNIQUE INDEX "pm_projects_erpSalesOrder_key" ON "pm_projects"("erpSalesOrder");
+    ```
+  - Ran migration and generated Prisma client on dev DB (`engineering_os`), zero drift verified via `prisma migrate diff`.
+  - Ran migration, seed, and integration tests on fresh CI-like throwaway DB (`engos_ci_014`): 14 test files passed, 63 tests passed.
   - **Test counts:**
     - `npm run typecheck`: clean (0 errors).
     - `npm test`: 14 test files passed, 163 tests passed.
