@@ -50,6 +50,8 @@ services:
       ERPNEXT_PUBLIC_URL: ${ERPNEXT_PUBLIC_URL:-}
       ERPNEXT_URL: ${ERPNEXT_URL:-}
       ERP_SSO_SECRET: ${ERP_SSO_SECRET:-}
+      ERPNEXT_API_KEY: ${ERPNEXT_API_KEY:-}
+      ERPNEXT_API_SECRET: ${ERPNEXT_API_SECRET:-}
     networks:
       - engos_internal_net # Talks to private PostgreSQL DB
       - n8n_default       # Joins central Traefik network for automated HTTPS

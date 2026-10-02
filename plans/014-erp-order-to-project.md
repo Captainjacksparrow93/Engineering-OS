@@ -1,6 +1,6 @@
 # 014 — ERP: every new project starts from a sales order
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity · **Branch:** `erp` · **Depends on:** 013 REVIEWED (F14, F15 done)
 
 ## Goal
@@ -72,7 +72,7 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
 - If a tool is missing or fails, say so in Implementation notes. Never claim you used one when you didn't.
 
 ## Steps
-- [ ] **1. ERPNext client.**
+- [x] **1. ERPNext client.**
   - Add `ERPNEXT_API_KEY` and `ERPNEXT_API_SECRET` to `src/core/config.ts` and `.env.example` (empty values).
   - Add a small module in `src/modules/erp/` with:
     - `isErpEnabled()`;
@@ -155,5 +155,15 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
 - [ ] No secret in the repo, notes, logs or the browser.
 
 ## Implementation notes (implementer)
+- **Step 1 (ERPNext client):**
+  - Added optional `ERPNEXT_API_KEY` and `ERPNEXT_API_SECRET` to `src/core/config.ts` (treating empty string `""` as `undefined`), `.env.example`, and `docker-compose.yml`.
+  - Created `src/modules/erp/client.ts` providing `isErpEnabled()`, `erpGet(doctype, name)`, `erpList(doctype, { filters, fields, limit, orderBy })`, and `erpUpdate(doctype, name, fields)` using `Authorization: token <key>:<secret>` and `AbortSignal.timeout(10_000)`.
+  - Mapped HTTP 404 responses distinctly to `NotFoundError` (`src/core/rbac/errors.ts`), and network/timeout/5xx/401/403/invalid-JSON errors to `DomainError("ERP isn't responding. Try again in a minute.")` while logging server-side details without secrets.
+  - Added TDD unit tests in `src/modules/erp/client.test.ts` (6 tests passing).
+  - **Test counts:**
+    - `npm run typecheck`: clean (0 errors).
+    - `npm test`: 14 test files passed, 163 tests passed.
+    - `npm run test:int`: 14 test files passed, 63 tests passed.
+    - `npm run build`: clean.
 
 ## Review (Claude)
