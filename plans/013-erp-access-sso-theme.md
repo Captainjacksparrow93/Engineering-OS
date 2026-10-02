@@ -518,3 +518,9 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - Change the filter so the tile goes dark and the symbol stays white. Claude tried `filter: grayscale(1) contrast(8) brightness(0.9)` on `.desktop-icon img.app-icon` in the browser: a near-ink tile with a crisp white symbol. Use that or something equivalent, on the same selectors as F12b.
   - Check that the ACS logo in the top bar is **not** caught by the `.sidebar-header img` / `.header-logo img` selectors (it must keep its own colours).
   - Look at the desk home and the Selling sidebar in the browser, and in the notes say what you saw, not only computed CSS values.
+
+**Re-review 2026-10-02, commit `59529d4` (F14). Verdict: F14 accepted.**
+- `scripts/verify_browser.py` reads `SEED_PASSWORD` only from the environment and exits with a clear message if it's missing.
+- `docs/screenshots/` is untracked and ignored. The 10 PNGs stay on disk only.
+- Both still exist in older `erp` commits (`ec349f4`). `erp` has never been pushed, and `SEED_PASSWORD` is the local seed value already in `.env.example`, `ci.yml` and `docker-compose.local.yml`, so no history rewrite is needed.
+- **Next: F15** (`sso.login` tests), then re-shoot F3 (screenshots stay local), then plan 014.
