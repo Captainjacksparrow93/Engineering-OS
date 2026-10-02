@@ -1,6 +1,6 @@
 # 013 — ERP access: one-click sign-in, restyled ERPNext, ERP entry in our app (local)
 
-**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity · **Branch:** `erp`
 **Depends on:** 012 part A (local ERPNext at `C:\Users\Dhruv-Home\erpnext-local`, v16.37.0, on `127.0.0.1:8080`).
 **Where it runs:** **local only** (user decision 2026-10-01: all ERP development is done and tested locally first; the VPS comes after plan 015). Nothing in this plan touches the VPS.
@@ -364,6 +364,25 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
       - TypeScript unit tests (`npm test`): 13 files, 157 passed.
       - TypeScript integration tests (`npm run test:int`): 14 files, 63 passed.
       - Next.js build (`npm run build`): clean.
+  - **F3 re-shoot (after F10–F15, on running `acs-erpnext:v16.37.0-acs5`):**
+    - Re-ran `scripts/verify_browser.py` against Engineering OS (`http://127.0.0.1:3001`) and ERPNext (`http://127.0.0.1:8080`, image `acs-erpnext:v16.37.0-acs5`) with `SEED_PASSWORD` supplied via environment variable.
+    - All 10 screenshots re-shot at 1440x900 and stored locally only in `docs/screenshots/erp/` (untracked per `.gitignore`):
+      - `erpnext_login_page.png`: warm cream floor (`#f7f7f4`), ACS logo at top, Email and Password inputs with 1px `#d8d8d0` borders and ink focus ring, no "Login with Email Link" button, no "Sign up" link, no "Powered by" footer.
+      - `engos_director_dashboard.png`, `engos_clients_page.png`, `engos_erp_launcher.png`: Engineering OS screens showing sidebar `ERP` item and launcher card with "Open ERP" button.
+      - `erpnext_director_sso_desk.png`: Desk home signed in via SSO as Satish Nagar (`SN`), ACS logo in top-left bar, warm cream floor, 11 tiles (`Framework`, `Organization`, `Accounting`, `Assets`, `Buying`, `Manufacturing`, `Quality`, `Selling`, `Stock`, `Subcontracting`, `ERP Settings`) — no `Projects` tile, and `ERPNext Settings` renamed to `ERP Settings`.
+      - `erpnext_sales_head_sso_desk.png`: Desk home signed in via SSO as Dharmesh Thummar (`DT`), 10 operational tiles (`Framework` tile absent because Sales Head does not hold `System Manager`).
+      - `erpnext_selling_workspace.png`: Selling workspace with sidebar reading `Selling / ERP`, no "Getting Started" onboarding block, `Sales Order Trends` chart with ink `#1a1a19` line and light grey area fill (no pink), and white KPI/shortcut cards with hairline borders.
+      - `erpnext_sales_order_list.png`: Sales Order list view with 53 orders, 1px bordered filter inputs, white table surface, and terracotta `+ Add Sales Order` button.
+      - `erpnext_sales_order_form.png`: New Sales Order form with white card surface, 1px `#d8d8d0` bordered inputs (8px radius), `WO Number` field present, `Project` field hidden (`visible: False`), and `Items` child table with cream header (`#f7f7f4`), white row surface (`#ffffff`), hairline borders, and white `Add row` / `Add multiple` buttons.
+      - `erpnext_customer_form.png`: New Customer form with white card surface, 1px `#d8d8d0` bordered inputs, and `ACS Reference` custom field.
+    - Network tab / request audit across the full walkthrough: **0 requests** to Google Fonts, Google CSS, or external CDNs.
+    - Ran `review-delta` (`build_or_update_graph_tool` + `get_review_context_tool`): low risk, 0 broken dependents, all changed functions covered by unit/integration tests.
+    - Re-ran full test suite including `npm run test:int` against a **fresh CI-like throwaway Postgres database** (`engos_ci_013`: empty DB → `npx prisma migrate deploy` → `npm run db:seed` → `npm run test:int`):
+      - `python -m unittest discover -s erp/acs_erp`: 23 passed (0.013s).
+      - `npm run typecheck`: clean (0 errors).
+      - `npm test`: 13 test files passed, 157 tests passed.
+      - `npm run test:int` (fresh CI-like DB): 14 test files passed, 63 tests passed.
+      - `npm run build`: clean.
 
 
 ## Review (Claude)
@@ -473,7 +492,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - **"Powered by" footers:** remove them from web pages and the login page, from **print formats/PDFs** (Print Settings), and from **emails** (turn off the standard email footer and set our own: "ACS Engitech · Engineering OS").
   - **Help menu:** remove the links to Frappe/ERPNext docs, forum and "What's new". Keep only **About**, because ERPNext and Frappe are GPLv3 and the license notice must stay reachable (nowhere prominent is needed). Don't remove license or copyright files from the source.
   - **Prove it:** search the rendered login page, desk home, a Sales Order form, a printed Sales Order PDF and a test email preview for "ERPNext" and "Frappe" (case-insensitive) and paste the hits, which should be none except the About dialog. Screenshots go with F3.
-- [ ] **F3 (still open):** the browser screenshots, **after F10–F13**: login page, desk home, Selling workspace, Sales Order list, Sales Order form, Customer form, next to our Director dashboard and Clients page. Plus the network tab showing nothing from Google.
+- [x] **F3 (still open):** the browser screenshots, **after F10–F13**: login page, desk home, Selling workspace, Sales Order list, Sales Order form, Customer form, next to our Director dashboard and Clients page. Plus the network tab showing nothing from Google.
 
 **Re-review 2026-10-02, commit `ec349f4` (F10, plus F3 evidence). Verdict: F10 accepted; F3 evidence received but it shows UI defects (added to F12); F11, F12, F13 and F14 open.**
 - **F10 ok:**
