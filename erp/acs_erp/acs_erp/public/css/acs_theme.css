@@ -276,8 +276,9 @@ textarea.form-control:focus {
   display: none !important;
 }
 
-/* 7. Desk tiles & workspace icons neutralized (F12)
-   Replace bright blue desktop tiles and sidebar workspace icons with neutral / ink */
+/* 7. Desk tiles & workspace icons neutralized (F12, F12b)
+   Replace bright blue desktop tiles and sidebar workspace icons with neutral / ink.
+   App icons are SVGs with hardcoded blue #0289F7. We filter them to neutral ink (#1a1a19). */
 .desktop-icon .icon-container,
 .sidebar-header .sidebar-item-icon,
 .header-logo-container {
@@ -291,10 +292,29 @@ textarea.form-control:focus {
   color: #1a1a19 !important;
 }
 
-/* 8. Chart colors (F12)
-   Map default line graph stroke and dots to ink (#1a1a19) and neutral (#6b6b66) instead of pink */
+.icon-container img.app-icon,
+.desktop-icon img.app-icon,
+.header-logo img,
+.sidebar-header img,
+.sidebar-item-icon img,
+.dropdown-menu-item .sidebar-item-icon img {
+  filter: grayscale(100%) brightness(0.2) !important;
+}
+
+/* 8. Chart colors (F12, F12b)
+   Map line graph stroke and dots to ink (#1a1a19) and neutral (#6b6b66) instead of pink.
+   Neutralize area fill under the line to transparent ink (#1a1a19 at low opacity). */
 .chart-container path.line-graph-path {
   stroke: #1a1a19 !important;
+}
+
+.chart-container path.region-fill {
+  fill: #1a1a19 !important;
+  fill-opacity: 0.08 !important;
+}
+
+.chart-container defs linearGradient stop {
+  stop-color: #1a1a19 !important;
 }
 
 .chart-container .dataset-units circle {

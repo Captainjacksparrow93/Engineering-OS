@@ -315,6 +315,25 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
       - **Printed Sales Order PDF extracted text:** 0 hits.
       - **Rendered test email footer:** 0 hits.
       (Hits remain only in the license notice inside the About dialog, and internal asset bundle filenames `/assets/frappe/*` and `/assets/erpnext/*`).
+  - **F12b (neutralize desk tile icons and chart area fill):**
+    - Built new Docker image tag: `acs-erpnext:v16.37.0-acs5` (`docker build -t acs-erpnext:v16.37.0-acs5 -f erp/Dockerfile erp`).
+    - Configured `CUSTOM_TAG=v16.37.0-acs5` in `C:\Users\Dhruv-Home\erpnext-local\.env`.
+    - Recreated containers with `docker compose ... up -d --force-recreate` and ran `bench --site frontend migrate`.
+    - Verified `docker inspect` creation timestamps:
+      - Image `acs-erpnext:v16.37.0-acs5`: `2026-10-02T07:47:54.215852337Z`
+      - Container `erpnext-local-backend-1`: `2026-10-02T07:48:08.111567594Z`
+      - Container `erpnext-local-frontend-1`: `2026-10-02T07:48:12.264486898Z`
+    - Implemented icon neutralization via CSS `filter` in `erp/acs_erp/acs_erp/public/css/acs_theme.css`:
+      - Applied `filter: grayscale(100%) brightness(0.2) !important;` to `.icon-container img.app-icon`, `.desktop-icon img.app-icon`, `.header-logo img`, `.sidebar-header img`, `.sidebar-item-icon img`, and `.dropdown-menu-item .sidebar-item-icon img`.
+      - Rationale: CSS filter is fully future-proof and universal; automatically neutralizes all existing SVGs and any future standard or custom module icons without needing file copies or overrides.
+    - Implemented chart area fill neutralization:
+      - Overrode `.chart-container path.region-fill` with `fill: #1a1a19 !important; fill-opacity: 0.08 !important;`.
+      - Overrode `.chart-container defs linearGradient stop` with `stop-color: #1a1a19 !important;`.
+    - Verified in browser at desktop width (1440x900) via Playwright:
+      - **Desk home (`/desk`):** all 16 app tile icons and header logo icon computed filter: `grayscale(1) brightness(0.2)` (neutral deep ink tone `#1a1a19`, zero blue).
+      - **Selling workspace (`/app/selling`):** sidebar workspace icon computed filter: `grayscale(1) brightness(0.2)`; Sales Order Trends chart line stroke: `rgb(26, 26, 25)` (`#1a1a19`); chart area region-fill computed fill: `rgb(26, 26, 25)` (`#1a1a19`) with `fill-opacity: 0.08` (neutral ink tint, zero pink).
+      - **Sales Order form (`/app/sales-order/new`):** inputs 1px `#d8d8d0` border, 8px radius; child-table white surface with hairline border (`#e5e5df`).
+    - Screenshots kept locally and out of git index (per F14).
     - **Test counts:**
       - Python tests (`python -m unittest discover -s erp/acs_erp`): 14 passed.
       - TypeScript typecheck (`npm run typecheck`): clean.
@@ -471,7 +490,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - **The Sales Order Trends chart line is ink now, but the area under it is still pink.**
 
 **New follow-up:**
-- [ ] **F12b: blue icons and chart fill.**
+- [x] **F12b: blue icons and chart fill.**
   - Make the desk tiles and sidebar workspace icons neutral: either a CSS `filter` on `img.app-icon` and the sidebar header icon (e.g. grayscale, darkened toward ink), or point each Desktop Icon at neutral copies shipped in `acs_erp`. Say which, and that new modules' icons are covered too.
   - Chart area fill: neutral (`#f0f0ea` / ink at low opacity), not pink.
   - Verify in the browser at desktop width (desk, Selling workspace, Sales Order form) and say in the notes what you looked at. Keep screenshots out of git (F14).
