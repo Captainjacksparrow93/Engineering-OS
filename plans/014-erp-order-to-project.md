@@ -186,3 +186,9 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
   - `readErpConfig` wraps `config()` in `try/catch` and falls back to `process.env` (and also ORs `process.env` back in). If the env is invalid, that hides it and runs on unvalidated values. Read only `config()` and let a bad config fail loudly.
   - `config.ts` now skips its cache when `NODE_ENV === 'test'`. That changes production code for tests. Instead, reset the module in the test (`vi.resetModules()` plus `vi.stubEnv`, or a small exported reset used only by tests), and put the cache line back as it was.
   - Re-run the full suite and paste the counts.
+
+**Re-review 2026-10-02, commit `c14c749` (F1). Verdict: F1 accepted.**
+- `readErpConfig` reads only `config()`, so a bad env now fails loudly.
+- The `config.ts` cache line is restored; tests use `vi.stubEnv` plus a `resetConfigCache()` export.
+- Claude re-ran the ERP unit tests: pass.
+- **Next: step 2** (the `erp_order_links` migration).
