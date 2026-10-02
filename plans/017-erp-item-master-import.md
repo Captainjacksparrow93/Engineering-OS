@@ -1,6 +1,6 @@
 # 017 — ERP: import the item master (demo PLC parts)
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** partner's Claude (via `Captainjacksparrow93/Engineering-OS`, branch `erp`)
 
 ## Goal
@@ -77,7 +77,7 @@ Evidence (read from the file 2026-10-02):
 - If a tool is missing or fails, say so in Implementation notes. Never claim you used one when you didn't.
 
 ## Steps
-- [ ] **1. Tests first: `clean_row`** (`tests/test_item_import.py`, red before step 2). Fixtures come from the real file, copied into the test as literal rows (don't read the xlsx in unit tests). Cases:
+- [x] **1. Tests first: `clean_row`** (`tests/test_item_import.py`, red before step 2). Fixtures come from the real file, copied into the test as literal rows (don't read the xlsx in unit tests). Cases:
   - a normal row (`ASPLC0000009`) maps to the table above exactly;
   - a blank `MakeDesc` with `PartNo` `6ES72881ST400AA1` → brand "Siemens";
   - a blank `MakeDesc` with an unknown part number → no brand;
@@ -89,7 +89,7 @@ Evidence (read from the file 2026-10-02):
   - item codes `PLC` / `SCADA` / `HMI` → a skip with a reason;
   - columns are found **by header name**, not position (shuffle the header in one test);
   - a duplicate `ItemCode` within one file → the second copy is reported, not imported.
-- [ ] **2. Implement `clean_row`** until step 1 is green.
+- [x] **2. Implement `clean_row`** until step 1 is green.
 - [ ] **3. `run(path, apply=False)`.** Tests first, with `frappe` mocked as in `test_install.py`:
   - reads the first sheet with `openpyxl` (`read_only=True, data_only=True`);
   - creates missing Item Groups parent-first (`is_group=1` for parents, leaf `is_group=0`) and missing Brands. In dry-run mode it only reports them;
@@ -121,7 +121,10 @@ Evidence (read from the file 2026-10-02):
 - The full export: same script, same command. If its columns differ, stop and note them instead of changing the mapping.
 
 ## Implementation notes (implementer)
-<commits, deviations from plan, test pass/fail counts, tools used, image tag, open questions>
+- **Environment / tools:** same cloud container as plans 014/015 (local ERPNext in `/var/tmp/erpnext-local`, image `acs7` at the start). code-review-graph, Token Savior and sequential-thinking are not available here; I read `_ensure_custom_fields`, `after_install` and `tests/test_install.py` directly and found callers by text search (`_ensure_custom_fields` ← `after_install` only, which `hooks.py` also runs as `after_migrate`). The host Python has no `openpyxl` (the bench has 3.1.5), so `run()` imports `frappe` and `openpyxl` inside the function and the unit tests never need either.
+- **The file, read on 2026-10-02 with the bench's openpyxl:** sheet `Sheet2`, header + 38 rows, all `Active` True, `MakeDesc` Siemens 29 / blank 9 (ASPLC0000038–45 and 47, all `6ES7…`), one group path (`Electronics ` › `PLC` › `SMART PLC`), longest trimmed `ItemDesc` 59 chars. Matches the plan's evidence.
+- **Steps 1–2 (`clean_row`):** tests written first (`erp/acs_erp/acs_erp/tests/test_item_import.py`, 11, literal rows ASPLC0000009 and ASPLC0000043 from the file incl. their real padding): red (module missing), then `erp/acs_erp/acs_erp/item_import.py`: `clean_row(header, row, row_number)` → the Item fields (`item_code`, `item_name` ≤ 140, `description` (falls back to the name), `custom_maker_part_no`, `brand` (Siemens by part-number prefix when blank), `item_group_path`, `disabled`, `stock_uom` Nos, `is_stock_item` 1), or `{"error": "Row N: …"}` / `{"skip": "Row N: …"}`. Columns found by header name. `clean_rows(header, rows)` numbers rows like the spreadsheet (first data row = 2), skips fully blank rows, and reports a repeated `ItemCode` as an error. Committed together (one commit for steps 1–2) so no commit carries red tests. One choice not in the plan: a **blank** `Active` counts as active (only an explicit false/No/0 disables); the file has no blanks.
+  - **Test counts:** `python3 -m unittest discover -s erp/acs_erp` 36 OK; typecheck clean; `npm test` 14 files / 168 passed; `npm run test:int` 20 files / 113 passed; build clean.
 
 ## Review (Claude)
 <verdict, follow-ups>
