@@ -40,3 +40,6 @@ backups/
 # Python (acs_erp)
 __pycache__/
 *.pyc
+
+# Local verification screenshots
+docs/screenshots/

@@ -340,6 +340,10 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
       - TypeScript unit tests (`npm test`): 13 files, 157 passed.
       - TypeScript integration tests (`npm run test:int`): 14 files, 63 passed.
       - Next.js build (`npm run build`): clean.
+  - **F14 (evidence hygiene):**
+    - Removed hardcoded fallback password from `scripts/verify_browser.py`: now reads `SEED_PASSWORD` strictly from `os.environ.get("SEED_PASSWORD")` and exits with status 1 and `"Error: SEED_PASSWORD environment variable is required."` if unset.
+    - Untracked `docs/screenshots/erp/*.png` from git (`git rm -r --cached docs/screenshots/erp/`) and added `docs/screenshots/` to `.gitignore`; local files remain on disk at `docs/screenshots/erp/`.
+    - Playwright for Python is an external verification tool dependency (not in `package.json`); install locally with `pip install playwright && playwright install chromium`.
 
 
 ## Review (Claude)
@@ -462,7 +466,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
 - **The F3 notes contradict F10:** they say `_ensure_docperms()` now calls `setup_custom_perms()` "before adding EngOS Integration", but F10 removed both. Correct the F3 note.
 
 **New follow-up:**
-- [ ] **F14: evidence hygiene.**
+- [x] **F14: evidence hygiene.**
   - `scripts/verify_browser.py` hard-codes a fallback password (`SEED_PASSWORD` default). `AGENTS.md`: never hard-code a password. Read it **only** from the environment, and stop with a clear message if it's missing.
   - Screenshots of local data don't belong in the repo (1.5 MB of images showing employee names and project data). Move `docs/screenshots/erp/` out of git (`git rm -r --cached`, add `docs/screenshots/` to `.gitignore`) and keep them locally, or in the plan notes as file paths only.
   - Python dependencies for that script (Playwright) aren't part of the app; say in the notes how to install them, and don't add them to `package.json`.

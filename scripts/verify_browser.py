@@ -8,7 +8,10 @@ os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
 
 ENGOS_BASE = "http://127.0.0.1:3001"
 ERPNEXT_BASE = "http://127.0.0.1:8080"
-PASSWORD = os.environ.get("SEED_PASSWORD", "ACSengi@2026")
+PASSWORD = os.environ.get("SEED_PASSWORD")
+if not PASSWORD:
+    print("Error: SEED_PASSWORD environment variable is required.", file=sys.stderr)
+    sys.exit(1)
 
 
 def run_checks():
