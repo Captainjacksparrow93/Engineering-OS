@@ -374,3 +374,15 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - `scripts/verify_browser.py` hard-codes a fallback password (`SEED_PASSWORD` default). `AGENTS.md`: never hard-code a password. Read it **only** from the environment, and stop with a clear message if it's missing.
   - Screenshots of local data don't belong in the repo (1.5 MB of images showing employee names and project data). Move `docs/screenshots/erp/` out of git (`git rm -r --cached`, add `docs/screenshots/` to `.gitignore`) and keep them locally, or in the plan notes as file paths only.
   - Python dependencies for that script (Playwright) aren't part of the app; say in the notes how to install them, and don't add them to `package.json`.
+
+**Re-review 2026-10-02, commit `da12b9f` (F11). Verdict: F11 accepted; new F15.**
+- **F11 ok, checked by Claude:** all five app containers run `acs-erpnext:v16.37.0-acs2` (image 11:29:26, containers 11:29:33 IST). `sso.py`, `install.py`, `hooks.py`, `passcodec.py` and `events.py` inside the backend container are byte-identical to the repo, and `docker diff` shows only `.pyc` files under `acs_erp`, so nothing was copied in by hand. The `project` field is hidden on Sales Order, Sales Invoice and Purchase Order.
+- **What F11 uncovered:** in `acs1`, `sso.login` crashed (`UnboundLocalError`) for **every returning user**, so only first sign-ins worked, and F10's "API-key user gets 401" was really an error, not the guard. `_hide_projects_module` also failed silently: its broad `except` only logs. Both are fixed in `acs2`, but no test would have caught either.
+
+**New follow-up:**
+- [ ] **F15: tests for `sso.login`.** Add Python tests (next to `test_passcodec.py`) that call `acs_erp.sso.login` with real passes and cover:
+  - a new user is created with the mapped roles; the **same user signing in again** works and has roles re-synced (e.g. Director to Sales Head drops `System Manager`);
+  - refusals: `Administrator`, a user with an API key, a `Website User`, an expired pass, a reused nonce, a bad signature;
+  - `act: "disable"` disables the user;
+  - `_hide_projects_module` leaves the `project` field hidden on Sales Order (so a silent failure shows up).
+  - Paste the pass counts. Re-check the API-key refusal with curl and record the real status code.
