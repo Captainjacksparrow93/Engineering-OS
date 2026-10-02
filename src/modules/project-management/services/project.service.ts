@@ -506,6 +506,29 @@ export async function resumeProject(
   });
 }
 
+/** Plan 015: "Mark reviewed" on an "Order changed" alert. Directors and heads (`pm.project.create`). */
+export async function clearOrderAlert(principal: Principal, projectId: string) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, companyId: principal.companyId } });
+  if (!project) throw new NotFoundError('Project not found.');
+  assertCan(principal, 'pm.project.create', { departmentId: (project.departmentId || principal.departmentId) ?? undefined });
+  if (!project.erpOrderAlert) return;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.project.update({ where: { id: projectId }, data: { erpOrderAlert: null, erpOrderAlertAt: null } });
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'erp',
+        action: 'order_alert_cleared',
+        entityType: 'Project',
+        entityId: projectId,
+        diff: { alert: project.erpOrderAlert },
+      },
+      tx,
+    );
+  });
+}
+
 export interface ProjectListFilters {
   status?: string;
   search?: string;

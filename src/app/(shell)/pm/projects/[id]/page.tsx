@@ -19,6 +19,7 @@ import { HandoverProjectButton } from './handover-project-button';
 import { HoldProjectButton } from './hold-project-button';
 import { ProjectDangerActions } from './project-danger-actions';
 import { EditProjectDetailsButton } from './edit-project-details-button';
+import { OrderAlertBanner } from './order-alert-banner';
 
 export const dynamic = 'force-dynamic';
 
@@ -238,6 +239,21 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           </div>
         }
       />
+
+      {project.erpOrderAlert ? (
+        <OrderAlertBanner
+          projectId={project.id}
+          alert={project.erpOrderAlert}
+          changedAt={
+            project.erpOrderAlertAt
+              ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }).format(project.erpOrderAlertAt)
+              : null
+          }
+          orderName={project.erpSalesOrder}
+          orderHref={erpOrderUrlBase && project.erpSalesOrder ? `${erpOrderUrlBase}${encodeURIComponent(project.erpSalesOrder)}` : null}
+          canClear={canEditProjectDetails}
+        />
+      ) : null}
 
       {/* Cancelled Banner */}
       {project.status === 'CANCELLED' ? (

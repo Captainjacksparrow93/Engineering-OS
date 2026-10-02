@@ -17,6 +17,7 @@ import {
 import {
   addProjectMember,
   cancelProject,
+  clearOrderAlert,
   completeAutomationProject,
   deleteProject,
   getProjectTimeline,
@@ -423,6 +424,18 @@ export async function completeAutomationProjectAction(projectId: string) {
     return { success: true };
   } catch (error) {
     return { success: false, error: toState(error).error ?? 'Failed to complete project.' };
+  }
+}
+
+export async function clearOrderAlertAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    await clearOrderAlert(principal, projectId);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Couldn’t mark it reviewed. Try again.' };
   }
 }
 

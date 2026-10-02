@@ -125,7 +125,7 @@ Plan 014 links new projects to orders (`Project.erpSalesOrder`, `Task.erpOrderIt
     - ERP down → page data still returned;
     - ERP off → no call;
     - a second sync of the same change → no duplicate panels or alerts.
-- [ ] **4. Alert banner.**
+- [x] **4. Alert banner.**
   - On the project page, when `erpOrderAlert` is set, show an "Order changed: review" banner with the text, the time, and a link to the order in ERPNext.
   - Holders of `pm.project.create` see **Mark reviewed**, which clears the alert (`clearOrderAlert`, audited). Others see the banner without the button.
   - The projects list shows a small "Order changed" badge on those projects.
@@ -235,5 +235,11 @@ Projects: 4 created, 0 linked, 8 skipped, 0 failed
   - **Wiring:** `getProjectWorkspace` → `syncProjectOrderSafely` (this project); `listProjects` → `syncAllOrdersSafely` (all; at most once per 5 minutes per process per company). Both swallow and log errors. **Addition:** after an ERP failure, both skip syncing for 60 s, so a down ERPNext doesn't add its timeout to every page load. ERP off → no call.
   - **Tests** (`src/modules/erp/sync.int.test.ts`, 11, ERP mocked): ERP off; no change → no write; PO + dates without alert, audited with null actor; WO follows / clash alerts; customer rename cascades / name clash alerts; added panels (qty up + new row) appended to the PM with steps, `erpOrderItem`, alert and a notification to every Director; reduced qty + removed row + cancelled order only alert and keep every task; the same change twice → no duplicates; a standing condition isn't re-alerted; ERP down → page loads; page sync + list sync throttled to 5 minutes (fake clock). Checked they bite: removing the WO clash check, the throttle, the add rule or the alert dedupe each turns tests red.
   - **Test counts:** typecheck clean; `npm test` 14 files / 168 passed; `npm run test:int` 19 files / 110 passed; build clean; acs_erp 25 OK.
+- **Step 4 (alert banner):**
+  - `clearOrderAlert(principal, projectId)` (`project.service.ts`): same company, `assertCan(pm.project.create)` in the project's department (as Edit details); no alert → returns without writing; otherwise clears `erpOrderAlert` / `erpOrderAlertAt` and audits `erp.order_alert_cleared` (actor = the user, diff = the alert text) in one transaction. `clearOrderAlertAction` in `actions/pm.ts` (revalidates the project and the list).
+  - `OrderAlertBanner` (`src/app/(shell)/pm/projects/[id]/order-alert-banner.tsx`), shown on `ProjectPage` when `erpOrderAlert` is set: heading **"Order changed: review"**, the time (IST, e.g. "2 Oct 2026, 7:40 pm"), one bullet per alert line, **"Open SAL-ORD-… in ERP"** (`ERPNEXT_PUBLIC_URL/app/sales-order/<name>`), and **Mark reviewed** only for `pm.project.create` holders in that department (`canEditProjectDetails`); others see the banner without the button. Same warning style as the existing On hold banner.
+  - Projects list (`projects-client.tsx`): an **"Order changed"** badge next to the priority (full alert in its tooltip).
+  - **Tests** (`src/modules/erp/order-alert.int.test.ts`, 3): PM denied (alert kept); Director clears it, audited with their id and the text; clearing a project without an alert is a no-op (no second audit). The browser view is checked in step 5.
+  - **Test counts:** typecheck clean; `npm test` 14 files / 168 passed; `npm run test:int` 20 files / 113 passed; build clean; acs_erp 25 OK.
 
 ## Review (Claude)
