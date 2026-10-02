@@ -341,3 +341,14 @@ textarea.form-control:focus {
   display: none !important;
 }
 
+/* 12. "Powered by" footer suppression across web pages (F13) */
+.footer-powered,
+.web-footer .footer-powered,
+.powered-by-erpnext,
+.powered-by-frappe,
+a[href*="erpnext.com"],
+a[href*="frappeframework.com"] {
+  display: none !important;
+}
+
+

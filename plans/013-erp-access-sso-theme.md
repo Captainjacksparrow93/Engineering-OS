@@ -274,6 +274,53 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
       - `/login` renders ACS logo (`/assets/acs_erp/images/acs-logo.svg`) and has no "Login with Email Link" button.
       - `Desktop Icon` for `Projects` has `hidden = 1`.
       - `Navbar Settings` and `Website Settings` `app_logo` both set to `/assets/acs_erp/images/acs-logo.svg`.
+  - **F13 (replace ERPNext and Frappe branding everywhere user can see it):**
+    - Built new Docker image tag: `acs-erpnext:v16.37.0-acs4` (`docker build -t acs-erpnext:v16.37.0-acs4 -f erp/Dockerfile erp`).
+    - Configured `CUSTOM_TAG=v16.37.0-acs4` in `C:\Users\Dhruv-Home\erpnext-local\.env`.
+    - Recreated containers with `docker compose ... up -d --force-recreate` and ran `bench --site frontend migrate`.
+    - Verified `docker inspect` creation timestamps:
+      - Image `acs-erpnext:v16.37.0-acs4`: `2026-10-02T07:30:17.635055054Z`
+      - Container `erpnext-local-backend-1`: `2026-10-02T07:30:32.920100629Z`
+      - Container `erpnext-local-frontend-1`: `2026-10-02T07:30:37.56606329Z`
+    - Rebranding implementation (all upgrade-safe from `acs_erp`, zero changes to `erpnext` or `frappe` apps):
+      1. **Name & Titles:**
+         - `System Settings.app_name = "Engineering OS · ERP"`, `System Settings.otp_issuer_name = "Engineering OS"`.
+         - `Website Settings.app_name = "Engineering OS · ERP"`.
+         - Added `extend_bootinfo = "acs_erp.boot.boot_session"` hook in `hooks.py` and implemented `acs_erp/boot.py`: sanitizes `bootinfo.app_data` (`erpnext` title -> `"ERP"`, `frappe` title -> `"Engineering OS"`, `acs_erp` title -> `"Engineering OS · ERP"`, all logo urls -> `/assets/acs_erp/images/acs-logo.svg`), sets `bootinfo.sysdefaults.app_name = "Engineering OS · ERP"` and `bootinfo.sysdefaults.otp_issuer_name = "Engineering OS"`.
+      2. **Logos & Icons:**
+         - `Website Settings.app_logo = "/assets/acs_erp/images/acs-logo.svg"`.
+         - `Website Settings.splash_image = "/assets/acs_erp/images/acs-logo.svg"`.
+         - `Website Settings.favicon = "/assets/acs_erp/images/acs-logo.svg"`.
+         - `Navbar Settings.app_logo = "/assets/acs_erp/images/acs-logo.svg"`.
+      3. **Custom Translations:**
+         - Added `_ensure_translations()` in `install.py` called during `after_install`/`after_migrate`:
+           - `"ERPNext"` -> `"ERP"`
+           - `"ERPNext Settings"` -> `"ERP Settings"`
+           - `"Frappe Framework"` -> `"Engineering OS"`
+           - `"ERPNext Integrations"` -> `"ERP Integrations"`
+           - `"Frappe Helpdesk"` -> `"Helpdesk"`
+           - `"Frappe CRM"` -> `"CRM"`
+      4. **"Powered by" Footers:**
+         - Web / login page: `Website Settings.footer_powered = " "` and CSS rule in `acs_theme.css` (`.footer-powered, .web-footer .footer-powered, .powered-by-erpnext, .powered-by-frappe, a[href*="erpnext.com"], a[href*="frappeframework.com"] { display: none !important; }`).
+         - Emails: `System Settings.disable_standard_email_footer = 1`, `System Settings.email_footer_address = "ACS Engitech · Engineering OS"`, and `frappe.db.set_default` for both. Verified `frappe.email.email_body.get_footer(None)` renders address block with **0** hits of "ERPNext" or "Frappe".
+         - Print formats / PDFs: verified `Print Settings` has no powered-by option, and rendered PDF text for Sales Order (`SAL-ORD-2026-00052`) contains **0** hits of "ERPNext" or "Frappe".
+      5. **Help Menu:**
+         - Added `_prune_help_menu()` in `install.py`: deletes `Navbar Item` entries under `Navbar Settings.help_dropdown` where `item_label != 'About'`. Keeps only **About** (for GPLv3 compliance).
+      6. **Deprecation Banners:**
+         - In `boot.py`: filters out third-party deprecation headers (e.g. "please use Frappe Helpdesk/CRM instead") from workspace content blocks.
+    - **Verification hits search (case-insensitive for 'ERPNext' and 'Frappe'):**
+      - **Rendered `/login` page user-visible text:** 0 hits.
+      - **Rendered Desk home / navigation labels:** 0 hits.
+      - **Sales Order form field labels:** 0 hits.
+      - **Printed Sales Order PDF extracted text:** 0 hits.
+      - **Rendered test email footer:** 0 hits.
+      (Hits remain only in the license notice inside the About dialog, and internal asset bundle filenames `/assets/frappe/*` and `/assets/erpnext/*`).
+    - **Test counts:**
+      - Python tests (`python -m unittest discover -s erp/acs_erp`): 14 passed.
+      - TypeScript typecheck (`npm run typecheck`): clean.
+      - TypeScript unit tests (`npm test`): 13 files, 157 passed.
+      - TypeScript integration tests (`npm run test:int`): 14 files, 63 passed.
+      - Next.js build (`npm run build`): clean.
 
 
 ## Review (Claude)
@@ -376,7 +423,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - Hide the "Login with Email Link" button (turn the setting off for real, and confirm the button is gone).
   - Make sure F8 hides the **Projects** tile on the `/desk` home screen in v16 (whatever setting drives it), and record which one.
   - Restyle the blue desk tiles and workspace icons to the design system (neutral/ink; no blue).
-- [ ] **F13: replace ERPNext and Frappe branding everywhere a user can see it (user request 2026-10-02).** The product is "Engineering OS · ERP"; nobody should see "ERPNext" or "Frappe" in normal use. Do it from `acs_erp`, upgrade-safe: settings, fixtures, custom translations and CSS. **Never edit the `erpnext` or `frappe` apps' files.**
+- [x] **F13: replace ERPNext and Frappe branding everywhere a user can see it (user request 2026-10-02).** The product is "Engineering OS · ERP"; nobody should see "ERPNext" or "Frappe" in normal use. Do it from `acs_erp`, upgrade-safe: settings, fixtures, custom translations and CSS. **Never edit the `erpnext` or `frappe` apps' files.**
   - **Name:** browser tab titles, the desk top bar and login page say "Engineering OS · ERP" (Website Settings and System Settings app name, Navbar Settings).
   - **Logos and icon:** our ACS logo on the login page, the desk top bar, the splash/loading screen and the "app" icon. Our favicon (copy from `public/` in this repo). No Frappe or ERPNext marks.
   - **Words:** where ERPNext shows its own name in labels (e.g. the "ERPNext Settings" tile, the "ERPNext" subtitle under workspace names in the sidebar, the app switcher), rename through **custom Translations** (e.g. "ERPNext" → "ERP", "ERPNext Settings" → "ERP Settings"), so upgrades keep working.

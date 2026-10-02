@@ -20,6 +20,10 @@ web_include_css = "/assets/acs_erp/css/acs_theme.css"
 after_install = "acs_erp.install.after_install"
 after_migrate = "acs_erp.install.after_install"
 
+# Bootinfo
+# --------
+extend_bootinfo = "acs_erp.boot.boot_session"
+
 # Document Events
 # ---------------
 doc_events = {

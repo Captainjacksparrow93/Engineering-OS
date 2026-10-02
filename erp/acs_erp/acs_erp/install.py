@@ -3,10 +3,17 @@ import frappe
 
 def after_install():
     """Sets system defaults, creates panel items, and ensures custom fields and permissions exist."""
-    # 1. System Settings: Session Expiry 08:00, disable email-link login, disable onboarding
+    # 1. System Settings: Session Expiry 08:00, disable email-link login, disable onboarding, branding & email footers (F13)
     try:
         system_settings = frappe.get_doc("System Settings")
         system_settings.session_expiry = "08:00"
+        system_settings.app_name = "Engineering OS · ERP"
+        if hasattr(system_settings, "otp_issuer_name"):
+            system_settings.otp_issuer_name = "Engineering OS"
+        if hasattr(system_settings, "disable_standard_email_footer"):
+            system_settings.disable_standard_email_footer = 1
+        if hasattr(system_settings, "email_footer_address"):
+            system_settings.email_footer_address = "ACS Engitech · Engineering OS"
         if hasattr(system_settings, "login_with_email_link"):
             system_settings.login_with_email_link = 0
         if hasattr(system_settings, "allow_login_using_email_link"):
@@ -14,28 +21,37 @@ def after_install():
         if hasattr(system_settings, "enable_onboarding"):
             system_settings.enable_onboarding = 0
         system_settings.save(ignore_permissions=True)
+        frappe.db.set_default("disable_standard_email_footer", 1)
+        frappe.db.set_default("email_footer_address", "ACS Engitech · Engineering OS")
     except Exception as e:
         frappe.logger("acs_erp").error(f"Failed to update System Settings: {e}")
 
-    # 2. Website Settings: Disable sign-up, set brand name and app logo
+    # 2. Website Settings: Disable sign-up, set brand name, app logo, favicon, splash, and suppress powered footer (F13)
     try:
         website_settings = frappe.get_doc("Website Settings")
         website_settings.disable_signup = 1
         website_settings.app_name = "Engineering OS · ERP"
         website_settings.app_logo = "/assets/acs_erp/images/acs-logo.svg"
+        website_settings.splash_image = "/assets/acs_erp/images/acs-logo.svg"
+        website_settings.favicon = "/assets/acs_erp/images/acs-logo.svg"
+        website_settings.footer_powered = " "
         website_settings.save(ignore_permissions=True)
     except Exception as e:
         frappe.logger("acs_erp").error(f"Failed to update Website Settings: {e}")
 
-    # Navbar Settings: app logo
+    # Navbar Settings: app logo and prune Help menu (F13)
     try:
         if frappe.db.exists("DocType", "Navbar Settings"):
             navbar = frappe.get_doc("Navbar Settings")
             if hasattr(navbar, "app_logo"):
                 navbar.app_logo = "/assets/acs_erp/images/acs-logo.svg"
             navbar.save(ignore_permissions=True)
+            _prune_help_menu()
     except Exception as e:
         frappe.logger("acs_erp").error(f"Failed to update Navbar Settings: {e}")
+
+    # Custom Translations: override ERPNext and Frappe names upgrade-safely (F13)
+    _ensure_translations()
 
     # Complete/hide all module onboarding & welcome workspace (F12)
     _disable_onboarding()
@@ -249,4 +265,51 @@ def update_api_user():
         frappe.db.commit()
         return [r.role for r in u.roles]
     return []
+
+
+def _ensure_translations():
+    """Idempotently adds custom Translations to replace ERPNext and Frappe names upgrade-safely (F13)."""
+    translations = [
+        ("ERPNext", "ERP"),
+        ("ERPNext Settings", "ERP Settings"),
+        ("Frappe Framework", "Engineering OS"),
+        ("ERPNext Integrations", "ERP Integrations"),
+        ("Frappe Helpdesk", "Helpdesk"),
+        ("Frappe CRM", "CRM"),
+    ]
+    for src, tr in translations:
+        try:
+            existing = frappe.db.get_value(
+                "Translation",
+                {"language": "en", "source_text": src},
+                ["name", "translated_text"],
+                as_dict=True,
+            )
+            if existing:
+                if existing.translated_text != tr:
+                    frappe.db.set_value("Translation", existing.name, "translated_text", tr)
+            else:
+                doc = frappe.get_doc({
+                    "doctype": "Translation",
+                    "language": "en",
+                    "source_text": src,
+                    "translated_text": tr,
+                })
+                doc.insert(ignore_permissions=True)
+        except Exception as e:
+            frappe.logger("acs_erp").error(f"Failed to upsert translation for '{src}': {e}")
+
+
+def _prune_help_menu():
+    """Prunes help dropdown items in Navbar Settings to keep only About (F13)."""
+    try:
+        frappe.db.sql("""
+            DELETE FROM `tabNavbar Item`
+            WHERE `parent` = 'Navbar Settings'
+              AND `parentfield` = 'help_dropdown'
+              AND `item_label` != 'About'
+        """)
+    except Exception as e:
+        frappe.logger("acs_erp").error(f"Failed to prune Help menu: {e}")
+
 
