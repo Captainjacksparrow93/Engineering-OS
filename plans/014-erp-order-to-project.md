@@ -104,7 +104,7 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
   - Two Directors picking orders of the same new customer at the same time must end with **one** client: rely on the unique constraints and retry the lookup.
   - A name clash with an existing unlinked client of the same name links that client instead of failing.
   - Tests: each branch, the race (two parallel calls), write-back failure (the client still exists; the next call writes the reference again).
-- [ ] **5. Create the project from the order.**
+- [x] **5. Create the project from the order.**
   - `createAutomationProject` takes an optional `salesOrder` (name).
   - **When ERP is on:** a `WORK_ORDER` without `salesOrder` is refused ("Pick a sales order first."); service calls are unaffected. With `salesOrder`, the server calls `getOrderForProject` and `resolveClientForCustomer`, and uses their values for client, WO, PO, panels, panel dates and target date. It also stores `erpSalesOrder`, `clientPoNumber`, `erpOrderModified` and each panel task's `erpOrderItem`.
   - **After the DB transaction commits**, write `custom_project_code` and `custom_project_link` (`<APP_URL>/pm/projects/<id>`) onto the order.
@@ -240,6 +240,27 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
     - `npm run typecheck`: clean (0 errors).
     - `npm test`: 14 test files passed, 163 tests passed.
     - `npm run test:int`: 15 test files passed, 84 tests passed.
+    - `npm run build`: clean.
+- **Step 5 (create the project from the order):**
+  - **Environment / tools:** done in a cloud container, not on the user's PC. code-review-graph, Token Savior and sequential-thinking were **not available** here, so callers were found with text search (`grep`): `createAutomationProject` is called by `createAutomationProjectAction`, `createServiceCallAction` and the int tests named in "Affected code"; `writeProjectToOrder` is new (called by `createAutomationProject` and `listWaitingOrders`). The ordering questions (DB transaction vs write-back, repair, parallel saves) were reasoned through by hand. No local ERPNext and no Docker here: Postgres 16 ran directly on the container. **ERPNext check pending** for this step: the write-back to a *submitted* order relies on `allow_on_submit: 1` for `custom_project_code` / `custom_project_link` in `erp/acs_erp/acs_erp/fixtures/custom_field.json` (checked in the file only). Step 8 covers it in the browser.
+  - `createAutomationProject` (`automation-project.service.ts`):
+    - new optional `salesOrder`; `clientId` / `clientName` are now optional in `CreateAutomationProjectInput` (an order's client may not exist yet).
+    - **ERP on** (`isErpEnabled()`): a work order without `salesOrder` → "Pick a sales order first."; service calls unaffected. `salesOrder` together with `kind: 'SERVICE_CALL'` → "A service call can't come from a sales order."
+    - With `salesOrder`: `getOrderForProject` supplies WO, PO, target date, scopes, panel dates and `erpOrderItem`s; the browser's client, WO, target date, scopes and panel dates are ignored. Task drafts for panels that aren't on the order are dropped (so they add no members). `resolveClientForCustomer` runs only **after** every check has passed, so a refused save doesn't create a client. The project code is computed after that (moved below the date checks for both paths; no behaviour change).
+    - Stores `erpSalesOrder`, `clientPoNumber`, `erpOrderModified` (ERPNext's string, unchanged) and each `PHASE` task's `erpOrderItem`.
+    - Date errors on an order end with "Change the dates on the sales order in ERP." (reviewer's step-3 note).
+    - Parallel saves of one order: the second is refused by `getOrderForProject`, or, if both pass that check, by the unique index (`P2002` on `erpSalesOrder` → "This sales order already has a project."; on `workOrderNo` → "Work Order No. … is already in use.").
+    - **After the transaction commits**, `writeProjectToOrder` writes `custom_project_code` and `custom_project_link` (`<APP_URL>/pm/projects/<id>`). If it fails, the project stays, the error is logged and audited as `erp.writeback_failed` (diff: `erpSalesOrder`, `code`).
+    - Audit: the create audit is now `pm.project.created` as the plan says (it was `pm.automation_project.created`, which nothing reads and the audit log didn't format). The diff gains `workOrderNo`, `projectManagerId` (so the audit log shows "WO … · PM …") and `erpSalesOrder`.
+  - `order.service.ts`: new `writeProjectToOrder(orderName, {id, code})`. `listWaitingOrders` repairs a missed write-back: an order ERPNext still lists without a project code but that is on a `Project.erpSalesOrder` gets its fields written again (best effort, logged) and is never listed as waiting.
+  - `createAutomationProjectSchema` (`schemas.ts`): optional `salesOrder`. With it, client, WO and scopes aren't required (the server reads them from ERP). Without it, client, client name, WO and scopes are required as before. The action passes `salesOrder` through unchanged.
+  - **Tests (TDD, red first):** new `src/modules/erp/order-to-project.int.test.ts` (7): ERP off unchanged; ERP on refused without an order and service call still allowed; denied without `pm.project.create`; happy path (order beats browser values, new client linked to the customer, `erpOrderItem` and per-panel dates, ignored HMI draft adds no member, write-back payload, audit diff); parallel save refused (exactly one project); write-back failure kept + audited + repaired by `listWaitingOrders`; tight dates say to fix them in ERP. `schemas.test.ts`: +2 (order without client/WO/scopes accepted; still required without).
+  - **One existing test changed (please check):** `pm-panel-assignment.int.test.ts` test 2 read `prisma.task.findFirst({ where: { projectId, type: 'PROJECT' } })` with **no `orderBy`** and assumed it got step 1 (T001). The new parallel-save test rolls back one transaction; Postgres reuses that space, and the unordered read then returned T002 (no assignee). It failed only when run after the new file (reproduced with just those two files; passed alone). Fix: added `orderBy: { code: 'asc' }`. No product behaviour changed.
+  - **Test counts:**
+    - `npm run typecheck`: clean (0 errors).
+    - `npm test`: 14 test files passed, 165 tests passed.
+    - `npm run test:int` (dev DB): 16 test files passed, 91 tests passed.
+    - `npm run test:int` on a fresh throwaway DB (empty → `npx prisma migrate deploy` → `npm run db:seed`): 16 files, 91 tests passed.
     - `npm run build`: clean.
 
 ## Review (Claude)
