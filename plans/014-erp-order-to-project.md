@@ -121,7 +121,7 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
     - write-back failure and repair;
     - no `pm.project.create` → denied;
     - client-sent panels or WO that differ from the order are ignored.
-- [ ] **6. New project wizard: "Pick a sales order" first.** When ERP is on:
+- [x] **6. New project wizard: "Pick a sales order" first.** When ERP is on:
   - **Step 0** lists the waiting orders (customer, order number, WO, panels, delivery date), with a search box.
   - Picking one fills steps 1–2 and **locks** client, WO, PO, panels and dates, with a "From sales order SAL-ORD-…" line and a link to the order in ERPNext (`ERPNEXT_PUBLIC_URL/app/sales-order/<name>`). PM, engineers, task dates and priority stay editable.
   - **Empty state:** "No confirmed sales orders are waiting for a project. Create and submit the order in ERP first." with a link to ERP.
@@ -262,6 +262,18 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
     - `npm run test:int` (dev DB): 16 test files passed, 91 tests passed.
     - `npm run test:int` on a fresh throwaway DB (empty → `npx prisma migrate deploy` → `npm run db:seed`): 16 files, 91 tests passed.
     - `npm run build`: clean.
+- **Step 6 (New project wizard: pick a sales order first):**
+  - New server actions `src/app/actions/erp-orders.ts`: `listWaitingOrdersAction()` and `getSalesOrderAction(name)` wrap `listWaitingOrders` / `getOrderForProject`. Client-safe errors (`DomainError` etc.) pass their message; anything else is logged and becomes "ERP isn't responding. Try again in a minute."
+  - New `sales-order-step.tsx` (`SalesOrderStep`): step 0 table (customer, order + PO, WO, panels, delivery), search box, Refresh, "Use this order"; empty state "No confirmed sales orders are waiting for a project." / "Create and submit the order in ERP first." with **Open ERP** (`/erp/open`, our SSO); ERP down → the error with **Try again**; **Create a service call instead** is always there. A refused pick (e.g. a missing WO) shows the reason inline.
+  - `AutomationProjectWizard`: new props `erpEnabled` and `erpOrderUrlBase` (from `NewProjectPage`: `isErpEnabled()` and `ERPNEXT_PUBLIC_URL/app/sales-order/`). ERP on → starts on step 0; picking fills WO, client name, ACS reference (or "Assigned when you save"), target date, scopes and per-panel dates, and locks them (read-only WO, client and target date; scope checkboxes and quantities disabled; panel dates read-only). A "From sales order SAL-ORD-… · Client PO … Change them in ERP." line with **Open in ERP** shows on steps 1–3. The service-call toggle is hidden when ERP is on (step 0 decides); a service call shows "Service call: no sales order needed." with **Pick a sales order instead**. The target-date auto-bump is off for an order (so a too-tight order shows the error, ending "Change the dates on the sales order in ERP.", instead of being silently moved). Submit sends `salesOrder` and no `clientId` (the server resolves the client). PM, engineers, start date, code, end user, application stay editable. **ERP off: the wizard is unchanged** (starts at step 1, toggle shown, nothing locked).
+  - No unit test for the components (the project has no React test setup); the logic they call is covered by the step 3–5 integration tests.
+  - **Browser check (no real ERPNext here: ERPNext check pending).** No Docker in this container, so ERPNext couldn't run. Instead: production build (`next start`) with ERP env pointing at a **throwaway mock of the ERPNext REST endpoints** (`/api/resource/Sales Order|Customer`, GET/PUT, same filters; kept outside the repo), signed in as a Director in Chromium (Playwright):
+    - step 0 listed the 2 submitted orders, not the draft; search "8101" → 1 row;
+    - picking SAL-ORD-2026-00101 (new customer, 2 × PLC on two rows with different dates, PO) locked WO 8101, client, target date, 3 scope checkboxes and 2 panel dates; the order line and PO showed;
+    - after choosing a PM and saving: project `ACS-0004-0001`, WO 8101, PO, `erpOrderModified`, PLC Panel 1/2 with `it101a#1` / `it101b#1` and their own dates; new client `ACS-0004` linked to the customer; the mock order got `custom_project_code` + `custom_project_link`, the customer got `custom_acs_reference = ACS-0004`;
+    - the waiting list then showed only SAL-ORD-2026-00102;
+    - mock ERP down: step 0 showed "ERP isn't responding. Try again in a minute." with Try again; `/pm/projects` still loaded (200); "Create a service call instead" opened the normal client picker; after bringing it up, "Pick a sales order instead" listed the orders again.
+  - **Test counts:** typecheck clean; `npm test` 14 files / 165 tests passed; `npm run test:int` 16 files / 91 tests passed; `npm run build` clean.
 
 ## Review (Claude)
 

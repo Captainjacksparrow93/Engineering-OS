@@ -8,6 +8,8 @@ import { addWorkingDays, formatDate, workingDaysBetween } from '@/core/utils/dat
 import { minWorkingDaysForHours, planLaneByHours } from '@/modules/project-management/domain/scheduling';
 import { createAutomationProjectAction } from '@/app/actions/automation-project';
 import { autoAssignAutomationTeamAction, createClientAction } from '@/app/actions/pm';
+import type { ProjectOrderInput } from '@/modules/erp/order.service';
+import { SalesOrderStep } from './sales-order-step';
 
 interface TemplateItem {
   id: string;
@@ -69,6 +71,8 @@ export function AutomationProjectWizard({
   initialClients = [],
   defaultClientRef = 'ACS-0001',
   existingProjectCodes = [],
+  erpEnabled = false,
+  erpOrderUrlBase = null,
 }: {
   managers: Manager[];
   teamsByPM: Record<string, string[]>;
@@ -77,8 +81,15 @@ export function AutomationProjectWizard({
   initialClients?: ClientOption[];
   defaultClientRef?: string;
   existingProjectCodes?: ExistingProjectCodeOption[];
+  /** ERP on: a work order starts from a sales order (step 0) and its order fields are locked. */
+  erpEnabled?: boolean;
+  /** `<ERPNEXT_PUBLIC_URL>/app/sales-order/`, for the "From sales order" link. */
+  erpOrderUrlBase?: string | null;
 }) {
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+  const [currentStep, setCurrentStep] = useState<0 | 1 | 2 | 3>(erpEnabled ? 0 : 1);
+  const [salesOrder, setSalesOrder] = useState<ProjectOrderInput | null>(null);
+  const fromOrder = salesOrder !== null;
+  const fixInErp = fromOrder ? ' Change the dates on the sales order in ERP.' : '';
 
   // Step 1: Order details
   const [isServiceCall, setIsServiceCall] = useState(false);
@@ -131,6 +142,40 @@ export function AutomationProjectWizard({
 
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  // Step 0: fill steps 1-2 from the picked order; those fields stay locked.
+  const applyOrder = (order: ProjectOrderInput) => {
+    setSalesOrder(order);
+    setIsServiceCall(false);
+    setWorkOrderNo(order.workOrderNo);
+    setClientId('');
+    setClientName(order.client.name);
+    setClientRefNumber(order.client.customAcsReference ?? '');
+    setTargetEndDate(order.targetEndDate);
+    const scopes: Record<string, { enabled: boolean; qty: number }> = {};
+    for (const tpl of templates) scopes[tpl.code] = { enabled: false, qty: 1 };
+    for (const scope of order.scopes) scopes[scope.templateCode] = { enabled: true, qty: scope.quantity };
+    setSelectedScopes(scopes);
+    setPanelDeliveryDates(order.panelDeliveryDates);
+    setTaskAssignments({});
+    setRationales({});
+    setCode('');
+    setStep1Error(null);
+    setError(null);
+    setCurrentStep(1);
+  };
+
+  const startServiceCall = () => {
+    setSalesOrder(null);
+    setIsServiceCall(true);
+    setWorkOrderNo('');
+    setClientId('');
+    setClientName('');
+    setClientRefNumber('');
+    setPanelDeliveryDates({});
+    setTaskAssignments({});
+    setCurrentStep(1);
+  };
 
   // Handle client selection
   const handleClientSelect = (selectedId: string) => {
@@ -268,11 +313,11 @@ export function AutomationProjectWizard({
 
   // Pre-fill target delivery date if empty or if previously less than min
   useEffect(() => {
-    if (!minFinishDateStr) return;
+    if (!minFinishDateStr || fromOrder) return;
     if (!targetEndDate || targetEndDate < minFinishDateStr) {
       setTargetEndDate(minFinishDateStr);
     }
-  }, [minFinishDateStr, targetEndDate]);
+  }, [minFinishDateStr, targetEndDate, fromOrder]);
 
   // Check if chosen target end date is too early
   const selectedDurationWorkingDays = useMemo(() => {
@@ -484,7 +529,7 @@ export function AutomationProjectWizard({
         return;
       }
     }
-    if (!clientId) {
+    if (!clientId && !fromOrder) {
       setStep1Error('Please select a client.');
       return;
     }
@@ -497,7 +542,7 @@ export function AutomationProjectWizard({
       return;
     }
     if (isTargetDateTooEarly) {
-      setStep1Error(`Needs at least ${minWorkingDays} working days (finishes ${formatDate(minFinishDateObj)}).`);
+      setStep1Error(`Needs at least ${minWorkingDays} working days (finishes ${formatDate(minFinishDateObj)}).${fixInErp}`);
       return;
     }
     setCurrentStep(2);
@@ -538,7 +583,7 @@ export function AutomationProjectWizard({
     e.preventDefault();
     setError(null);
 
-    if ((!isServiceCall && !workOrderNo.trim()) || !clientId || !selectedPMId) {
+    if ((!isServiceCall && !workOrderNo.trim()) || (!clientId && !fromOrder) || !selectedPMId) {
       setError(
         isServiceCall
           ? 'Please select a Client and choose a Project Manager.'
@@ -570,7 +615,7 @@ export function AutomationProjectWizard({
       const pFinish = startDate ? addWorkingDays(new Date(startDate), pMinDays - 1) : new Date();
 
       if (pDays < pMinDays) {
-        setError(`${panel.title} needs at least ${pMinDays} working days (finishes ${formatDate(pFinish)}).`);
+        setError(`${panel.title} needs at least ${pMinDays} working days (finishes ${formatDate(pFinish)}).${fixInErp}`);
         return;
       }
       if (startDate && pDelivery < startDate) {
@@ -625,9 +670,10 @@ export function AutomationProjectWizard({
     startTransition(async () => {
       const res = await createAutomationProjectAction({
         kind: isServiceCall ? 'SERVICE_CALL' : 'WORK_ORDER',
+        salesOrder: salesOrder?.erpSalesOrder,
         name: isServiceCall ? undefined : `WO ${workOrderNo.trim()}`,
         workOrderNo: isServiceCall ? (workOrderNo.trim() || undefined) : workOrderNo.trim(),
-        clientId,
+        clientId: clientId || undefined,
         clientName: clientName.trim(),
         clientRefNumber: clientRefNumber.trim() || undefined,
         code: code.trim() || undefined,
@@ -652,10 +698,35 @@ export function AutomationProjectWizard({
       {/* 3-Step Wizard Stepper */}
       <nav aria-label="Wizard Steps" className="card p-3 bg-surface">
         <div className="flex items-center justify-between sm:justify-center sm:gap-12">
+          {erpEnabled ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(0)}
+                className={clsx(
+                  'flex items-center gap-2 text-xs sm:text-body-sm font-semibold transition-colors',
+                  currentStep === 0 ? 'text-ink' : 'text-muted hover:text-ink'
+                )}
+              >
+                <span
+                  className={clsx(
+                    'flex h-6 w-6 items-center justify-center rounded-pill text-xs font-mono font-bold',
+                    currentStep === 0 ? 'bg-ink text-canvas' : 'bg-surface-strong text-ink border border-hairline'
+                  )}
+                >
+                  0
+                </span>
+                <span>Sales order</span>
+              </button>
+              <span className="h-px w-6 sm:w-12 bg-hairline" />
+            </>
+          ) : null}
           {/* Step 1 */}
           <button
             type="button"
-            onClick={() => setCurrentStep(1)}
+            onClick={() => {
+              if (currentStep > 1) setCurrentStep(1);
+            }}
             className={clsx(
               'flex items-center gap-2 text-xs sm:text-body-sm font-semibold transition-colors',
               currentStep === 1
@@ -747,6 +818,48 @@ export function AutomationProjectWizard({
         </div>
       ) : null}
 
+      {currentStep === 0 ? <SalesOrderStep onPick={applyOrder} onServiceCall={startServiceCall} /> : null}
+
+      {currentStep > 0 && salesOrder ? (
+        <div className="rounded-md border border-hairline bg-surface-strong/20 p-3 flex flex-wrap items-center justify-between gap-2 text-caption text-muted">
+          <span>
+            From sales order <span className="font-mono font-semibold text-ink">{salesOrder.erpSalesOrder}</span>
+            {salesOrder.clientPoNumber ? (
+              <>
+                {' '}· Client PO <span className="font-mono text-ink">{salesOrder.clientPoNumber}</span>
+              </>
+            ) : null}
+            . Client, WO, panels and dates come from the order. Change them in ERP.
+          </span>
+          {erpOrderUrlBase ? (
+            <a
+              href={`${erpOrderUrlBase}${encodeURIComponent(salesOrder.erpSalesOrder)}`}
+              target="_blank"
+              rel="noopener"
+              className="text-primary font-semibold hover:underline"
+            >
+              Open in ERP
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+
+      {currentStep > 0 && erpEnabled && !salesOrder ? (
+        <div className="rounded-md border border-hairline bg-surface-strong/20 p-3 flex flex-wrap items-center justify-between gap-2 text-caption text-muted">
+          <span>Service call: no sales order needed.</span>
+          <button
+            type="button"
+            onClick={() => {
+              setIsServiceCall(false);
+              setCurrentStep(0);
+            }}
+            className="text-primary font-semibold hover:underline"
+          >
+            Pick a sales order instead
+          </button>
+        </div>
+      ) : null}
+
       {/* STEP 1: ORDER DETAILS */}
       {currentStep === 1 ? (
         <section className="card p-5 space-y-6 bg-surface">
@@ -761,7 +874,8 @@ export function AutomationProjectWizard({
           ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            {/* Service Call / Work Order Toggle */}
+            {/* Service Call / Work Order Toggle (ERP on: step 0 decides) */}
+            {erpEnabled ? null : (
             <div className="sm:col-span-2 flex items-center justify-between p-3.5 rounded-lg border border-hairline bg-surface-strong/20">
               <div>
                 <p className="text-body-sm font-semibold text-ink">Urgent service call (no WO)</p>
@@ -779,6 +893,7 @@ export function AutomationProjectWizard({
                 <div className="w-11 h-6 bg-surface-strong peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
               </label>
             </div>
+            )}
 
             {/* Work Order No. (Digits Only) or Service Call Notice */}
             {!isServiceCall ? (
@@ -793,11 +908,17 @@ export function AutomationProjectWizard({
                   inputMode="numeric"
                   value={workOrderNo}
                   onChange={(e) => setWorkOrderNo(e.target.value.replace(/\D/g, ''))}
+                  readOnly={fromOrder}
                   placeholder="e.g. 1042"
-                  className="input text-sm w-full font-mono"
+                  className={clsx(
+                    'input text-sm w-full font-mono',
+                    fromOrder && 'bg-surface-strong/30 cursor-not-allowed text-muted'
+                  )}
                   required
                 />
-                <span className="text-[11px] text-muted">Digits only, unique across all projects.</span>
+                <span className="text-[11px] text-muted">
+                  {fromOrder ? 'From the sales order.' : 'Digits only, unique across all projects.'}
+                </span>
               </div>
             ) : (
               <div className="flex flex-col justify-center rounded border border-dashed border-hairline p-3 bg-surface-strong/10">
@@ -814,6 +935,7 @@ export function AutomationProjectWizard({
                 <label className="label text-xs font-semibold" htmlFor="clientId">
                   Client / Customer *
                 </label>
+                {fromOrder ? null : (
                 <button
                   type="button"
                   onClick={() => setShowAddClient(true)}
@@ -821,7 +943,17 @@ export function AutomationProjectWizard({
                 >
                   ➕ Add new client
                 </button>
+                )}
               </div>
+              {fromOrder ? (
+                <input
+                  id="clientId"
+                  type="text"
+                  value={clientName}
+                  readOnly
+                  className="input text-sm w-full font-medium bg-surface-strong/30 cursor-not-allowed text-muted"
+                />
+              ) : (
               <select
                 id="clientId"
                 value={clientId}
@@ -836,6 +968,7 @@ export function AutomationProjectWizard({
                   </option>
                 ))}
               </select>
+              )}
             </div>
 
             {/* Client Reference No. (Read-only) */}
@@ -848,7 +981,7 @@ export function AutomationProjectWizard({
                 type="text"
                 value={clientRefNumber}
                 readOnly
-                placeholder="Autofilled from client selection"
+                placeholder={fromOrder ? 'Assigned when you save' : 'Autofilled from client selection'}
                 className="input text-sm w-full font-mono bg-surface-strong/30 cursor-not-allowed text-muted"
               />
               <span className="text-[11px] text-muted">Used to generate project code (e.g. {clientRefNumber || 'ACS-XXXX'}-0001).</span>
@@ -938,16 +1071,18 @@ export function AutomationProjectWizard({
                 type="date"
                 value={targetEndDate}
                 onChange={(e) => setTargetEndDate(e.target.value)}
-                min={minFinishDateStr || undefined}
+                readOnly={fromOrder}
+                min={fromOrder ? undefined : minFinishDateStr || undefined}
                 className={clsx(
                   'input text-sm w-full font-mono',
+                  fromOrder && 'bg-surface-strong/30 cursor-not-allowed',
                   isTargetDateTooEarly && 'border-error text-error'
                 )}
                 required
               />
               {isTargetDateTooEarly ? (
                 <p className="mt-1 text-[11px] text-error">
-                  Target date allows {selectedDurationWorkingDays} working days, but parallel panels require at least {minWorkingDays} working days.
+                  Target date allows {selectedDurationWorkingDays} working days, but parallel panels require at least {minWorkingDays} working days.{fixInErp}
                 </p>
               ) : null}
             </div>
@@ -1094,6 +1229,7 @@ export function AutomationProjectWizard({
                         <input
                           type="checkbox"
                           checked={scope.enabled}
+                          disabled={fromOrder}
                           onChange={() => toggleScope(tpl.code)}
                           className="rounded text-ink focus:ring-ink h-4 w-4"
                         />
@@ -1120,7 +1256,7 @@ export function AutomationProjectWizard({
                           <button
                             type="button"
                             onClick={() => setScopeQty(tpl.code, scope.qty - 1)}
-                            disabled={scope.qty <= 1}
+                            disabled={fromOrder || scope.qty <= 1}
                             className="flex h-6 w-6 items-center justify-center rounded border border-hairline bg-surface text-xs font-bold text-ink hover:bg-surface-strong disabled:opacity-40"
                           >
                             -
@@ -1131,7 +1267,7 @@ export function AutomationProjectWizard({
                           <button
                             type="button"
                             onClick={() => setScopeQty(tpl.code, scope.qty + 1)}
-                            disabled={scope.qty >= 20}
+                            disabled={fromOrder || scope.qty >= 20}
                             className="flex h-6 w-6 items-center justify-center rounded border border-hairline bg-surface text-xs font-bold text-ink hover:bg-surface-strong disabled:opacity-40"
                           >
                             +
@@ -1293,6 +1429,8 @@ export function AutomationProjectWizard({
                           id={`delivery-${panel.panelKey}`}
                           type="date"
                           value={panelDeliveryDate}
+                          readOnly={fromOrder}
+                          title={fromOrder ? 'From the sales order. Change it in ERP.' : undefined}
                           min={startDate}
                           max={targetEndDate}
                           onChange={(e) => {
