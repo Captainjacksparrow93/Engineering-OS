@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/core/db/prisma';
 import { assertCan } from '@/core/rbac/guard';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
@@ -20,6 +21,13 @@ import {
   type WorkloadPerson,
 } from '../domain/availability';
 import { generateWithGemini } from '@/core/ai/vertex';
+import { isErpEnabled } from '@/modules/erp/client';
+import {
+  getOrderForProject,
+  resolveClientForCustomer,
+  writeProjectToOrder,
+  type ProjectOrderInput,
+} from '@/modules/erp/order.service';
 
 export interface ScopeSelection {
   templateCode: string; // "PLC" | "SCADA" | "HMI"
@@ -43,8 +51,10 @@ export interface CreateAutomationProjectInput {
   name?: string;
   workOrderNo?: string | null;
   code?: string;
-  clientId: string;
-  clientName: string;
+  /** ERPNext sales order name. When set, client, WO, PO, panels and dates come from the order, not from the input. */
+  salesOrder?: string;
+  clientId?: string;
+  clientName?: string;
   clientRefNumber?: string;
   endUserName?: string;
   applicationName?: string;
@@ -186,11 +196,24 @@ export async function createAutomationProject(principal: Principal, input: Creat
   const departmentId = input.departmentId || manager.departmentId || principal.departmentId;
   assertCan(principal, 'pm.project.create', { departmentId: departmentId ?? undefined });
 
-  const isServiceCall = input.kind === 'SERVICE_CALL' || !input.workOrderNo;
+  const salesOrderName = input.salesOrder?.trim() || undefined;
+  if (salesOrderName && input.kind === 'SERVICE_CALL') {
+    throw new DomainError("A service call can't come from a sales order.");
+  }
+  const isServiceCall = !salesOrderName && (input.kind === 'SERVICE_CALL' || !input.workOrderNo);
   const kind = isServiceCall ? 'SERVICE_CALL' : 'WORK_ORDER';
+  if (!salesOrderName && input.kind !== 'SERVICE_CALL' && (input.kind === 'WORK_ORDER' || input.workOrderNo) && isErpEnabled()) {
+    throw new DomainError('Pick a sales order first.');
+  }
 
-  const scopes = input.scopes ?? [];
-  const tasks = input.tasks ?? [];
+  // The server trusts ERPNext, not the browser: an order's client, WO, PO, panels and dates replace the input's.
+  const order: ProjectOrderInput | null = salesOrderName ? await getOrderForProject(principal, salesOrderName) : null;
+  const fixDates = order ? ' Change the dates on the sales order in ERP.' : '';
+  const scopes = order ? order.scopes : input.scopes ?? [];
+  const panelDeliveryDates = order ? order.panelDeliveryDates : input.panelDeliveryDates;
+  const tasks = (input.tasks ?? []).filter(
+    (t) => !order || `${t.templateCode}_${t.unitIndex}` in order.panelOrderItems,
+  );
 
   // Validate all assignees belong to company and are active
   const assigneeIds = tasks
@@ -229,39 +252,42 @@ export async function createAutomationProject(principal: Principal, input: Creat
     );
   }
 
-  // Determine and validate client
-  if (!input.clientId) {
-    throw new DomainError('Client is required. Pick a client before creating the project.');
+  // Determine and validate client (an order's client is resolved from ERPNext once every check has passed)
+  let clientId = '';
+  let clientName = '';
+  let clientRef = '';
+  if (!order) {
+    if (!input.clientId) {
+      throw new DomainError('Client is required. Pick a client before creating the project.');
+    }
+
+    const client = await getClientById(principal.companyId, input.clientId);
+    if (!client) {
+      throw new DomainError('Client not found or does not belong to your company.');
+    }
+
+    clientRef = input.clientRefNumber?.trim().toUpperCase() || client.refNumber;
+    if (!clientRef) {
+      throw new DomainError('Client not found. Pick a client before creating the project.');
+    }
+    clientId = client.id;
+    clientName = input.clientName ?? client.name;
   }
 
-  const client = await getClientById(principal.companyId, input.clientId);
-  if (!client) {
-    throw new DomainError('Client not found or does not belong to your company.');
-  }
-
-  const clientRef = input.clientRefNumber?.trim().toUpperCase() || client.refNumber;
-  if (!clientRef) {
-    throw new DomainError('Client not found. Pick a client before creating the project.');
-  }
-
-  let code = input.code?.trim().toUpperCase();
-  if (!code) {
-    code = await nextClientProjectCode(principal.companyId, clientRef);
-  }
-
-  const trimmedWO = input.workOrderNo ? input.workOrderNo.trim() : null;
+  const trimmedWO = order ? order.workOrderNo : input.workOrderNo ? input.workOrderNo.trim() : null;
   if (trimmedWO) {
     const existingWO = await prisma.project.findUnique({ where: { workOrderNo: trimmedWO } });
     if (existingWO) throw new DomainError(`Work Order No. ${trimmedWO} is already in use.`);
   }
 
   const start = input.startDate ? new Date(input.startDate) : new Date();
-  const targetEnd = input.targetEndDate ? new Date(input.targetEndDate) : addWorkingDays(start, 45);
+  const targetEndDate = order ? order.targetEndDate : input.targetEndDate;
+  const targetEnd = targetEndDate ? new Date(targetEndDate) : addWorkingDays(start, 45);
 
   const dayStr = String(start.getDate()).padStart(2, '0');
   const monthStr = start.toLocaleString('en-US', { month: 'short' });
   const defaultName = isServiceCall
-    ? `SC ${input.clientName} ${dayStr}-${monthStr}`
+    ? `SC ${clientName} ${dayStr}-${monthStr}`
     : `WO ${trimmedWO}`;
   const projectName = input.name?.trim() || defaultName;
 
@@ -286,25 +312,25 @@ export async function createAutomationProject(principal: Principal, input: Creat
 
     for (let unit = 1; unit <= scope.quantity; unit++) {
       const panelKey = `${scope.templateCode}_${unit}`;
-      const rawDate = input.panelDeliveryDates?.[panelKey];
+      const rawDate = panelDeliveryDates?.[panelKey];
       const panelDate = rawDate ? startOfDay(new Date(rawDate)) : targetEndDay;
       const panelTitle = `${scope.templateCode} Panel ${unit}`;
       if (rawDate) {
         if (isNaN(panelDate.getTime())) {
-          throw new DomainError(`${panelTitle} delivery date is invalid.`);
+          throw new DomainError(`${panelTitle} delivery date is invalid.${fixDates}`);
         }
         if (panelDate.getTime() < startDay.getTime()) {
-          throw new DomainError(`${panelTitle} delivery date is before the project start date.`);
+          throw new DomainError(`${panelTitle} delivery date is before the project start date.${fixDates}`);
         }
         if (panelDate.getTime() > targetEndDay.getTime()) {
-          throw new DomainError(`${panelTitle} delivery date is after the project target date.`);
+          throw new DomainError(`${panelTitle} delivery date is after the project target date.${fixDates}`);
         }
       }
       if (minDays > 0) {
         const availableDays = workingDaysBetween(startDay, panelDate);
         if (availableDays < minDays) {
           throw new DomainError(
-            `${panelTitle} needs at least ${minDays} working days (finishes ${formatDate(minFinish)}).`
+            `${panelTitle} needs at least ${minDays} working days (finishes ${formatDate(minFinish)}).${fixDates}`
           );
         }
       }
@@ -325,6 +351,21 @@ export async function createAutomationProject(principal: Principal, input: Creat
     }
   }
 
+  if (order) {
+    const client = await resolveClientForCustomer(principal, {
+      name: order.client.erpCustomer,
+      custom_acs_reference: order.client.customAcsReference,
+    });
+    clientId = client.id;
+    clientName = client.name;
+    clientRef = client.refNumber;
+  }
+
+  let code = input.code?.trim().toUpperCase();
+  if (!code) {
+    code = await nextClientProjectCode(principal.companyId, clientRef);
+  }
+
   const createdProject = await prisma.$transaction(async (tx) => {
     // 1. Create Project
     const project = await tx.project.create({
@@ -335,8 +376,11 @@ export async function createAutomationProject(principal: Principal, input: Creat
         workOrderNo: trimmedWO,
         name: projectName,
         description: input.description ?? null,
-        clientId: input.clientId,
-        clientName: input.clientName,
+        clientId,
+        clientName,
+        clientPoNumber: order?.clientPoNumber ?? null,
+        erpSalesOrder: order?.erpSalesOrder ?? null,
+        erpOrderModified: order?.erpOrderModified || null,
         endUserName: input.endUserName ?? null,
         applicationName: input.applicationName ?? null,
         status: input.status ?? (isServiceCall ? 'IN_PROGRESS' : 'PLANNING'),
@@ -405,7 +449,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
         const panelHours = tpl.items.reduce((sum, item) => sum + item.defaultDurationHours, 0);
 
         const panelKey = `${scope.templateCode}_${unit}`;
-        const rawPanelDate = input.panelDeliveryDates?.[panelKey];
+        const rawPanelDate = panelDeliveryDates?.[panelKey];
         const panelDeliveryDate = rawPanelDate ? new Date(rawPanelDate) : targetEnd;
 
         // Create Phase task (container node for this panel)
@@ -421,6 +465,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
             createdById: principal.userId,
             plannedStart: start,
             plannedEnd: panelDeliveryDate,
+            erpOrderItem: order?.panelOrderItems[panelKey] ?? null,
           },
         });
 
@@ -505,16 +550,53 @@ export async function createAutomationProject(principal: Principal, input: Creat
       {
         actorId: principal.userId,
         module: 'pm',
-        action: 'automation_project.created',
+        action: 'project.created',
         entityType: 'Project',
         entityId: project.id,
-        diff: { code: project.code, name: project.name, manager: manager.fullName },
+        diff: {
+          code: project.code,
+          name: project.name,
+          workOrderNo: trimmedWO,
+          manager: manager.fullName,
+          projectManagerId: manager.id,
+          erpSalesOrder: order?.erpSalesOrder ?? null,
+        },
       },
       tx,
     );
 
     return project;
+  }).catch((err: unknown) => {
+    // Two people saving the same order (or WO) at once: the unique index lets only one through.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const target = String(err.meta?.target ?? '');
+      if (target.includes('erpSalesOrder')) throw new DomainError('This sales order already has a project.');
+      if (target.includes('workOrderNo')) throw new DomainError(`Work Order No. ${trimmedWO} is already in use.`);
+    }
+    throw err;
   });
+
+  // After the commit: the order gets the project code and link. A failure keeps the project;
+  // listWaitingOrders writes it again.
+  if (order) {
+    try {
+      await writeProjectToOrder(order.erpSalesOrder, createdProject);
+    } catch (err) {
+      console.error('[erp] failed to write the project back to the sales order', {
+        salesOrder: order.erpSalesOrder,
+        projectId: createdProject.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await audit({
+        actorId: principal.userId,
+        module: 'erp',
+        action: 'writeback_failed',
+        entityType: 'Project',
+        entityId: createdProject.id,
+        diff: { erpSalesOrder: order.erpSalesOrder, code: createdProject.code },
+      });
+    }
+  }
 
   await recomputeTaskDerivedState(createdProject.id);
   return createdProject;

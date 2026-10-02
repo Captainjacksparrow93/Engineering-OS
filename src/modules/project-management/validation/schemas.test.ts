@@ -22,6 +22,21 @@ describe('updateProjectSchema', () => {
 });
 
 describe('createAutomationProjectSchema', () => {
+  it('accepts a sales order without client, WO or scopes (the server reads them from ERP)', () => {
+    const parsed = createAutomationProjectSchema.parse({
+      salesOrder: ' SAL-ORD-2026-00052 ',
+      managerId: 'pm-1',
+    });
+    expect(parsed.salesOrder).toBe('SAL-ORD-2026-00052');
+  });
+
+  it('still requires client, WO and scopes without a sales order', () => {
+    const result = createAutomationProjectSchema.safeParse({ managerId: 'pm-1' });
+    expect(result.success).toBe(false);
+    const paths = result.success ? [] : result.error.issues.map((i) => i.path.join('.'));
+    expect(paths).toEqual(expect.arrayContaining(['clientId', 'workOrderNo', 'scopes']));
+  });
+
   it('validates valid automation project payload', () => {
     const valid = {
       workOrderNo: '4821',

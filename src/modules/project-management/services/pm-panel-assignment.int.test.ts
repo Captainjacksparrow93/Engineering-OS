@@ -91,6 +91,7 @@ describe('Plan 011: PM and Assistant PM Panel Assignment Integration Tests', () 
     const task = await prisma.task.findFirst({
       where: { projectId: project.id, type: 'PROJECT' },
       include: { assignments: true },
+      orderBy: { code: 'asc' },
     });
     expect(task).toBeDefined();
     expect(task?.assignments[0]?.userId).toBe(pmUser.id);

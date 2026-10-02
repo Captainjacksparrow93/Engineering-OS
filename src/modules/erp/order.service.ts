@@ -1,4 +1,5 @@
 import { prisma } from '@/core/db/prisma';
+import { config } from '@/core/config';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { DomainError, ForbiddenError, NotFoundError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
@@ -62,6 +63,14 @@ interface ErpCustomerDoc {
   custom_acs_reference?: string;
 }
 
+/** Writes our project code and a link to the project onto the ERPNext sales order. Throws on failure. */
+export async function writeProjectToOrder(orderName: string, project: { id: string; code: string }) {
+  await erpUpdate('Sales Order', orderName, {
+    custom_project_code: project.code,
+    custom_project_link: `${config().APP_URL.replace(/\/+$/, '')}/pm/projects/${project.id}`,
+  });
+}
+
 /**
  * List submitted ERPNext sales orders waiting to become an Engineering OS project.
  * Needs `pm.project.create`.
@@ -115,9 +124,24 @@ export async function listWaitingOrders(principal: Principal): Promise<WaitingOr
       companyId: principal.companyId,
       erpSalesOrder: { in: candidateNames },
     },
-    select: { erpSalesOrder: true },
+    select: { id: true, code: true, erpSalesOrder: true },
   });
   const existingOrderNames = new Set(existingProjects.map((p) => p.erpSalesOrder).filter(Boolean));
+
+  // Repair: these orders already have a project but ERPNext missed the write-back. Write it again.
+  await Promise.all(
+    existingProjects.map(async (project) => {
+      try {
+        await writeProjectToOrder(project.erpSalesOrder!, project);
+      } catch (err) {
+        console.error('[erp] repair write-back to the sales order failed', {
+          salesOrder: project.erpSalesOrder,
+          projectId: project.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }),
+  );
 
   const waitingCandidates = openUnlinked.filter((o) => !existingOrderNames.has(o.name));
   if (waitingCandidates.length === 0) {
