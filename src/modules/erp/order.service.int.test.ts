@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { prisma } from '@/core/db/prisma';
 import { loadPrincipal } from '@/core/rbac/principal';
 import { DomainError, ForbiddenError } from '@/core/rbac/errors';
-import { erpGet, erpList } from './client';
-import { listWaitingOrders, getOrderForProject } from './order.service';
+import { erpGet, erpList, erpUpdate } from './client';
+import { listWaitingOrders, getOrderForProject, resolveClientForCustomer } from './order.service';
 import type { Principal } from '@/core/rbac/types';
 
 vi.mock('@/modules/erp/client', async (importOriginal) => {
@@ -12,6 +12,7 @@ vi.mock('@/modules/erp/client', async (importOriginal) => {
     ...actual,
     erpGet: vi.fn(),
     erpList: vi.fn(),
+    erpUpdate: vi.fn(),
   };
 });
 
@@ -460,4 +461,212 @@ describe('ERP Order Service Integration Tests (Plan 014 Step 3)', () => {
       );
     });
   });
+
+  describe('resolveClientForCustomer', () => {
+    it('denies resolution for an engineer lacking pm.project.create', async () => {
+      await expect(resolveClientForCustomer(engineerPrincipal, 'Any Customer')).rejects.toThrow(
+        ForbiddenError,
+      );
+    });
+
+    it('finds existing client by erpCustomer (branch 1)', async () => {
+      const client = await prisma.client.create({
+        data: {
+          companyId: directorPrincipal.companyId,
+          name: `Client Branch 1 ${Date.now()}`,
+          refNumber: `ACS-${Math.floor(1000 + Math.random() * 8000)}`,
+          erpCustomer: 'Branch 1 Customer',
+        },
+      });
+
+      try {
+        vi.mocked(erpGet).mockResolvedValueOnce({
+          name: 'Branch 1 Customer',
+          customer_name: 'Branch 1 Customer',
+          custom_acs_reference: client.refNumber,
+        } as any);
+
+        const resolved = await resolveClientForCustomer(directorPrincipal, 'Branch 1 Customer');
+
+        expect(resolved.id).toBe(client.id);
+        expect(resolved.refNumber).toBe(client.refNumber);
+        expect(erpUpdate).not.toHaveBeenCalled();
+      } finally {
+        await prisma.client.delete({ where: { id: client.id } });
+      }
+    });
+
+    it('links existing client when customer custom_acs_reference matches refNumber (branch 2)', async () => {
+      const ref = `ACS-${Math.floor(1000 + Math.random() * 8000)}`;
+      const client = await prisma.client.create({
+        data: {
+          companyId: directorPrincipal.companyId,
+          name: `Unlinked Ref Client ${Date.now()}`,
+          refNumber: ref,
+          erpCustomer: null,
+        },
+      });
+
+      try {
+        vi.mocked(erpGet).mockResolvedValueOnce({
+          name: 'Customer With Matching ACS Ref',
+          customer_name: 'Customer With Matching ACS Ref',
+          custom_acs_reference: ref,
+        } as any);
+
+        const resolved = await resolveClientForCustomer(
+          directorPrincipal,
+          'Customer With Matching ACS Ref',
+        );
+
+        expect(resolved.id).toBe(client.id);
+        expect(resolved.erpCustomer).toBe('Customer With Matching ACS Ref');
+
+        const dbClient = await prisma.client.findUnique({ where: { id: client.id } });
+        expect(dbClient?.erpCustomer).toBe('Customer With Matching ACS Ref');
+        expect(erpUpdate).not.toHaveBeenCalled();
+      } finally {
+        await prisma.client.delete({ where: { id: client.id } });
+      }
+    });
+
+    it('links existing unlinked client of the same name and writes reference back (branch 3 name clash)', async () => {
+      const customerName = `Existing Name Co ${Date.now()}`;
+      const ref = `ACS-${Math.floor(1000 + Math.random() * 8000)}`;
+      const client = await prisma.client.create({
+        data: {
+          companyId: directorPrincipal.companyId,
+          name: customerName,
+          refNumber: ref,
+          erpCustomer: null,
+        },
+      });
+
+      try {
+        vi.mocked(erpGet).mockResolvedValueOnce({
+          name: customerName,
+          customer_name: customerName,
+          custom_acs_reference: '',
+        } as any);
+        vi.mocked(erpUpdate).mockResolvedValueOnce({ name: customerName } as any);
+
+        const resolved = await resolveClientForCustomer(directorPrincipal, customerName);
+
+        expect(resolved.id).toBe(client.id);
+        expect(resolved.erpCustomer).toBe(customerName);
+
+        const dbClient = await prisma.client.findUnique({ where: { id: client.id } });
+        expect(dbClient?.erpCustomer).toBe(customerName);
+
+        expect(erpUpdate).toHaveBeenCalledWith('Customer', customerName, {
+          custom_acs_reference: ref,
+        });
+      } finally {
+        await prisma.client.delete({ where: { id: client.id } });
+      }
+    });
+
+    it('creates brand new client with nextClientRef and writes reference back (branch 4)', async () => {
+      const customerName = `Brand New Customer ${Date.now()}`;
+
+      vi.mocked(erpGet).mockResolvedValueOnce({
+        name: customerName,
+        customer_name: customerName,
+        custom_acs_reference: '',
+      } as any);
+      vi.mocked(erpUpdate).mockResolvedValueOnce({ name: customerName } as any);
+
+      const resolved = await resolveClientForCustomer(directorPrincipal, customerName);
+
+      try {
+        expect(resolved.name).toBe(customerName);
+        expect(resolved.erpCustomer).toBe(customerName);
+        expect(resolved.refNumber).toMatch(/^ACS-\d{4}$/);
+
+        const dbClient = await prisma.client.findUnique({ where: { id: resolved.id } });
+        expect(dbClient).not.toBeNull();
+        expect(dbClient?.erpCustomer).toBe(customerName);
+
+        expect(erpUpdate).toHaveBeenCalledWith('Customer', customerName, {
+          custom_acs_reference: resolved.refNumber,
+        });
+      } finally {
+        await prisma.client.delete({ where: { id: resolved.id } });
+      }
+    });
+
+    it('resolves exactly one client when two parallel requests race for the same new customer', async () => {
+      const customerName = `Race Customer ${Date.now()}`;
+
+      vi.mocked(erpGet).mockImplementation(async (doctype: string, name: string) => {
+        if (doctype === 'Customer' && name === customerName) {
+          return {
+            name: customerName,
+            customer_name: customerName,
+            custom_acs_reference: '',
+          } as any;
+        }
+        throw new Error(`Unexpected erpGet for ${doctype} ${name}`);
+      });
+      vi.mocked(erpUpdate).mockResolvedValue({ name: customerName } as any);
+
+      const [res1, res2] = await Promise.all([
+        resolveClientForCustomer(directorPrincipal, customerName),
+        resolveClientForCustomer(directorPrincipal, customerName),
+      ]);
+
+      try {
+        expect(res1.id).toBe(res2.id);
+        expect(res1.refNumber).toBe(res2.refNumber);
+
+        const totalInDb = await prisma.client.count({
+          where: { companyId: directorPrincipal.companyId, erpCustomer: customerName },
+        });
+        expect(totalInDb).toBe(1);
+      } finally {
+        await prisma.client.delete({ where: { id: res1.id } });
+      }
+    });
+
+    it('preserves the client if write-back fails and retries write-back on subsequent call', async () => {
+      const customerName = `Writeback Fail Customer ${Date.now()}`;
+
+      // Call 1: erpGet returns empty custom_acs_reference; erpUpdate fails
+      vi.mocked(erpGet).mockResolvedValueOnce({
+        name: customerName,
+        customer_name: customerName,
+        custom_acs_reference: '',
+      } as any);
+      vi.mocked(erpUpdate).mockRejectedValueOnce(new Error('ERPNext timeout on write-back'));
+
+      const res1 = await resolveClientForCustomer(directorPrincipal, customerName);
+
+      try {
+        // Client still exists in DB!
+        expect(res1.id).toBeDefined();
+        const dbClient = await prisma.client.findUnique({ where: { id: res1.id } });
+        expect(dbClient).not.toBeNull();
+        expect(dbClient?.erpCustomer).toBe(customerName);
+
+        // Call 2: customer still has empty custom_acs_reference in ERPNext; erpUpdate succeeds this time
+        vi.mocked(erpGet).mockResolvedValueOnce({
+          name: customerName,
+          customer_name: customerName,
+          custom_acs_reference: '',
+        } as any);
+        vi.mocked(erpUpdate).mockResolvedValueOnce({ name: customerName } as any);
+
+        const res2 = await resolveClientForCustomer(directorPrincipal, customerName);
+
+        expect(res2.id).toBe(res1.id);
+        expect(erpUpdate).toHaveBeenCalledTimes(2);
+        expect(erpUpdate).toHaveBeenLastCalledWith('Customer', customerName, {
+          custom_acs_reference: res1.refNumber,
+        });
+      } finally {
+        await prisma.client.delete({ where: { id: res1.id } });
+      }
+    });
+  });
 });
+

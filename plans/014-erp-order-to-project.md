@@ -96,7 +96,7 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
     - panels: one scope per item code with the summed quantity, and per-panel delivery dates from each item row's `delivery_date`. Units are numbered in row order and keyed `${code}_${unit}` like today. Remember each unit's row name for `Task.erpOrderItem`.
   - **Refuse, with a clear message:** a draft, cancelled or closed order; an order that already has a project; an item code that isn't an active checklist template (PLC / SCADA / HMI); a missing or non-digit WO number.
   - Integration tests with the ERP client mocked: allow, deny (no `pm.project.create`), happy path, each refusal.
-- [ ] **4. Client from the ERPNext customer (lazy ACS reference).** `resolveClientForCustomer(principal, customer)`:
+- [x] **4. Client from the ERPNext customer (lazy ACS reference).** `resolveClientForCustomer(principal, customer)`:
   1. find our client by `erpCustomer`;
   2. otherwise, if the customer's `custom_acs_reference` matches a client's `refNumber`, link that client;
   3. otherwise create a client named after the customer with `nextClientRef`.
@@ -225,6 +225,21 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
     - `npm run typecheck`: clean (0 errors).
     - `npm test`: 14 test files passed, 163 tests passed.
     - `npm run test:int`: 15 test files passed, 77 tests passed.
+    - `npm run build`: clean.
+- **Step 4 (Client from the ERPNext customer — lazy ACS reference):**
+  - Implemented `resolveClientForCustomer(principal, customer)` in `src/modules/erp/order.service.ts`:
+    - Checks `pm.project.create` permission.
+    - Branch 1: looks up existing client by `erpCustomer`.
+    - Branch 2: if customer has `custom_acs_reference`, looks up client by `refNumber` and links `erpCustomer`.
+    - Branch 3 (name clash): if an unlinked client exists with matching name, links that client and writes reference back.
+    - Branch 4: creates a new client with `nextClientRef`, links `erpCustomer`, audits `client.created`, and writes reference back to ERPNext.
+    - Handles concurrency races: catches unique constraint error `P2002` on parallel creation and safely retries lookup by `erpCustomer` / name so concurrent requests resolve to the exact same client.
+    - Handles write-back failure: keeps created/linked client in DB without throwing away work, logging failure; subsequent resolutions re-attempt `erpUpdate`.
+  - Added integration tests in `src/modules/erp/order.service.int.test.ts` (21 tests total) covering permission gate, all 4 branches, parallel creation race resolution, and write-back failure resilience.
+  - **Test counts:**
+    - `npm run typecheck`: clean (0 errors).
+    - `npm test`: 14 test files passed, 163 tests passed.
+    - `npm run test:int`: 15 test files passed, 84 tests passed.
     - `npm run build`: clean.
 
 ## Review (Claude)

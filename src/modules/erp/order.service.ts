@@ -2,7 +2,9 @@ import { prisma } from '@/core/db/prisma';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { DomainError, ForbiddenError, NotFoundError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
-import { erpGet, erpList } from './client';
+import { audit } from '@/core/audit/audit';
+import { nextClientRef } from '@/modules/project-management/services/client.service';
+import { erpGet, erpList, erpUpdate } from './client';
 
 export interface WaitingOrder {
   orderName: string;
@@ -298,3 +300,133 @@ export async function getOrderForProject(
     panelOrderItems,
   };
 }
+
+/**
+ * Resolve or lazily create a client from an ERPNext Customer.
+ * 1. Find our client by erpCustomer.
+ * 2. Otherwise, if customer's custom_acs_reference matches a client's refNumber, link that client.
+ * 3. Otherwise, if an existing unlinked client of the same name exists, link that client.
+ * 4. Otherwise create a client named after the customer with nextClientRef.
+ * Then write custom_acs_reference back to the ERPNext customer if it's empty.
+ */
+export async function resolveClientForCustomer(
+  principal: Principal,
+  customer: string | { name: string; custom_acs_reference?: string | null },
+) {
+  if (!hasPermissionAnywhere(principal, 'pm.project.create')) {
+    throw new ForbiddenError('Missing permission: pm.project.create');
+  }
+
+  const customerName = typeof customer === 'string' ? customer.trim() : customer.name.trim();
+  if (!customerName) {
+    throw new DomainError('Customer name is required.');
+  }
+
+  let customAcsRef: string | null = null;
+  let displayName = customerName;
+
+  if (typeof customer === 'object' && customer.custom_acs_reference !== undefined) {
+    customAcsRef = customer.custom_acs_reference?.trim() || null;
+  } else {
+    try {
+      const customerDoc = await erpGet<ErpCustomerDoc>('Customer', customerName);
+      customAcsRef = customerDoc.custom_acs_reference?.trim() || null;
+      if (customerDoc.name && customerDoc.name !== customerName) {
+        // if customerDoc has specific name
+      }
+    } catch (err) {
+      if (!(err instanceof NotFoundError)) throw err;
+    }
+  }
+
+  // 1. Find our client by erpCustomer
+  let client = await prisma.client.findFirst({
+    where: { companyId: principal.companyId, erpCustomer: customerName },
+  });
+
+  // 2. Otherwise, if customer's custom_acs_reference matches a client's refNumber, link that client
+  if (!client && customAcsRef) {
+    const byRef = await prisma.client.findFirst({
+      where: { companyId: principal.companyId, refNumber: customAcsRef },
+    });
+    if (byRef) {
+      client = await prisma.client.update({
+        where: { id: byRef.id },
+        data: { erpCustomer: customerName },
+      });
+    }
+  }
+
+  // 3. Name clash with an existing unlinked client of the same name links that client instead of failing
+  if (!client) {
+    const byName = await prisma.client.findFirst({
+      where: { companyId: principal.companyId, name: displayName },
+    });
+    if (byName) {
+      client = await prisma.client.update({
+        where: { id: byName.id },
+        data: { erpCustomer: customerName },
+      });
+    }
+  }
+
+  // 4. Otherwise create a client named after the customer with nextClientRef
+  if (!client) {
+    const nextRef = await nextClientRef(principal.companyId);
+    try {
+      client = await prisma.client.create({
+        data: {
+          companyId: principal.companyId,
+          name: displayName,
+          refNumber: nextRef,
+          erpCustomer: customerName,
+          isActive: true,
+        },
+      });
+
+      await audit({
+        actorId: principal.userId,
+        module: 'pm',
+        action: 'client.created',
+        entityType: 'Client',
+        entityId: client.id,
+        diff: { name: displayName, refNumber: nextRef, erpCustomer: customerName },
+      });
+    } catch (err: any) {
+      // Concurrency handling: two Directors picking orders of the same new customer at the same time
+      if (err?.code === 'P2002') {
+        client = await prisma.client.findFirst({
+          where: {
+            companyId: principal.companyId,
+            OR: [{ erpCustomer: customerName }, { name: displayName }],
+          },
+        });
+        if (client && !client.erpCustomer) {
+          client = await prisma.client.update({
+            where: { id: client.id },
+            data: { erpCustomer: customerName },
+          });
+        }
+      }
+      if (!client) throw err;
+    }
+  }
+
+  // Write custom_acs_reference back to the ERPNext customer if it's empty
+  if (!customAcsRef) {
+    try {
+      await erpUpdate('Customer', customerName, {
+        custom_acs_reference: client.refNumber,
+      });
+    } catch (err) {
+      console.error('[erp] failed to write custom_acs_reference back to Customer', {
+        customer: customerName,
+        refNumber: client.refNumber,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return client;
+}
+
