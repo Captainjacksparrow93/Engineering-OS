@@ -225,3 +225,9 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
 - The `config.ts` cache line is restored; tests use `vi.stubEnv` plus a `resetConfigCache()` export.
 - Claude re-ran the ERP unit tests: pass.
 - **Next: step 2** (the `erp_order_links` migration).
+
+**Review 2026-10-02, commit `af2fe4c` (step 2). Verdict: accepted.**
+- The migration `20261002090500_erp_order_links` is purely additive: 5 nullable columns and 2 unique indexes. It sorts after `20261001122602_erp_access_permission`.
+- Postgres allows many NULLs under a unique index, so the existing rows are unaffected. Tested on a fresh CI-like DB.
+- **`erpOrderModified` is `TEXT`, not a timestamp.** Fine, and arguably better: keep it as ERPNext's own `modified` string (site time, no timezone) and only ever pass it back in ERPNext filters (`modified > value`). Don't turn it into a JS `Date` (steps 5 and 015).
+- **Next: step 3** (order service).
