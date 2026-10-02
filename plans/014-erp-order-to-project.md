@@ -265,3 +265,11 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
   - **Optional (ponytail):** the per-order `erpGet` for item summaries is one call per waiting order. That's fine while the list is short. If you change it, use one list call with child-table fields, but don't build anything bigger.
   - **Test:** the mock returns more than 20 orders, with the waiting one oldest, and it's still listed. Assert the filters sent to `erpList`.
 - **Note for step 5:** an order whose dates are too tight (the panel date before today, or shorter than the template's minimum working days) will be refused by `createAutomationProject`'s existing date checks. Make sure the message says to fix the dates **in ERP**.
+
+**Re-review 2026-10-02, commit `661dc8b` (F2). Verdict: F2 accepted.**
+- **Claude checked against the real local ERPNext (`acs5`)** with the `engos-api` key:
+  - submitted orders with the default page: **20**;
+  - with `limit_page_length=0`: **52**, which confirms the bug was real;
+  - with the F2 filters (`custom_project_code is not set`, status not in Closed / Completed / Cancelled / On Hold) and limit 0: accepted by ERPNext, **52** returned. None has a project yet, so all are waiting.
+- The code-side status filter remains as a second guard. `getOrderForProject` now also refuses On Hold and Completed orders.
+- **Next: step 4** (client from the ERPNext customer).
