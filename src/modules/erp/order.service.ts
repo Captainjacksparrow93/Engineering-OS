@@ -70,7 +70,11 @@ export async function listWaitingOrders(principal: Principal): Promise<WaitingOr
   }
 
   const orders = await erpList<ErpSalesOrderRow>('Sales Order', {
-    filters: [['Sales Order', 'docstatus', '=', 1]],
+    filters: [
+      ['Sales Order', 'docstatus', '=', 1],
+      ['Sales Order', 'custom_project_code', 'is', 'not set'],
+      ['Sales Order', 'status', 'not in', ['Closed', 'Completed', 'Cancelled', 'On Hold']],
+    ],
     fields: [
       'name',
       'customer',
@@ -81,12 +85,20 @@ export async function listWaitingOrders(principal: Principal): Promise<WaitingOr
       'status',
       'modified',
     ],
+    limit: 0,
     orderBy: 'modified desc',
   });
 
   const openUnlinked = orders.filter((o) => {
     const status = (o.status || '').toLowerCase();
-    if (status === 'closed' || status === 'cancelled') return false;
+    if (
+      status === 'closed' ||
+      status === 'completed' ||
+      status === 'cancelled' ||
+      status === 'on hold'
+    ) {
+      return false;
+    }
     if (o.custom_project_code && o.custom_project_code.trim() !== '') return false;
     return true;
   });
@@ -162,7 +174,7 @@ export async function getOrderForProject(
 
   const order = await erpGet<ErpSalesOrderDoc>('Sales Order', trimmedOrderName);
 
-  // 1. Refuse: draft, cancelled, or closed order
+  // 1. Refuse: draft, cancelled, closed, completed, or on hold order
   const statusLower = (order.status || '').toLowerCase();
   if (order.docstatus === 0 || statusLower === 'draft') {
     throw new DomainError('Sales order is in draft. Submit it in ERP first.');
@@ -172,6 +184,12 @@ export async function getOrderForProject(
   }
   if (statusLower === 'closed') {
     throw new DomainError('Sales order is closed.');
+  }
+  if (statusLower === 'completed') {
+    throw new DomainError('Sales order is completed.');
+  }
+  if (statusLower === 'on hold') {
+    throw new DomainError('Sales order is on hold.');
   }
 
   // 2. Refuse: order that already has a project

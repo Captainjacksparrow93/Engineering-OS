@@ -143,6 +143,26 @@ describe('ERP Order Service Integration Tests (Plan 014 Step 3)', () => {
 
         const waiting = await listWaitingOrders(directorPrincipal);
 
+        expect(erpList).toHaveBeenCalledWith('Sales Order', {
+          filters: [
+            ['Sales Order', 'docstatus', '=', 1],
+            ['Sales Order', 'custom_project_code', 'is', 'not set'],
+            ['Sales Order', 'status', 'not in', ['Closed', 'Completed', 'Cancelled', 'On Hold']],
+          ],
+          fields: [
+            'name',
+            'customer',
+            'custom_wo_number',
+            'po_no',
+            'delivery_date',
+            'custom_project_code',
+            'status',
+            'modified',
+          ],
+          limit: 0,
+          orderBy: 'modified desc',
+        });
+
         expect(waiting).toHaveLength(2);
         expect(waiting[0]).toEqual({
           orderName: 'SAL-ORD-003',
@@ -162,6 +182,57 @@ describe('ERP Order Service Integration Tests (Plan 014 Step 3)', () => {
         });
       } finally {
         await prisma.project.delete({ where: { id: existingProject.id } });
+      }
+    });
+
+    it('lists waiting orders even when there are more than 20 orders and the waiting one is the oldest', async () => {
+      // Generate 25 orders: orders 1..24 already linked in PM, order 25 is unlinked waiting order
+      const mockOrders = Array.from({ length: 25 }, (_, i) => ({
+        name: `SAL-ORD-BATCH-${String(i + 1).padStart(3, '0')}`,
+        customer: `Customer ${i + 1}`,
+        custom_wo_number: `${4000 + i}`,
+        po_no: `PO-${i + 1}`,
+        delivery_date: '2026-12-31',
+        custom_project_code: '',
+        status: 'To Deliver',
+        modified: `2026-10-02 12:${String(50 - i).padStart(2, '0')}:00`,
+      }));
+
+      // Pre-link orders 1..24 in DB
+      const existingProjects = await Promise.all(
+        mockOrders.slice(0, 24).map((o, idx) =>
+          prisma.project.create({
+            data: {
+              companyId: directorPrincipal.companyId,
+              code: `TEST-BATCH-${Date.now()}-${idx}`,
+              name: `Project for ${o.name}`,
+              clientName: o.customer,
+              erpSalesOrder: o.name,
+              managerId: directorPrincipal.userId,
+            },
+          }),
+        ),
+      );
+
+      try {
+        vi.mocked(erpList).mockResolvedValueOnce(mockOrders);
+
+        // erpGet is only called for the 1 waiting candidate (SAL-ORD-BATCH-025)
+        vi.mocked(erpGet).mockResolvedValueOnce({
+          name: 'SAL-ORD-BATCH-025',
+          customer: 'Customer 25',
+          items: [{ name: 'row_25', item_code: 'PLC', qty: 3, delivery_date: '2026-12-31' }],
+        } as any);
+
+        const waiting = await listWaitingOrders(directorPrincipal);
+
+        expect(waiting).toHaveLength(1);
+        expect(waiting[0].orderName).toBe('SAL-ORD-BATCH-025');
+        expect(waiting[0].panelsSummary).toBe('3 × PLC');
+      } finally {
+        await prisma.project.deleteMany({
+          where: { id: { in: existingProjects.map((p) => p.id) } },
+        });
       }
     });
   });
@@ -273,6 +344,22 @@ describe('ERP Order Service Integration Tests (Plan 014 Step 3)', () => {
 
       await expect(getOrderForProject(directorPrincipal, 'SAL-ORD-CLOSED')).rejects.toThrow(
         new DomainError('Sales order is closed.'),
+      );
+    });
+
+    it('refuses an on-hold order', async () => {
+      vi.mocked(erpGet).mockResolvedValueOnce({
+        name: 'SAL-ORD-ON-HOLD',
+        customer: 'Acme',
+        custom_wo_number: '1234',
+        docstatus: 1,
+        status: 'On Hold',
+        modified: '2026-10-02 12:00:00',
+        items: [{ name: 'r1', item_code: 'PLC', qty: 1 }],
+      } as any);
+
+      await expect(getOrderForProject(directorPrincipal, 'SAL-ORD-ON-HOLD')).rejects.toThrow(
+        new DomainError('Sales order is on hold.'),
       );
     });
 

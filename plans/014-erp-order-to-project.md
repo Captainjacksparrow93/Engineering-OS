@@ -217,6 +217,15 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
     - `npm test`: 14 test files passed, 163 tests passed.
     - `npm run test:int`: 15 test files passed, 75 tests passed.
     - `npm run build`: clean.
+- **F2 (the waiting list misses orders):**
+  - Updated `listWaitingOrders` in `src/modules/erp/order.service.ts` to push filters directly to ERPNext: `docstatus = 1`, `custom_project_code is not set`, and `status not in ['Closed', 'Completed', 'Cancelled', 'On Hold']`, and set `limit: 0` (`limit_page_length=0` in Frappe) so all matching waiting orders are returned rather than being truncated by Frappe's 20-row default page limit.
+  - Updated `getOrderForProject` to refuse `On Hold` orders with "Sales order is on hold." (and `Completed` orders with "Sales order is completed.") aligning the single-order validator with waiting order listing.
+  - Updated `src/modules/erp/order.service.int.test.ts` (14 tests) to assert exact ERPNext filters and `limit: 0`, verify that a waiting order past the default 20-order limit (e.g. 25 orders returned with candidate at index 24) is returned, and verify `getOrderForProject` refuses `On Hold` orders.
+  - **Test counts:**
+    - `npm run typecheck`: clean (0 errors).
+    - `npm test`: 14 test files passed, 163 tests passed.
+    - `npm run test:int`: 15 test files passed, 77 tests passed.
+    - `npm run build`: clean.
 
 ## Review (Claude)
 
@@ -249,7 +258,7 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
   - units are numbered across rows, and `erpOrderItem` is `row#unitInRow`;
   - the ACS reference is read from the customer.
   - Claude ran `order.service.int.test.ts`: **12 passed**.
-- [ ] **F2: the waiting list misses orders.**
+- [x] **F2: the waiting list misses orders.**
   - **The bug:** `listWaitingOrders` calls `erpList` with no `limit`, so Frappe returns only its default page (20 rows) of submitted orders, sorted by `modified desc`, and our code filters them afterwards. The local site already has 50+ submitted orders. After plan 015's backfill, production will have one per existing project, all with `custom_project_code` set. A real waiting order older than the newest 20 orders would silently never appear.
   - **Fix:** let ERPNext do the filtering: `docstatus = 1`, `custom_project_code` not set, and status not in `Closed`, `Completed`, `Cancelled`, `On Hold`. Ask for all rows (`limit_page_length` 0, or a stated high cap with a log line when it's hit).
   - **Also refuse `On Hold`** in `getOrderForProject`, so the list and the check agree.
