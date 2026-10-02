@@ -1,6 +1,6 @@
 # 015 — ERP: backfill existing clients and projects, and keep order changes in sync
 
-**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity · **Branch:** `erp` · **Depends on:** 014 REVIEWED
 
 ## Goal
@@ -131,7 +131,7 @@ Plan 014 links new projects to orders (`Project.erpSalesOrder`, `Task.erpOrderIt
   - The projects list shows a small "Order changed" badge on those projects.
   - Use `ux-writing` and `impeccable`.
   - Tests: allow (Director clears), deny (PM can't clear), happy path, validation (clearing a project without an alert is a no-op).
-- [ ] **5. Check it end to end on the local stack, in the browser.**
+- [x] **5. Check it end to end on the local stack, in the browser.**
   - Using a project created in plan 014's step 8, edit its order in ERPNext with "Update Items" on the submitted order, as the Sales Head:
     1. change a row's delivery date and the client PO → PM updates on the next page load, with no alert;
     2. add one panel → it appears assigned to the PM, and the Director gets an alert and a notification;
@@ -141,21 +141,21 @@ Plan 014 links new projects to orders (`Project.erpSalesOrder`, `Task.erpOrderIt
   - Write what you saw in notes.
 
 ## Acceptance criteria
-- [ ] Typecheck, unit tests, build and integration tests pass (full suite), including on a fresh CI-like database.
-- [ ] Backfill:
+- [x] Typecheck, unit tests, build and integration tests pass (full suite), including on a fresh CI-like database.
+- [x] Backfill:
   - dry run by default;
   - `--apply` links every client and every non-cancelled work order;
   - a second run creates nothing;
   - skipped items are listed with reasons;
   - imported orders are marked, submitted, and closed when the project is finished.
-- [ ] Sync:
+- [x] Sync:
   - PO, dates, WO and client name follow ERP;
   - added panels are appended and assigned to the PM;
   - removals and cancellations only alert;
   - nothing in PM is ever deleted;
   - every change is audited.
-- [ ] Directors are notified and can mark an alert reviewed; others can't.
-- [ ] ERP off or down never breaks a page.
+- [x] Directors are notified and can mark an alert reviewed; others can't.
+- [x] ERP off or down never breaks a page.
 
 ## Implementation notes (implementer)
 - **Order of work:** started right after 014 reached DONE (not yet REVIEWED), because the user asked for 014 → 015 → 017 in one go. Same container as 014 step 8: code-review-graph, Token Savior and sequential-thinking are not available here, so callers come from text search and the ordering reasoning is written out in these notes. Local ERPNext: `/var/tmp/erpnext-local` (see plan 014 step 8 notes).
@@ -241,5 +241,14 @@ Projects: 4 created, 0 linked, 8 skipped, 0 failed
   - Projects list (`projects-client.tsx`): an **"Order changed"** badge next to the priority (full alert in its tooltip).
   - **Tests** (`src/modules/erp/order-alert.int.test.ts`, 3): PM denied (alert kept); Director clears it, audited with their id and the text; clearing a project without an alert is a no-op (no second audit). The browser view is checked in step 5.
   - **Test counts:** typecheck clean; `npm test` 14 files / 168 passed; `npm run test:int` 20 files / 113 passed; build clean; acs_erp 25 OK.
+- **Step 5 (end to end on the local stack, in the browser):** project `ACS-0005-0001` (from plan 014 step 8; SAL-ORD-2026-00001: PLC × 1 and SCADA × 1), app = production build on :3100 against ERPNext `acs7`, Chromium. The Sales Head's changes were made in **their own ERPNext session (via our SSO)** by calling the same server method ERPNext's **Update Items** dialog uses (`erpnext.controllers.accounts_controller.update_child_qty_rate`), plus `frappe.client.set_value` for `po_no` and `frappe.client.cancel`. I did not click through the dialog itself. After each change the Director opened the project page (the sync runs on that load):
+  1. **PLC row date → +125 days, PO → `GACL/PO/2026/118-R1`:** PM showed the new PO; PLC Panel 1 `plannedEnd` 2027-02-04; target unchanged (ERP header still 2027-03-01); **no banner, 0 notifications**.
+  2. **PLC qty 1 → 2:** **PLC Panel 2** appended (13 steps, `erpOrderItem` `77o7r9lgab#2`, date 2027-02-04, every step assigned to the PM Dhrupin Vaghasiya); banner "Order changed: review · PLC Panel 2 added from the sales order and assigned to the PM: assign engineers." with "Open SAL-ORD-2026-00001 in ERP" and **Mark reviewed**; **4 notifications** (one per active Director).
+  3. **PLC qty 2 → 1:** alert only: "PLC quantity reduced from 2 to 1 in ERP. PLC Panel 2 was kept."; all three panels still there.
+  4. **Order cancelled (`docstatus` 2):** alert only: "Order cancelled in ERP. Nothing was changed or deleted here."; project still PLANNING with all 42 tasks.
+  - The PM (Dhrupin) saw the banner **without** Mark reviewed; the projects list showed the **"Order changed"** badge on ACS-0005-0001; the Director clicked **Mark reviewed** and the banner went away. Audit trail for the project: 4 × `erp.order_synced` (actor null) and `erp.order_alert_cleared` (actor = the Director).
+- **Before DONE:** `npm run test:int` on a fresh throwaway DB (empty → `npx prisma migrate deploy` → `npm run db:seed`): 20 files / 113 passed. typecheck clean, `npm test` 168 passed, build clean, acs_erp 25 OK (step 4 run; no code change since).
+- **Self-review (`review-delta` skill not installed here; by hand):** sync never deletes (no `delete` in `sync.ts`; tested); every sync write is audited with a null actor; ERP off → `isErpEnabled()` short-circuits both wrappers; ERP failures are caught in the wrappers. Two refactors touched shared code (`createPanelTasks` out of `createAutomationProject`, `renameClientCascade` out of `updateClient`); both callers' existing tests pass unchanged. Callers checked by text search (graph tools not available here): `getProjectWorkspace` (project page, `api/pm/projects/[id]`, tests), `listProjects` (projects page, `api/pm/projects`, tests), `updateClient` (`actions/pm.ts`, tests).
+- **For the planner:** (a) DEMO-style panel titles (`PLC × 1: …`) are skipped by the backfill; check the production copy's dry run. (b) Plan 014's note on local `.env` and `npm run test:int` applies here too.
 
 ## Review (Claude)
