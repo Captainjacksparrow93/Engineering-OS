@@ -1,31 +1,37 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetConfigCache } from '@/core/config';
 import { DomainError, NotFoundError } from '@/core/rbac/errors';
 import { erpGet, erpList, erpUpdate, isErpEnabled } from './client';
 
 describe('ERPNext REST client', () => {
-  const originalEnv = { ...process.env };
   const fetchMock = vi.fn();
 
   beforeEach(() => {
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
-    process.env.ERPNEXT_URL = 'http://127.0.0.1:8080/';
-    process.env.ERPNEXT_API_KEY = 'test_api_key';
-    process.env.ERPNEXT_API_SECRET = 'test_api_secret';
+    vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/test');
+    vi.stubEnv('AUTH_SECRET', '0123456789abcdef0123456789abcdef');
+    vi.stubEnv('ERPNEXT_URL', 'http://127.0.0.1:8080/');
+    vi.stubEnv('ERPNEXT_API_KEY', 'test_api_key');
+    vi.stubEnv('ERPNEXT_API_SECRET', 'test_api_secret');
+    resetConfigCache();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    process.env = { ...originalEnv };
+    vi.unstubAllEnvs();
+    resetConfigCache();
   });
 
   it('reports isErpEnabled() true only when URL, API key, and API secret are all set', () => {
     expect(isErpEnabled()).toBe(true);
 
-    delete process.env.ERPNEXT_API_SECRET;
+    vi.stubEnv('ERPNEXT_API_SECRET', '');
+    resetConfigCache();
     expect(isErpEnabled()).toBe(false);
 
-    process.env.ERPNEXT_API_SECRET = '   ';
+    vi.stubEnv('ERPNEXT_API_SECRET', '   ');
+    resetConfigCache();
     expect(isErpEnabled()).toBe(false);
   });
 

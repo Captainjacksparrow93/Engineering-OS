@@ -165,6 +165,14 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
     - `npm test`: 14 test files passed, 163 tests passed.
     - `npm run test:int`: 14 test files passed, 63 tests passed.
     - `npm run build`: clean.
+- **F1 (one source for ERP settings, and no test switch in production code):**
+  - Updated `readErpConfig()` in `src/modules/erp/client.ts` to read solely from `config()` without `try/catch` or `process.env` fallbacks.
+  - Restored `if (cached) return cached;` in `src/core/config.ts` and exported `resetConfigCache()` for tests (`src/modules/erp/client.test.ts` uses `vi.stubEnv` + `resetConfigCache()`).
+  - **Test counts:**
+    - `npm run typecheck`: clean (0 errors).
+    - `npm test`: 14 test files passed, 163 tests passed.
+    - `npm run test:int`: 14 test files passed, 63 tests passed.
+    - `npm run build`: clean.
 
 ## Review (Claude)
 
@@ -174,7 +182,7 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
   - no secret in the logs; nothing sent to the browser.
   - The `optionalNonEmpty` change in `config.ts` also fixes a latent bug: `ERPNEXT_URL=""` from `.env.example` would have failed `z.string().url()` and broken `config()`.
   - Claude ran the ERP unit tests (16 passed) and typecheck (clean).
-- [ ] **F1: one source for ERP settings, and no test switch in production code.**
+- [x] **F1: one source for ERP settings, and no test switch in production code.**
   - `readErpConfig` wraps `config()` in `try/catch` and falls back to `process.env` (and also ORs `process.env` back in). If the env is invalid, that hides it and runs on unvalidated values. Read only `config()` and let a bad config fail loudly.
   - `config.ts` now skips its cache when `NODE_ENV === 'test'`. That changes production code for tests. Instead, reset the module in the test (`vi.resetModules()` plus `vi.stubEnv`, or a small exported reset used only by tests), and put the cache line back as it was.
   - Re-run the full suite and paste the counts.

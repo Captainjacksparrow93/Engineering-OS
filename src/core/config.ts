@@ -25,7 +25,7 @@ const schema = z.object({
 let cached: z.infer<typeof schema> | null = null;
 
 export function config() {
-  if (cached && process.env.NODE_ENV !== 'test') return cached;
+  if (cached) return cached;
   const parsed = schema.safeParse(process.env);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
@@ -33,5 +33,9 @@ export function config() {
   }
   cached = parsed.data;
   return cached;
+}
+
+export function resetConfigCache(): void {
+  cached = null;
 }
 

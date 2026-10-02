@@ -11,26 +11,11 @@ interface ErpCredentials {
 }
 
 function readErpConfig(): Partial<ErpCredentials> {
-  let url: string | undefined;
-  let apiKey: string | undefined;
-  let apiSecret: string | undefined;
-  try {
-    const cfg = config();
-    url = cfg.ERPNEXT_URL;
-    apiKey = cfg.ERPNEXT_API_KEY;
-    apiSecret = cfg.ERPNEXT_API_SECRET;
-  } catch {
-    url = process.env.ERPNEXT_URL;
-    apiKey = process.env.ERPNEXT_API_KEY;
-    apiSecret = process.env.ERPNEXT_API_SECRET;
-  }
-  const cleanUrl = (url || process.env.ERPNEXT_URL || '').trim().replace(/\/+$/, '');
-  const cleanKey = (apiKey || process.env.ERPNEXT_API_KEY || '').trim();
-  const cleanSecret = (apiSecret || process.env.ERPNEXT_API_SECRET || '').trim();
+  const cfg = config();
   return {
-    baseUrl: cleanUrl || undefined,
-    apiKey: cleanKey || undefined,
-    apiSecret: cleanSecret || undefined,
+    baseUrl: cfg.ERPNEXT_URL?.trim().replace(/\/+$/, '') || undefined,
+    apiKey: cfg.ERPNEXT_API_KEY?.trim() || undefined,
+    apiSecret: cfg.ERPNEXT_API_SECRET?.trim() || undefined,
   };
 }
 
