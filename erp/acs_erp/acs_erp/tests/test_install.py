@@ -3,15 +3,19 @@ import unittest
 from unittest.mock import MagicMock
 
 # Mock frappe module before importing install
-mock_frappe = MagicMock()
-mock_installer = MagicMock()
+mock_frappe = sys.modules.get('frappe') or MagicMock()
+mock_frappe.whitelist = lambda *args, **kwargs: (lambda fn: fn)
+mock_frappe._ = lambda s: s
+mock_installer = sys.modules.get('frappe.installer') or MagicMock()
+mock_frappe.installer = mock_installer
 sys.modules['frappe'] = mock_frappe
 sys.modules['frappe.installer'] = mock_installer
 
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from install import _ensure_allowed_referrers
+from acs_erp.install import _ensure_allowed_referrers
 
 
 class TestEnsureAllowedReferrers(unittest.TestCase):

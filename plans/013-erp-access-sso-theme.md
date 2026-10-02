@@ -344,6 +344,26 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
     - Removed hardcoded fallback password from `scripts/verify_browser.py`: now reads `SEED_PASSWORD` strictly from `os.environ.get("SEED_PASSWORD")` and exits with status 1 and `"Error: SEED_PASSWORD environment variable is required."` if unset.
     - Untracked `docs/screenshots/erp/*.png` from git (`git rm -r --cached docs/screenshots/erp/`) and added `docs/screenshots/` to `.gitignore`; local files remain on disk at `docs/screenshots/erp/`.
     - Playwright for Python is an external verification tool dependency (not in `package.json`); install locally with `pip install playwright && playwright install chromium`.
+  - **F15 (tests for `sso.login`, `disable_user`, and `_hide_projects_module`):**
+    - Added `erp/acs_erp/acs_erp/tests/test_sso.py` (9 new tests, bringing `python -m unittest discover -s erp/acs_erp` to **23 tests passing**):
+      1. `test_new_user_created_and_repeat_login_resyncs_roles`: verifies first sign-in creates the user with all 21 Director roles, and repeat sign-in for the same user with Sales Head roles succeeds without error, drops `System Manager`, and retains non-managed roles (`Desk User`).
+      2. `test_refuses_administrator_email_and_role`: verifies both literal `"administrator"` email and an existing user holding `Administrator` role are refused with 401.
+      3. `test_refuses_user_with_api_key`: verifies an existing user with `api_key` set (e.g. `engos-api@acsengitech.com`) is refused with 401.
+      4. `test_refuses_website_user`: verifies a user with `user_type = "Website User"` is refused with 401.
+      5. `test_refuses_expired_pass`: verifies an expired pass is refused with 401.
+      6. `test_refuses_reused_nonce`: verifies first use succeeds and second use of the same nonce is refused with 401.
+      7. `test_refuses_bad_signature`: verifies a tampered signature is refused with 401.
+      8. `test_disable_user_disables_account_and_clears_sessions`: verifies `act: "disable"` sets `enabled = 0` and clears active sessions for that user.
+      9. `test_hide_projects_module_leaves_project_field_hidden_on_sales_order`: verifies `_hide_projects_module()` calls `make_property_setter` with a dict argument and leaves the `project` field hidden (`hidden == 1`) on `Sales Order`, plus hides the `Projects` Desktop Icon and Workspace.
+    - Re-checked API-key refusal against the running local ERPNext stack (`acs5`) with `curl.exe -X POST http://127.0.0.1:8080/api/method/acs_erp.sso.login --data-urlencode "pass=..."` for `engos-api@acsengitech.com`:
+      - Real HTTP status code: **`401`** (`HTTP/1.1 401 UNAUTHORIZED`).
+      - Confirmed in `logs/acs_erp.log`: `ERROR acs_erp SSO refused for integration user with API key: engos-api@acsengitech.com`.
+    - **Test counts:**
+      - Python tests (`python -m unittest discover -s erp/acs_erp`): 23 passed (9 `test_passcodec` + 5 `test_install` + 9 `test_sso`).
+      - TypeScript typecheck (`npm run typecheck`): clean.
+      - TypeScript unit tests (`npm test`): 13 files, 157 passed.
+      - TypeScript integration tests (`npm run test:int`): 14 files, 63 passed.
+      - Next.js build (`npm run build`): clean.
 
 
 ## Review (Claude)
@@ -476,7 +496,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
 - **What F11 uncovered:** in `acs1`, `sso.login` crashed (`UnboundLocalError`) for **every returning user**, so only first sign-ins worked, and F10's "API-key user gets 401" was really an error, not the guard. `_hide_projects_module` also failed silently: its broad `except` only logs. Both are fixed in `acs2`, but no test would have caught either.
 
 **New follow-up:**
-- [ ] **F15: tests for `sso.login`.** Add Python tests (next to `test_passcodec.py`) that call `acs_erp.sso.login` with real passes and cover:
+- [x] **F15: tests for `sso.login`.** Add Python tests (next to `test_passcodec.py`) that call `acs_erp.sso.login` with real passes and cover:
   - a new user is created with the mapped roles; the **same user signing in again** works and has roles re-synced (e.g. Director to Sales Head drops `System Manager`);
   - refusals: `Administrator`, a user with an API key, a `Website User`, an expired pass, a reused nonce, a bad signature;
   - `act: "disable"` disables the user;
