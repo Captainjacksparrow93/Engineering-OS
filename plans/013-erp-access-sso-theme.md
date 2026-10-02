@@ -194,6 +194,41 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
     - Verified locally on running container: set `acs_erp_engos_origin` to `http://127.0.0.1:3001`, reset `allowed_referrers` to `["http://127.0.0.1:8080"]`, ran `bench --site frontend migrate`, and confirmed `site_config.json` was updated to `["http://127.0.0.1:8080", "http://127.0.0.1:3001"]`.
     - Added unit test suite in `erp/acs_erp/acs_erp/tests/test_install.py` (5 tests passing).
     - Rebuilt Docker image `acs-erpnext:v16.37.0-acs1`.
+  - **F3 (Browser check & screenshots, permission fix):**
+    - Executed automated browser walkthrough with Chromium via Playwright (`scripts/verify_browser.py`).
+    - Captured screenshots into `docs/screenshots/erp/` and artifact directory:
+      - `engos_director_dashboard.png`: Engineering OS Director Dashboard.
+      - `engos_clients_page.png`: Clients list page.
+      - `engos_erp_launcher.png`: ERP launcher card with "Open ERP" button.
+      - `erpnext_director_sso_desk.png`: ERPNext Desk signed in as Satish Nagar (avatar `SN`, `System Manager` + 20 module roles).
+      - `erpnext_selling_workspace.png`: Selling workspace with trends and KPI cards.
+      - `erpnext_sales_order_list.png`: Sales Order list view.
+      - `erpnext_sales_order_form.png`: Sales Order new form with WO Number and no project field.
+      - `erpnext_customer_form.png`: Customer new form with ACS Reference custom field.
+      - `erpnext_login_page.png`: Restyled clean ERPNext login page.
+      - `erpnext_sales_head_sso_desk.png`: ERPNext Desk signed in as Dharmesh Thummar (avatar `DT`, 20 module roles, no `System Manager`, System Settings blocked).
+    - Permission fix: removed `Custom DocPerm` from `hooks.py` fixtures and deleted `custom_docperm.json` fixture per `AGENTS.md` gotcha; updated `_ensure_docperms()` in `install.py` to call `setup_custom_perms()` before adding `EngOS Integration`, preserving standard roles (`Sales Manager`, `Sales User`, `System Manager`) on `Sales Order`, `Customer`, and `Item`.
+    - Google Font / CSS audit: network listener intercepted all requests across Engineering OS and ERPNext walkthroughs; **0 requests** made to Google Fonts or external CDNs. All fonts served locally via `/assets/acs_erp/fonts/`.
+    - Test counts: 14 Python unit tests passed; TS `typecheck` clean; 157 unit tests passed; 63 integration tests passed; production `next build` clean.
+  - **F10 (Standard roles access restored & EngOS Integration dropped):**
+    - Removed `Custom DocPerm` and `Role` from `hooks.py` fixtures and deleted `fixtures/custom_docperm.json` and `fixtures/role.json`.
+    - Removed `_ensure_docperms()` from `install.py`.
+    - Shipped migration patch `acs_erp.patches.drop_engos_integration` registered in `patches.txt` and executed via `bench --site frontend migrate`:
+      - Deletes Custom DocPerm rows for `EngOS Integration`.
+      - Resets custom perms (`reset_perms`) for `Sales Order`, `Customer`, and `Item` to restore standard permissions.
+      - Reassigns `engos-api` user to standard `Sales User` role.
+      - Deletes `EngOS Integration` role.
+    - Updated F1 guard in `sso.py`: refuses SSO into any user that has an `api_key` (integration user) in addition to `Administrator` and non-`System User`.
+    - Proven on running container:
+      - `frappe.has_permission` (`can_read`):
+        - Director: `{'Customer': True, 'Item': True, 'Sales Order': True, 'Quotation': True}`
+        - Director `can_create`: `{'Customer': True, 'Item': True, 'Sales Order': True, 'Quotation': True}`
+        - Sales Head: `{'Customer': True, 'Item': True, 'Sales Order': True, 'Quotation': True}`
+        - Sales Head `can_create`: `{'Customer': True, 'Item': True, 'Sales Order': True, 'Quotation': True}`
+        - `engos-api`: `{'Customer': True, 'Item': True, 'Sales Order': True, 'Quotation': True}`
+      - Created and submitted Sales Order as Sales Head (`docstatus = 1`).
+      - Verified `engos-api` successfully wrote allow-on-submit link fields (`custom_project_code`, `custom_project_link`).
+      - Verified SSO guard rejects pass for API key user `engos-api@acsengitech.com` (HTTP 401).
 
 
 ## Review (Claude)
@@ -221,7 +256,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - Test in a real browser: Open ERP, then go back and Open ERP again, as the same user and as a different user.
   - If it fails, fix it, for example: when the request already has a session, end it first, or detect that it's the same user and just redirect to `/app`.
   - Record what happened.
-- [ ] **F3: the real browser check and screenshots** (step 5 acceptance, not yet met):
+- [x] **F3: the real browser check and screenshots** (step 5 acceptance, met):
   - sign in as a seeded Director and as the Sales Head; click **ERP** → **Open ERP**;
   - screenshots of ERPNext's Selling workspace, Sales Order list, Sales Order form, Customer form and login page, next to our Director dashboard and Clients page;
   - confirm in the browser's network tab that no font or CSS comes from Google.
@@ -276,7 +311,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
 5. **Theme gap:** the desk home screen's app tiles and the workspace icons are ERPNext's **bright blue**. `docs/design-system.md` → "ERP" maps blue to neutral/ink; the theme doesn't cover these yet.
 
 **Follow-ups (implementer), in this order:**
-- [ ] **F10 (critical): give the standard roles their access back.**
+- [x] **F10 (critical): give the standard roles their access back.**
   - Drop the `EngOS Integration` role and its Custom DocPerm fixture.
   - Ship a migration patch in `acs_erp` (listed in `patches.txt`, idempotent) that deletes the Custom DocPerm rows with `role = 'EngOS Integration'`, then the role.
   - Give `engos-api` the standard **`Sales User`** role. It covers reading Customer, Item and Sales Order, creating and writing Customer, and writing the allow-on-submit link fields. Accept that it could also create Sales Orders: the key lives only on our server.

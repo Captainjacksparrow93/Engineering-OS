@@ -93,11 +93,14 @@ def login(token: str = None):
         user_doc.flags.ignore_password_policy = True
         user_doc.insert(ignore_permissions=True)
     else:
-        user_doc = frappe.get_doc("User", email)
-        # Security check: never allow SSO into privileged system/integration accounts or non-System User
+        # Security check: never allow SSO into privileged accounts, integration users with API keys, or non-System User
         existing_roles = {r.role for r in user_doc.roles}
-        if "Administrator" in existing_roles or "EngOS Integration" in existing_roles:
-            frappe.logger("acs_erp").error(f"SSO refused for privileged/integration user: {email}")
+        if "Administrator" in existing_roles:
+            frappe.logger("acs_erp").error(f"SSO refused for Administrator account: {email}")
+            return _fail_login()
+
+        if getattr(user_doc, "api_key", None):
+            frappe.logger("acs_erp").error(f"SSO refused for integration user with API key: {email}")
             return _fail_login()
 
         if user_doc.user_type != "System User":

@@ -53,8 +53,4 @@ fixtures = [
         "doctype": "Role",
         "filters": [["name", "in", ["EngOS Integration"]]],
     },
-    {
-        "doctype": "Custom DocPerm",
-        "filters": [["role", "in", ["EngOS Integration"]]],
-    },
 ]

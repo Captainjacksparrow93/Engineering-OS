@@ -52,25 +52,17 @@ def after_install():
             except Exception as e:
                 frappe.logger("acs_erp").error(f"Failed to create Item {itm['item_code']}: {e}")
 
-    # 4. Ensure EngOS Integration role exists
-    if not frappe.db.exists("Role", "EngOS Integration"):
-        frappe.get_doc({
-            "doctype": "Role",
-            "role_name": "EngOS Integration",
-            "desk_access": 1,
-        }).insert(ignore_permissions=True)
-
-    # 5. Ensure custom fields exist
+    # 4. Ensure custom fields exist
     _ensure_custom_fields()
 
-    # 6. Ensure docperms exist
-    _ensure_docperms()
-
-    # 7. Hide Projects module and disable Project creation (F8)
+    # 5. Hide Projects module and disable Project creation (F8)
     _hide_projects_module()
 
-    # 8. Ensure Engineering OS origin is in allowed_referrers (F9)
+    # 6. Ensure Engineering OS origin is in allowed_referrers (F9)
     _ensure_allowed_referrers()
+
+    # 7. Ensure API user has Sales User role (F10)
+    update_api_user()
 
     frappe.db.commit()
 
@@ -215,37 +207,13 @@ def _ensure_custom_fields():
             doc.insert(ignore_permissions=True)
 
 
-def _ensure_docperms():
-    perms = [
-        {"parent": "Customer", "role": "EngOS Integration", "read": 1, "write": 1, "create": 1},
-        {"parent": "Item", "role": "EngOS Integration", "read": 1, "write": 0, "create": 0},
-        {"parent": "Sales Order", "role": "EngOS Integration", "read": 1, "write": 1, "create": 0},
-    ]
-    for p in perms:
-        if not frappe.db.exists("Custom DocPerm", {"parent": p["parent"], "role": p["role"], "permlevel": 0}):
-            try:
-                frappe.get_doc({
-                    "doctype": "Custom DocPerm",
-                    "parent": p["parent"],
-                    "parenttype": "DocType",
-                    "parentfield": "permissions",
-                    "role": p["role"],
-                    "permlevel": 0,
-                    "read": p["read"],
-                    "write": p["write"],
-                    "create": p["create"],
-                }).insert(ignore_permissions=True)
-            except Exception as e:
-                frappe.logger("acs_erp").error(f"Failed to create Custom DocPerm for {p['parent']}: {e}")
-
-
 def update_api_user():
-    """Restricts engos-api user to EngOS Integration role."""
+    """Assigns Sales User role to engos-api user (F10)."""
     if frappe.db.exists("User", "engos-api@acsengitech.com"):
         u = frappe.get_doc("User", "engos-api@acsengitech.com")
-        u.roles = [r for r in u.roles if r.role in ("All", "EngOS Integration")]
-        if not any(r.role == "EngOS Integration" for r in u.roles):
-            u.append("roles", {"role": "EngOS Integration"})
+        u.roles = [r for r in u.roles if r.role not in ("EngOS Integration",)]
+        if not any(r.role == "Sales User" for r in u.roles):
+            u.append("roles", {"role": "Sales User"})
         u.save(ignore_permissions=True)
         frappe.db.commit()
         return [r.role for r in u.roles]

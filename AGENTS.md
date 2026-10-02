@@ -80,3 +80,13 @@ ERPNext (v16.37.0) runs as a **separate** set of containers next to Engineering 
 - **Frappe permissions gotcha:** adding **any** Custom DocPerm to a DocType makes Frappe ignore that DocType's standard permissions for every role. Don't add Custom DocPerms in fixtures; use standard roles.
 - **Verify in a real browser,** signed in through our SSO as each affected role, not only with scripts.
 - **Don't stop the live-app pieces** you share the PC with: leave `engos_local_db` / `engos_local_app` running, and never run `docker compose down -v`, `docker system prune` or `docker volume rm`.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
