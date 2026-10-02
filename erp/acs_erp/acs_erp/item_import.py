@@ -87,3 +87,99 @@ def clean_rows(header, rows):
         first_seen[code] = row_number
         items.append(result)
     return items, problems
+
+
+UPDATE_FIELDS = ("item_name", "description", "custom_maker_part_no", "brand", "item_group", "disabled")
+
+
+def _same(a, b):
+    return (a if a not in ("", None) else None) == (b if b not in ("", None) else None)
+
+
+def run(path, apply=False):
+    """Reads the first sheet of `path` and loads it as Items. Returns the report dict (also printed)."""
+    import frappe
+    from openpyxl import load_workbook
+
+    report = {"created": 0, "updated": 0, "unchanged": 0, "skipped": 0, "errors": 0, "new_groups": [], "new_brands": [], "lines": []}
+    rows = list(load_workbook(path, read_only=True, data_only=True).worksheets[0].iter_rows(values_only=True))
+    header, data = (rows[0], rows[1:]) if rows else ((), [])
+    present = {(_text(h) or "") for h in header}
+    missing = [c for c in REQUIRED_COLUMNS if c not in present]
+    if missing:
+        report["errors"] = 1
+        report["lines"].append(f"The file has no column {', '.join(missing)}. Nothing was imported; check the export.")
+        return _finish(report, apply)
+
+    items, problems = clean_rows(header, data)
+    for problem in problems:
+        report["skipped" if "skip" in problem else "errors"] += 1
+        report["lines"].append(problem.get("skip") or problem["error"])
+
+    try:
+        # Item groups parent-first under "All Item Groups"; the last name of a path is a leaf.
+        for item in items:
+            parent = "All Item Groups"
+            for depth, name in enumerate(item["item_group_path"]):
+                if not frappe.db.exists("Item Group", name) and name not in report["new_groups"]:
+                    report["new_groups"].append(name)
+                    if apply:
+                        frappe.get_doc({
+                            "doctype": "Item Group",
+                            "item_group_name": name,
+                            "parent_item_group": parent,
+                            "is_group": 1 if depth < len(item["item_group_path"]) - 1 else 0,
+                        }).insert()
+                parent = name
+        for brand in dict.fromkeys(i["brand"] for i in items if i["brand"]):
+            if not frappe.db.exists("Brand", brand):
+                report["new_brands"].append(brand)
+                if apply:
+                    frappe.get_doc({"doctype": "Brand", "brand": brand}).insert()
+
+        verb = "" if apply else "would "
+        for item in items:
+            fields = {k: item[k] for k in UPDATE_FIELDS if k != "item_group"}
+            fields["item_group"] = item["item_group_path"][-1] if item["item_group_path"] else "All Item Groups"
+            code = item["item_code"]
+            if frappe.db.exists("Item", code):
+                doc = frappe.get_doc("Item", code)
+                changed = {k: v for k, v in fields.items() if not _same(doc.get(k), v)}
+                if not changed:
+                    report["unchanged"] += 1
+                    continue
+                report["updated"] += 1
+                report["lines"].append(f"{code}: {verb}update {', '.join(changed)}")
+                if apply:
+                    doc.update(changed)
+                    doc.save()
+            else:
+                report["created"] += 1
+                report["lines"].append(f"{code}: {verb}create")
+                if apply:
+                    frappe.get_doc({
+                        "doctype": "Item",
+                        "item_code": code,
+                        **fields,
+                        "stock_uom": item["stock_uom"],
+                        "is_stock_item": item["is_stock_item"],
+                    }).insert()
+        if apply:
+            frappe.db.commit()
+    except Exception:
+        if apply:
+            frappe.db.rollback()
+        raise
+    return _finish(report, apply)
+
+
+def _finish(report, apply):
+    for line in report["lines"]:
+        print(line)
+    print(
+        f"{'Applied' if apply else 'Dry run (nothing written; pass apply=True to write)'}: "
+        f"{report['created']} created, {report['updated']} updated, {report['unchanged']} unchanged, "
+        f"{report['skipped']} skipped, {report['errors']} errors; "
+        f"new item groups: {', '.join(report['new_groups']) or 'none'}; new brands: {', '.join(report['new_brands']) or 'none'}"
+    )
+    return report
