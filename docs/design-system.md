@@ -125,7 +125,7 @@ User decision 2026-10-01: people use **ERPNext's own screens and dashboards** (a
 - **Depth:** remove shadows (cards, dropdowns, modals use 1px `hairline` borders instead). Radius: 8px for controls, 12px for cards and modals, 9999px for pills.
 - **Orange is scarce:** ERPNext's primary button (the one main action per page) uses `primary`. Every other button is secondary/ink. Links and the active sidebar item use ink weight and `surface-strong`, not orange or blue.
 - **Status colours:** ERPNext indicators map to ours: green → `success`, red → `error`, blue and other neutrals → neutral `surface-strong`/ink. Don't introduce amber; "warning" indicators use the `error` tint, as in our app.
-- **Branding:** our ACS logo and "Engineering OS · ERP" in ERPNext's navbar and on its (Administrator-only) login page. Hide ERPNext's "Help" menu and onboarding banners where config allows.
+- **Branding (user request 2026-10-02): no "ERPNext" or "Frappe" anywhere in normal use.** "Engineering OS · ERP" as the name (tab titles, top bar, login), our ACS logo, favicon and splash, "ERPNext" labels renamed through custom translations, no "Powered by" footers (pages, prints and PDFs, emails), and a Help menu cut down to About (kept for the GPLv3 notice). All of it from `acs_erp`, never by editing ERPNext's own files.
 
 **Getting there from Engineering OS:** an **ERP** item in our sidebar and in the module launcher (registry entry `erp` → live, opening ERPNext's address in a new tab). It signs the user in automatically (see `CLAUDE.md`, "One login"). Don't embed ERPNext in an iframe.
 
