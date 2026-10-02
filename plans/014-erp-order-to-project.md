@@ -1,6 +1,6 @@
 # 014 — ERP: every new project starts from a sales order
 
-**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity · **Branch:** `erp` · **Depends on:** 013 REVIEWED (F14, F15 done)
 
 ## Goal
@@ -133,7 +133,7 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
   - `updateProject` refuses changes to client, WO, target date and panel delivery dates on a project with `erpSalesOrder`: "This comes from the sales order. Change it in ERP." The Edit details dialog shows those fields read-only with the same hint. Code, priority, PM and engineers stay editable.
   - Projects without `erpSalesOrder` (all existing ones until plan 015) keep today's behaviour.
   - Tests: refused on a linked project, still allowed on an unlinked one, PM still forbidden.
-- [ ] **8. Check it end to end on the local ERPNext, in the browser.**
+- [x] **8. Check it end to end on the local ERPNext, in the browser.**
   - As the Sales Head (SSO): create and submit a sales order in ERPNext for a **new** customer, with WO, PO and two item rows with different delivery dates.
   - As a Director in our app: the order is in the waiting list; pick it and assign PM and engineers; save.
   - Check:
@@ -146,13 +146,13 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
   - Write what you saw in notes (no screenshots in git).
 
 ## Acceptance criteria
-- [ ] Typecheck, unit tests, build and integration tests pass (full suite), including on a fresh CI-like database.
-- [ ] With ERP on, a work-order project can only be created from a confirmed sales order without a project. The order's values win over anything the browser sends.
-- [ ] Client, ACS reference, project code and link are consistent in both systems after step 8, and a failed write-back repairs itself.
-- [ ] Order fields of linked projects can't be edited in our app; unlinked projects behave as before.
-- [ ] ERPNext down: New project explains it; everything else in PM works.
-- [ ] With ERP off, behaviour is unchanged (existing tests untouched and green).
-- [ ] No secret in the repo, notes, logs or the browser.
+- [x] Typecheck, unit tests, build and integration tests pass (full suite), including on a fresh CI-like database.
+- [x] With ERP on, a work-order project can only be created from a confirmed sales order without a project. The order's values win over anything the browser sends.
+- [x] Client, ACS reference, project code and link are consistent in both systems after step 8, and a failed write-back repairs itself.
+- [x] Order fields of linked projects can't be edited in our app; unlinked projects behave as before.
+- [x] ERPNext down: New project explains it; everything else in PM works.
+- [x] With ERP off, behaviour is unchanged (existing tests untouched and green).
+- [x] No secret in the repo, notes, logs or the browser.
 
 ## Implementation notes (implementer)
 - **Step 1 (ERPNext client):**
@@ -282,6 +282,22 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
   - **Browser check (mock ERPNext, as in step 6):** on the project from step 6, the subtitle link pointed at `…/app/sales-order/SAL-ORD-2026-00101` and "PO NCL/PO/7781" showed; in Edit details, client, WO, target and panel dates were disabled, code and priority were not; changing priority saved (`HIGH`), WO and target unchanged.
   - **Found, not fixed (outside this plan; needs its own plan):** Edit details fails with "Expected string, received null" whenever **End user name or Application name is empty**: the dialog sends `null` for an empty field, but `updateProjectSchema` (from `baseProjectSchema`) accepts only `string | undefined` for `endUserName` / `applicationName`. Pre-existing since plan 008 (same code on `main`), so it likely affects the live app. Workaround in the browser check: filled both fields.
   - **Test counts:** typecheck clean; `npm test` 14 files / 165 tests passed; `npm run test:int` 17 files / 95 tests passed; `npm run build` clean.
+- **Step 8 (end to end on a real local ERPNext, in the browser):**
+  - **Local ERPNext (this container, outside the repo, `/var/tmp/erpnext-local`):** Docker works here after all (started `dockerd` by hand). `frappe_docker` **v3.2.2** (same pinned tag as plan 012), compose `compose.yaml` + `overrides/compose.mariadb.yaml` + `overrides/compose.redis.yaml` + `overrides/compose.noproxy.yaml` (no trim override; it lives only on the user's PC), port `127.0.0.1:8080`, site `frontend`. `.env` keys: `ERPNEXT_VERSION`, `CUSTOM_IMAGE`, `CUSTOM_TAG`, `PULL_POLICY`, `DB_PASSWORD`, `ADMIN_PASSWORD`, `HTTP_PUBLISH_PORT`, `FRAPPE_SITE_NAME_HEADER`, `GUNICORN_*`, `ERP_SSO_SECRET`, `ERPNEXT_API_KEY`, `ERPNEXT_API_SECRET` (values only in that file).
+    - **Image `acs-erpnext:v16.37.0-acs6`**, built from `erp/Dockerfile` + `erp/acs_erp` with **two local-only lines** (in a build copy outside the repo) that trust this container's HTTPS-proxy CA (`COPY ccr-ca.crt` + `ENV PIP_CERT=… NODE_EXTRA_CA_CERTS=…`). Without them `pip install -e acs_erp` can't reach pypi.org through the sandbox proxy (`CERTIFICATE_VERIFY_FAILED`). `erp/Dockerfile` itself is unchanged; the user's PC doesn't need this.
+    - `bench new-site … --install-app erpnext --set-default frontend`, `install-app acs_erp`, `setup_complete` (ACS Engitech / ACS, India, INR, FY 2026-04-01 → 2027-03-31, Standard chart, no GSTIN), `set-config acs_erp_sso_secret` / `acs_erp_engos_origin http://localhost:3100` / `host_name`, `enable-scheduler`, `migrate`. Items PLC / SCADA / HMI exist after the migrate. API user `engos-api@acsengitech.com` with **only `Sales User`**, keys generated.
+    - Our app: production build (`next start -p 3100`) with `ERPNEXT_URL` / `ERPNEXT_PUBLIC_URL=http://127.0.0.1:8080`, key, secret and `ERP_SSO_SECRET` passed **as process env only**. **Heads-up:** putting the ERP keys in our `.env` makes `npm run test:int` fail (21 tests), because Prisma loads `.env` into `process.env`, so `isErpEnabled()` is true and the existing ERP-off tests are refused "Pick a sales order first." CI has no keys, so CI is unaffected; locally, keep the ERP keys out of `.env` while running tests (or a future change could blank them in `vitest.integration.config.ts`).
+  - **What I saw (Chromium via Playwright, signed in through our login and our SSO):**
+    - **Sales Head** (`dharmesh.thummar@…`) → our ERP entry → landed in ERPNext as themselves. In that desk session created customer **Gujarat Alkalies Ltd** (new) and submitted **SAL-ORD-2026-00001**: WO 9301, PO `GACL/PO/2026/118`, rows PLC × 1 (delivery +120 days) and SCADA × 1 (+150 days). The order was created through ERPNext's own desk API calls (`frappe.client.insert` / `submit` in the user's browser session), not by clicking through the form.
+    - **Director** (`satishkumar.nagar@…`) → New project: step 0 listed SAL-ORD-2026-00001 (with its PO); picked it → WO 9301, client "Gujarat Alkalies Ltd", ACS reference "Assigned when you save", target 2027-03-01, all locked; chose a PM, auto-assign filled engineers; saved.
+    - **Project** `ACS-0005-0001`: WO 9301, client Gujarat Alkalies Ltd, PO `GACL/PO/2026/118`, target 2027-03-01; PLC Panel 1 → 2027-01-30 (`erpOrderItem` `77o7r9lgab#1`), SCADA Panel 1 → 2027-03-01 (`77og0bblnn#1`), the same as ERPNext's row names and dates.
+    - **New client** `ACS-0005` (`erpCustomer` = the customer); ERPNext customer `custom_acs_reference` = `ACS-0005`.
+    - **ERPNext order page** (desk, full Chromium): Project Code `ACS-0005-0001`, Project Link `http://localhost:3100/pm/projects/cmur8jjcp000p7dclgkfnsvaj`, last edited by EngOS API. Opening that link in our app shows the project; the project page's "From sales order" link (`/app/sales-order/…`) redirects to ERPNext v16's `/desk/sales-order/…` and opens the order.
+    - The order was **no longer waiting**. A **second order** SAL-ORD-2026-00002 for the same customer (WO 9302, no PO) showed reference ACS-0005 when picked and became `ACS-0005-0002`; still exactly **one** client for that customer.
+    - **ERPNext backend stopped for a minute** (`docker compose stop backend`): New project showed "ERP isn't responding. Try again in a minute." with Try again (after ~10 s, the client timeout); `/pm/projects`, the project page and `/dashboard` all returned 200; "Create a service call instead" opened the normal form. After `start backend`, New project showed the empty state "No confirmed sales orders are waiting for a project."
+    - Side notes, not ours: the Playwright **headless shell** can't render ERPNext forms (`RangeError: Incorrect locale information provided`); full Chromium can. ERPNext logs "socket.io: Invalid origin" for the `127.0.0.1` host (realtime only; pages work).
+  - **Before DONE:** `npm run test:int` on a fresh throwaway DB (empty → `npx prisma migrate deploy` → `npm run db:seed`): 17 files / 95 tests passed. `python3 -m unittest discover -s erp/acs_erp`: 23 tests OK. typecheck clean, `npm test` 165 passed, build clean (from step 7, no code change since).
+  - **Self-review of the plan's diff (`review-delta` skill not installed here; done by hand):** ERP off → `isErpEnabled()` is false, wizard starts at step 1 and the server path is unchanged (step 5 test). The server never trusts order fields from the browser (step 5 test). Callers of the changed functions (`createAutomationProject`, `updateProject`, `listWaitingOrders`) were found by text search (graph/Token Savior not available in this container).
 
 ## Review (Claude)
 
