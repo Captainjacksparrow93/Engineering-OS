@@ -76,4 +76,7 @@ ERPNext (v16.37.0) runs as a **separate** set of containers next to Engineering 
 - **Never touch the VPS** (no SSH, nothing on `72.62.248.38`). VPS steps in ERP plans belong to Claude.
 - **Secrets:** generate ERPNext passwords and API keys yourself. Keep them only in `C:\Users\Dhruv-Home\erpnext-local\.env`, never in the repo, plan notes, commits or chat. In notes, write the `.env` **key names**, never values.
 - **Follow the official docs** for `frappe_docker` and the Frappe REST API (current versions). If a plan step doesn't match what ERPNext actually does, stop and write what you found in Implementation notes instead of improvising.
+- **Test the code that's actually running:** every rebuild of the `acs-erpnext` image gets a **new tag** (`…-acs2`, `-acs3`, …). Recreate the ERPNext containers on it and run `bench --site frontend migrate` before you verify anything, and write the running tag in the notes.
+- **Frappe permissions gotcha:** adding **any** Custom DocPerm to a DocType makes Frappe ignore that DocType's standard permissions for every role. Don't add Custom DocPerms in fixtures; use standard roles.
+- **Verify in a real browser,** signed in through our SSO as each affected role, not only with scripts.
 - **Don't stop the live-app pieces** you share the PC with: leave `engos_local_db` / `engos_local_app` running, and never run `docker compose down -v`, `docker system prune` or `docker volume rm`.
