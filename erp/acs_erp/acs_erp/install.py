@@ -145,15 +145,13 @@ def _hide_projects_module():
                 meta = frappe.get_meta(dt)
                 if meta.has_field("project"):
                     # Use frappe.make_property_setter to idempotently set hidden=1
-                    frappe.make_property_setter(
-                        doctype=dt,
-                        fieldname="project",
-                        property="hidden",
-                        value=1,
-                        property_type="Check",
-                        validate_field_exists=True,
-                        is_system_generated=True,
-                    )
+                    frappe.make_property_setter({
+                        "doctype": dt,
+                        "fieldname": "project",
+                        "property": "hidden",
+                        "value": "1",
+                        "property_type": "Check",
+                    })
         except Exception as e:
             frappe.logger("acs_erp").error(f"Failed to hide project field on {dt}: {e}")
 

@@ -93,6 +93,7 @@ def login(token: str = None):
         user_doc.flags.ignore_password_policy = True
         user_doc.insert(ignore_permissions=True)
     else:
+        user_doc = frappe.get_doc("User", email)
         # Security check: never allow SSO into privileged accounts, integration users with API keys, or non-System User
         existing_roles = {r.role for r in user_doc.roles}
         if "Administrator" in existing_roles:

@@ -207,7 +207,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
       - `erpnext_customer_form.png`: Customer new form with ACS Reference custom field.
       - `erpnext_login_page.png`: Restyled clean ERPNext login page.
       - `erpnext_sales_head_sso_desk.png`: ERPNext Desk signed in as Dharmesh Thummar (avatar `DT`, 20 module roles, no `System Manager`, System Settings blocked).
-    - Permission fix: removed `Custom DocPerm` from `hooks.py` fixtures and deleted `custom_docperm.json` fixture per `AGENTS.md` gotcha; updated `_ensure_docperms()` in `install.py` to call `setup_custom_perms()` before adding `EngOS Integration`, preserving standard roles (`Sales Manager`, `Sales User`, `System Manager`) on `Sales Order`, `Customer`, and `Item`.
+    - Permission fix: superseded by F10 which completely dropped `EngOS Integration` and Custom DocPerm fixtures, restoring standard role permissions cleanly.
     - Google Font / CSS audit: network listener intercepted all requests across Engineering OS and ERPNext walkthroughs; **0 requests** made to Google Fonts or external CDNs. All fonts served locally via `/assets/acs_erp/fonts/`.
     - Test counts: 14 Python unit tests passed; TS `typecheck` clean; 157 unit tests passed; 63 integration tests passed; production `next build` clean.
   - **F10 (Standard roles access restored & EngOS Integration dropped):**
@@ -229,6 +229,25 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
       - Created and submitted Sales Order as Sales Head (`docstatus = 1`).
       - Verified `engos-api` successfully wrote allow-on-submit link fields (`custom_project_code`, `custom_project_link`).
       - Verified SSO guard rejects pass for API key user `engos-api@acsengitech.com` (HTTP 401).
+  - **F11 (stop testing stale code - container recreation on tag acs2 & verification):**
+    - Built new Docker image tag: `acs-erpnext:v16.37.0-acs2` (`docker build -t acs-erpnext:v16.37.0-acs2 -f erp/Dockerfile erp`).
+    - Configured `CUSTOM_TAG=v16.37.0-acs2` in `C:\Users\Dhruv-Home\erpnext-local\.env`.
+    - Recreated all local ERPNext containers with `docker compose -f compose.yaml -f overrides/compose.mariadb.yaml -f overrides/compose.redis.yaml -f overrides/compose.noproxy.yaml -f overrides/compose.erp-phase0-trim.yaml up -d --force-recreate`.
+    - Ran `bench --site frontend migrate` on the fresh containers.
+    - Verified `docker inspect` creation timestamps:
+      - Image `acs-erpnext:v16.37.0-acs2`: `2026-10-02T05:59:26.800548382Z`
+      - Container `erpnext-local-backend-1`: `2026-10-02T05:59:33.786960764Z`
+      - Container `erpnext-local-frontend-1`: `2026-10-02T05:59:38.106382963Z`
+    - Fixed `sso.py` UnboundLocalError bug where `user_doc = frappe.get_doc("User", email)` was missing in the existing user branch; also fixed `install.py` `frappe.make_property_setter` call argument dictionary.
+    - Re-verified on running fresh containers:
+      - **F7:** Real SSO login succeeded (302 -> `/app`).
+        - Director user `review.director@acsengitech.local`: received 21 managed roles (`System Manager` + 20 operational module roles: `Sales Manager`, `Sales User`, `Sales Master Manager`, `Purchase Manager`, `Purchase User`, `Purchase Master Manager`, `Stock Manager`, `Stock User`, `Item Manager`, `Delivery Manager`, `Delivery User`, `Accounts Manager`, `Accounts User`, `Manufacturing Manager`, `Manufacturing User`, `Quality Manager`, `Maintenance Manager`, `Maintenance User`, `Fleet Manager`, `Support Team`) + standard `All`, `Guest`, `Desk User`.
+        - Sales Head user `review.saleshead@acsengitech.local`: received all 20 operational module roles **without** `System Manager` + standard `All`, `Guest`, `Desk User`.
+      - **F8:**
+        - `Workspace` "Projects": `is_hidden = 1`.
+        - `DocPerm` for DocType `Project`: `create` count across all roles is `0`.
+        - `Property Setter` on `Sales Order`: field `project` property `hidden` is `1`.
+      - **F9:** `site_config.json` on running container has `acs_erp_engos_origin: "http://127.0.0.1:3001"` and `allowed_referrers: ["http://127.0.0.1:8080", "http://127.0.0.1:3001"]`.
 
 
 ## Review (Claude)
@@ -317,7 +336,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - Give `engos-api` the standard **`Sales User`** role. It covers reading Customer, Item and Sales Order, creating and writing Customer, and writing the allow-on-submit link fields. Accept that it could also create Sales Orders: the key lives only on our server.
   - Update F1's guard: instead of "has `EngOS Integration`", refuse SSO into **any user that has an API key** (integration users), plus the existing `Administrator` / non-`System User` checks.
   - Prove it: as a Director and as the Sales Head (via SSO), Customer, Item, Sales Order and Quotation lists open, and a Sales Order can be created and submitted. `engos-api` can still read and write the link fields. Paste `frappe.model.can_read` results for the four DocTypes.
-- [ ] **F11: stop testing stale code.**
+- [x] **F11: stop testing stale code.**
   - Every image rebuild gets a **new tag** (`acs-erpnext:v16.37.0-acs2`, `-acs3`, …).
   - Recreate the containers on it (volumes kept), then run `bench --site frontend migrate`.
   - In the notes, record the tag running and `docker inspect` creation times of image and container.
