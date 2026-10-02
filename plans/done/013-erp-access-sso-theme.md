@@ -1,6 +1,6 @@
 # 013 — ERP access: one-click sign-in, restyled ERPNext, ERP entry in our app (local)
 
-**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** REVIEWED   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity · **Branch:** `erp`
 **Depends on:** 012 part A (local ERPNext at `C:\Users\Dhruv-Home\erpnext-local`, v16.37.0, on `127.0.0.1:8080`).
 **Where it runs:** **local only** (user decision 2026-10-01: all ERP development is done and tested locally first; the VPS comes after plan 015). Nothing in this plan touches the VPS.
@@ -573,3 +573,11 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   So the tests catch both bugs found earlier.
 - The real API-key refusal returns **401** on the running `acs5`, and the log line confirms the guard.
 - **Left in plan 013:** re-shoot the F3 screenshots (local only, never in git), then set 013 to DONE. F12c moved to plan 016 step 1.
+
+**Final review 2026-10-02, commit `407619e` (F3 re-shoot). Verdict: REVIEWED.**
+- The 10 screenshots are fresh (13:55, `acs5`), local only (0 tracked in git). Claude viewed the Sales Order form and the Director desk.
+- **Sales Order form:** bordered inputs, white item rows with a cream header, WO Number present, Project hidden, one orange Save.
+- **Director desk:** ACS logo, cream floor, "ERP Settings", no Projects tile.
+- The dark tile icons are F12c, carried into plan 016 step 1.
+- Full suite reported green on a fresh CI-like DB (157 unit, 63 integration, 23 Python).
+- Plan 013 is closed. Next: plan 014.
