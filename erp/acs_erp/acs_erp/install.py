@@ -3,32 +3,42 @@ import frappe
 
 def after_install():
     """Sets system defaults, creates panel items, and ensures custom fields and permissions exist."""
-    # 1. Session Expiry 08:00
+    # 1. System Settings: Session Expiry 08:00, disable email-link login, disable onboarding
     try:
         system_settings = frappe.get_doc("System Settings")
         system_settings.session_expiry = "08:00"
+        if hasattr(system_settings, "login_with_email_link"):
+            system_settings.login_with_email_link = 0
         if hasattr(system_settings, "allow_login_using_email_link"):
             system_settings.allow_login_using_email_link = 0
+        if hasattr(system_settings, "enable_onboarding"):
+            system_settings.enable_onboarding = 0
         system_settings.save(ignore_permissions=True)
     except Exception as e:
         frappe.logger("acs_erp").error(f"Failed to update System Settings: {e}")
 
-    # 2. Disable sign-up and set brand name
+    # 2. Website Settings: Disable sign-up, set brand name and app logo
     try:
         website_settings = frappe.get_doc("Website Settings")
         website_settings.disable_signup = 1
         website_settings.app_name = "Engineering OS · ERP"
+        website_settings.app_logo = "/assets/acs_erp/images/acs-logo.svg"
         website_settings.save(ignore_permissions=True)
     except Exception as e:
         frappe.logger("acs_erp").error(f"Failed to update Website Settings: {e}")
 
+    # Navbar Settings: app logo
     try:
         if frappe.db.exists("DocType", "Navbar Settings"):
             navbar = frappe.get_doc("Navbar Settings")
-            navbar.app_name = "Engineering OS · ERP"
+            if hasattr(navbar, "app_logo"):
+                navbar.app_logo = "/assets/acs_erp/images/acs-logo.svg"
             navbar.save(ignore_permissions=True)
     except Exception as e:
         frappe.logger("acs_erp").error(f"Failed to update Navbar Settings: {e}")
+
+    # Complete/hide all module onboarding & welcome workspace (F12)
+    _disable_onboarding()
 
     # 3. Create PLC, SCADA, HMI Panel Items if missing
     panel_items = [
@@ -109,8 +119,24 @@ def _ensure_allowed_referrers():
         frappe.logger("acs_erp").error(f"Failed to update allowed_referrers: {e}")
 
 
+def _disable_onboarding():
+    """Hides Welcome Workspace and marks all Module Onboarding docs as completed (F12)."""
+    try:
+        if frappe.db.exists("Workspace", "Welcome Workspace"):
+            frappe.db.set_value("Workspace", "Welcome Workspace", "is_hidden", 1, update_modified=False)
+    except Exception as e:
+        frappe.logger("acs_erp").error(f"Failed to hide Welcome Workspace: {e}")
+
+    try:
+        if frappe.db.exists("DocType", "Module Onboarding"):
+            for row in frappe.get_all("Module Onboarding", filters={"is_complete": 0}):
+                frappe.db.set_value("Module Onboarding", row.name, "is_complete", 1, update_modified=False)
+    except Exception as e:
+        frappe.logger("acs_erp").error(f"Failed to complete Module Onboarding: {e}")
+
+
 def _hide_projects_module():
-    """Hides Projects workspace, removes create perm on Project DocType, and hides project field on orders."""
+    """Hides Projects workspace, desktop icon, removes create perm on Project DocType, and hides project field on orders."""
     # Hide Projects workspace
     try:
         workspaces = frappe.get_all("Workspace", filters={"name": ["in", ["Projects", "Project"]], "is_hidden": 0})
@@ -118,6 +144,13 @@ def _hide_projects_module():
             frappe.db.set_value("Workspace", ws.name, "is_hidden", 1, update_modified=False)
     except Exception as e:
         frappe.logger("acs_erp").error(f"Failed to hide Projects workspace: {e}")
+
+    # Hide Projects Desktop Icon on /desk (v16)
+    try:
+        if frappe.db.exists("Desktop Icon", "Projects"):
+            frappe.db.set_value("Desktop Icon", "Projects", "hidden", 1, update_modified=False)
+    except Exception as e:
+        frappe.logger("acs_erp").error(f"Failed to hide Projects Desktop Icon: {e}")
 
     # Remove create permission on Project DocType for all roles
     try:

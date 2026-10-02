@@ -55,7 +55,7 @@ body {
 
   /* Surfaces & Floor */
   --bg-color: #f7f7f4 !important;
-  --fg-color: #1a1a19 !important;
+  --fg-color: #ffffff !important;
   --text-color: #1a1a19 !important;
   --text-muted: #6b6b66 !important;
   --text-light: #9e9e98 !important;
@@ -64,11 +64,22 @@ body {
   --control-bg: #ffffff !important;
   --control-bg-on-gray: #ffffff !important;
   --modal-bg: #ffffff !important;
+  --subtle-accent: #f7f7f4 !important;
+  --subtle-fg: #f7f7f4 !important;
+
+  /* Blue tokens neutralized to neutral/ink (design system: no blue) */
+  --surface-blue-1: #f7f7f4 !important;
+  --surface-blue-2: #f0f0ea !important;
+  --surface-blue-3: #1a1a19 !important;
+  --bg-blue: #f7f7f4 !important;
+  --bg-light-blue: #f7f7f4 !important;
+  --outline-blue-1: #d8d8d0 !important;
 
   /* Borders & Hairlines */
   --border-color: #e5e5df !important;
   --subtle-border-color: #f0f0ea !important;
   --dark-border-color: #d8d8d0 !important;
+  --table-border-color: #e5e5df !important;
 
   /* Primary Accent: Cursor Orange (One CTA per screen) */
   --primary-color: #e3441a !important;
@@ -143,7 +154,8 @@ body {
   border-radius: 12px !important;
 }
 
-/* 4. Controls: 8px radius, clean borders */
+/* 4. Controls & Input Fields (F12)
+   1px hairline-strong border (#d8d8d0), 8px radius, white surface, ink focus ring */
 .form-control,
 .input-with-feedback,
 .custom-actions,
@@ -152,9 +164,32 @@ body {
   box-shadow: none !important;
 }
 
-.form-control:focus {
+.form-control,
+.input-with-feedback,
+input.form-control,
+select.form-control,
+textarea.form-control {
+  border: 1px solid #d8d8d0 !important;
+  background-color: #ffffff !important;
+  color: #1a1a19 !important;
+}
+
+.form-control:focus,
+.input-with-feedback:focus,
+input.form-control:focus,
+select.form-control:focus,
+textarea.form-control:focus {
   border-color: #1a1a19 !important;
   box-shadow: 0 0 0 1px #1a1a19 !important;
+  outline: none !important;
+}
+
+/* Like-disabled inputs & static displays */
+.like-disabled-input {
+  border: 1px solid #e5e5df !important;
+  border-radius: 8px !important;
+  background-color: #f7f7f4 !important;
+  color: #6b6b66 !important;
 }
 
 /* Buttons */
@@ -184,7 +219,94 @@ body {
   border-color: #d8d8d0 !important;
 }
 
-/* 5. Monospace font for document numbers and codes */
+/* 5. Child Tables / Form Grids (F12)
+   Grid rows: surface (white) with hairline borders. Footer: cream with hairline top border. */
+.form-grid {
+  border: 1px solid #e5e5df !important;
+  border-radius: 8px !important;
+  background-color: #ffffff !important;
+}
+
+.grid-heading-row {
+  border-bottom: 1px solid #e5e5df !important;
+  background-color: #f7f7f4 !important;
+  color: #6b6b66 !important;
+}
+
+.grid-heading-row .grid-row,
+.grid-heading-row .row-check,
+.grid-heading-row .row-index {
+  background-color: #f7f7f4 !important;
+  color: #6b6b66 !important;
+}
+
+.form-grid .grid-body {
+  background-color: #ffffff !important;
+}
+
+.form-grid .grid-row,
+.form-grid .data-row,
+.form-grid .grid-body .data-row {
+  background-color: #ffffff !important;
+  color: #1a1a19 !important;
+  border-bottom: 1px solid #e5e5df !important;
+}
+
+.form-grid .grid-body .data-row .row-check,
+.form-grid .grid-body .data-row .row-index,
+.form-grid .grid-body .grid-static-col {
+  background-color: #ffffff !important;
+  color: #1a1a19 !important;
+}
+
+.form-grid .grid-footer,
+.form-grid .grid-custom-buttons {
+  background-color: #f7f7f4 !important;
+  border-top: 1px solid #e5e5df !important;
+  padding: 8px 12px !important;
+}
+
+/* 6. Onboarding suppression (F12)
+   Hide Getting Started onboarding panel, sidebar entry, and onboarding widgets */
+.onb-panel,
+.user-onboarding,
+.onboarding-sidebar,
+.widget.onboarding,
+[data-name="Welcome Workspace"] {
+  display: none !important;
+}
+
+/* 7. Desk tiles & workspace icons neutralized (F12)
+   Replace bright blue desktop tiles and sidebar workspace icons with neutral / ink */
+.desktop-icon .icon-container,
+.sidebar-header .sidebar-item-icon,
+.header-logo-container {
+  background-color: #f0f0ea !important;
+}
+
+.desktop-alphabet,
+.desktop-icon .icon,
+.sidebar-header .sidebar-item-icon svg,
+.sidebar-header .header-logo svg {
+  color: #1a1a19 !important;
+}
+
+/* 8. Chart colors (F12)
+   Map default line graph stroke and dots to ink (#1a1a19) and neutral (#6b6b66) instead of pink */
+.chart-container path.line-graph-path {
+  stroke: #1a1a19 !important;
+}
+
+.chart-container .dataset-units circle {
+  fill: #1a1a19 !important;
+  stroke: #ffffff !important;
+}
+
+.chart-container .legend-dataset-label {
+  color: #6b6b66 !important;
+}
+
+/* 9. Monospace font for document numbers and codes */
 .indicator-pill,
 .badge {
   border-radius: 9999px !important;
@@ -200,7 +322,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* 6. Navbar styling: clean, warm floor */
+/* 10. Navbar styling: clean, warm floor */
 .navbar {
   background-color: #ffffff !important;
   border-bottom: 1px solid #e5e5df !important;
@@ -211,3 +333,11 @@ body {
   font-weight: 500;
   letter-spacing: -0.01em;
 }
+
+/* 11. Login page adjustments (F12) */
+.for-login-with-email-link,
+.form-login-with-email-link,
+.btn-login-with-email-link {
+  display: none !important;
+}
+

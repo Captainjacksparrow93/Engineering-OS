@@ -248,6 +248,32 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
         - `DocPerm` for DocType `Project`: `create` count across all roles is `0`.
         - `Property Setter` on `Sales Order`: field `project` property `hidden` is `1`.
       - **F9:** `site_config.json` on running container has `acs_erp_engos_origin: "http://127.0.0.1:3001"` and `allowed_referrers: ["http://127.0.0.1:8080", "http://127.0.0.1:3001"]`.
+  - **F12 (login page and desk look, child tables, inputs, onboarding, neutralized look):**
+    - Built new Docker image tag: `acs-erpnext:v16.37.0-acs3` (`docker build -t acs-erpnext:v16.37.0-acs3 -f erp/Dockerfile erp`).
+    - Configured `CUSTOM_TAG=v16.37.0-acs3` in `C:\Users\Dhruv-Home\erpnext-local\.env`.
+    - Recreated containers with `docker compose ... up -d --force-recreate` and ran `bench --site frontend migrate`.
+    - Verified `docker inspect` creation timestamps:
+      - Image `acs-erpnext:v16.37.0-acs3`: `2026-10-02T06:36:59.774113398Z`
+      - Container `erpnext-local-backend-1`: `2026-10-02T06:37:14.487815635Z`
+      - Container `erpnext-local-frontend-1`: `2026-10-02T06:37:18.611147731Z`
+    - In `erp/acs_erp/acs_erp/install.py`:
+      - `System Settings.login_with_email_link = 0` (confirmed button hidden from `/login`).
+      - `System Settings.enable_onboarding = 0`, plus `_disable_onboarding()` sets `is_complete = 1` for all `Module Onboarding` doctype entries and hides `Welcome Workspace`.
+      - `Website Settings.app_logo` and `Navbar Settings.app_logo` set to `/assets/acs_erp/images/acs-logo.svg` (copied from `public/acs-logo.svg`).
+      - In `_hide_projects_module()`: hides `Projects` Desktop Icon via `frappe.db.set_value("Desktop Icon", "Projects", "hidden", 1)` (hides Projects tile from `/desk` in v16).
+    - In `erp/acs_erp/acs_erp/public/css/acs_theme.css`:
+      - Fixed `--fg-color: #ffffff !important;` (Frappe uses `--fg-color` for card/table surface, not text color! Changing it to white fixed the solid black rows and black toolbar).
+      - Styled `.form-grid` child table: rows are white surface (`#ffffff`) with hairline borders (`#e5e5df`), footer is warm cream (`#f7f7f4`).
+      - Styled form inputs: `.form-control, .input-with-feedback, input.form-control, select.form-control, textarea.form-control` have 1px `#d8d8d0` border, 8px radius, white surface, and ink focus ring (`box-shadow: 0 0 0 1px #1a1a19`).
+      - Neutralized desk tiles and workspace icons: `.desktop-icon .icon-container`, `.sidebar-header .sidebar-item-icon`, and `.header-logo-container` mapped to neutral surface `#f0f0ea` and ink `#1a1a19` (no blue). Overrode `--surface-blue-1`, `--surface-blue-2`, `--surface-blue-3`, `--bg-blue`, `--bg-light-blue` to neutral/ink tokens.
+      - Hidden onboarding: `.onb-panel, .user-onboarding, .onboarding-sidebar, .widget.onboarding, [data-name="Welcome Workspace"] { display: none !important; }`.
+      - Chart colors: styled `.chart-container path.line-graph-path` and dots to ink `#1a1a19` instead of pink.
+    - Verified on running container:
+      - HTTP 200 on `/assets/acs_erp/images/acs-logo.svg` (41,767 bytes).
+      - HTTP 200 on `/assets/acs_erp/css/acs_theme.css` with updated CSS rules.
+      - `/login` renders ACS logo (`/assets/acs_erp/images/acs-logo.svg`) and has no "Login with Email Link" button.
+      - `Desktop Icon` for `Projects` has `hidden = 1`.
+      - `Navbar Settings` and `Website Settings` `app_logo` both set to `/assets/acs_erp/images/acs-logo.svg`.
 
 
 ## Review (Claude)
@@ -341,7 +367,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - Recreate the containers on it (volumes kept), then run `bench --site frontend migrate`.
   - In the notes, record the tag running and `docker inspect` creation times of image and container.
   - Re-check F7 (Director 21 roles, Sales Head 20 without `System Manager`), F8 and F9 **on the running containers**.
-- [ ] **F12: login page and desk look.** Also fix what the F3 screenshots (`erpnext_selling_workspace.png`, `erpnext_sales_order_form.png`) show:
+- [x] **F12: login page and desk look.** Also fix what the F3 screenshots (`erpnext_selling_workspace.png`, `erpnext_sales_order_form.png`) show:
   - **The child table (Sales Order items) renders as a solid black row**, and so does the "Add row/Add multiple" bar. A theme rule is painting the grid with `ink`; grid rows should be `surface` with `hairline` borders.
   - **Input fields have no visible border** (e.g. Customer, WO Number, Delivery Date), so they read as plain text. Inputs need the `.input` look: 1px `hairline-strong` border, 8px radius, ink focus ring.
   - **Hide ERPNext's "Getting Started" onboarding panel** and its sidebar entry for everyone (setting or CSS; record which).
