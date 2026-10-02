@@ -9,14 +9,28 @@
       "System Manager",
       "Sales Manager",
       "Sales User",
+      "Sales Master Manager",
       "Purchase Manager",
+      "Purchase User",
+      "Purchase Master Manager",
       "Stock Manager",
+      "Stock User",
+      "Item Manager",
+      "Delivery Manager",
+      "Delivery User",
       "Accounts Manager",
-      "Item Manager"
+      "Accounts User",
+      "Manufacturing Manager",
+      "Manufacturing User",
+      "Quality Manager",
+      "Maintenance Manager",
+      "Maintenance User",
+      "Fleet Manager",
+      "Support Team"
     ],
     "iat": 1700000000,
     "exp": 1700000030,
     "nonce": "0123456789abcdef0123456789abcdef"
   },
-  "pass": "eyJ2IjoxLCJhY3QiOiJsb2dpbiIsImVtYWlsIjoiZGlyZWN0b3JAYWNzZW5naXRlY2guY29tIiwibmFtZSI6IkphbmUgRGlyZWN0b3IiLCJyb2xlcyI6WyJTeXN0ZW0gTWFuYWdlciIsIlNhbGVzIE1hbmFnZXIiLCJTYWxlcyBVc2VyIiwiUHVyY2hhc2UgTWFuYWdlciIsIlN0b2NrIE1hbmFnZXIiLCJBY2NvdW50cyBNYW5hZ2VyIiwiSXRlbSBNYW5hZ2VyIl0sImlhdCI6MTcwMDAwMDAwMCwiZXhwIjoxNzAwMDAwMDMwLCJub25jZSI6IjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVmIn0.XaghwpQ-xggJ2bvEde4VvMawfBI_5nkwpTe6Seuf6AE"
+  "pass": "eyJ2IjoxLCJhY3QiOiJsb2dpbiIsImVtYWlsIjoiZGlyZWN0b3JAYWNzZW5naXRlY2guY29tIiwibmFtZSI6IkphbmUgRGlyZWN0b3IiLCJyb2xlcyI6WyJTeXN0ZW0gTWFuYWdlciIsIlNhbGVzIE1hbmFnZXIiLCJTYWxlcyBVc2VyIiwiU2FsZXMgTWFzdGVyIE1hbmFnZXIiLCJQdXJjaGFzZSBNYW5hZ2VyIiwiUHVyY2hhc2UgVXNlciIsIlB1cmNoYXNlIE1hc3RlciBNYW5hZ2VyIiwiU3RvY2sgTWFuYWdlciIsIlN0b2NrIFVzZXIiLCJJdGVtIE1hbmFnZXIiLCJEZWxpdmVyeSBNYW5hZ2VyIiwiRGVsaXZlcnkgVXNlciIsIkFjY291bnRzIE1hbmFnZXIiLCJBY2NvdW50cyBVc2VyIiwiTWFudWZhY3R1cmluZyBNYW5hZ2VyIiwiTWFudWZhY3R1cmluZyBVc2VyIiwiUXVhbGl0eSBNYW5hZ2VyIiwiTWFpbnRlbmFuY2UgTWFuYWdlciIsIk1haW50ZW5hbmNlIFVzZXIiLCJGbGVldCBNYW5hZ2VyIiwiU3VwcG9ydCBUZWFtIl0sImlhdCI6MTcwMDAwMDAwMCwiZXhwIjoxNzAwMDAwMDMwLCJub25jZSI6IjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVmIn0.-oLEH432bZvuxrgnmeBlTZ3iHQ3Pwzo8KbjOI_RxUgk"
 }

@@ -25,7 +25,10 @@ after_migrate = "acs_erp.install.after_install"
 doc_events = {
     "Sales Order": {
         "validate": "acs_erp.events.validate_sales_order",
-    }
+    },
+    "Project": {
+        "before_insert": "acs_erp.events.validate_project",
+    },
 }
 
 # Fixtures

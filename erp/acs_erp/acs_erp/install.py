@@ -66,7 +66,60 @@ def after_install():
     # 6. Ensure docperms exist
     _ensure_docperms()
 
+    # 7. Hide Projects module and disable Project creation (F8)
+    _hide_projects_module()
+
     frappe.db.commit()
+
+
+def _hide_projects_module():
+    """Hides Projects workspace, removes create perm on Project DocType, and hides project field on orders."""
+    # Hide Projects workspace
+    try:
+        workspaces = frappe.get_all("Workspace", filters={"name": ["in", ["Projects", "Project"]], "is_hidden": 0})
+        for ws in workspaces:
+            frappe.db.set_value("Workspace", ws.name, "is_hidden", 1, update_modified=False)
+    except Exception as e:
+        frappe.logger("acs_erp").error(f"Failed to hide Projects workspace: {e}")
+
+    # Remove create permission on Project DocType for all roles
+    try:
+        # Standard DocPerms
+        frappe.db.sql("""
+            UPDATE `tabDocPerm`
+            SET `create` = 0
+            WHERE `parent` = 'Project'
+        """)
+        # Custom DocPerms if any
+        if frappe.db.exists("DocType", "Custom DocPerm"):
+            frappe.db.sql("""
+                UPDATE `tabCustom DocPerm`
+                SET `create` = 0
+                WHERE `parent` = 'Project'
+            """)
+    except Exception as e:
+        frappe.logger("acs_erp").error(f"Failed to remove create permissions on Project: {e}")
+
+    # Hide project link field on transaction doctypes
+    target_doctypes = ["Sales Order", "Quotation", "Sales Invoice", "Purchase Order"]
+    for dt in target_doctypes:
+        try:
+            if frappe.db.exists("DocType", dt):
+                meta = frappe.get_meta(dt)
+                if meta.has_field("project"):
+                    # Use frappe.make_property_setter to idempotently set hidden=1
+                    frappe.make_property_setter(
+                        doctype=dt,
+                        fieldname="project",
+                        property="hidden",
+                        value=1,
+                        property_type="Check",
+                        validate_field_exists=True,
+                        is_system_generated=True,
+                    )
+        except Exception as e:
+            frappe.logger("acs_erp").error(f"Failed to hide project field on {dt}: {e}")
+
 
 
 def _ensure_custom_fields():

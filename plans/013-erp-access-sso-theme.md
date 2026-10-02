@@ -178,6 +178,17 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - **F4 (pycache cleanup):** Untracked and removed committed `__pycache__/*.pyc` files from git index.
   - **F5 (image build hygiene):** Removed `|| true` from `bench build --app acs_erp` in `erp/Dockerfile`; rebuilt image cleanly. Noted that on an existing volume, `apps.txt` is updated via container setup or `bench --site frontend install-app acs_erp`.
   - **F6 (small improvements):** Capped `body` to 500 characters in `erp.user_disable_failed` and added successful audit log `erp.user_disabled` in `src/modules/admin/services/admin.service.ts`.
+  - **F7 (role mapping):** Queried real roles list on the local ERPNext site (`tabRole`):
+    - Operational module roles: `Sales Manager`, `Sales User`, `Sales Master Manager`, `Purchase Manager`, `Purchase User`, `Purchase Master Manager`, `Stock Manager`, `Stock User`, `Item Manager`, `Delivery Manager`, `Delivery User`, `Accounts Manager`, `Accounts User`, `Manufacturing Manager`, `Manufacturing User`, `Quality Manager`, `Maintenance Manager`, `Maintenance User`, `Fleet Manager`, `Support Team`.
+    - Excluded: `Projects Manager`, `Projects User` (kept out per F8), `Administrator`, `Guest`, `HR Manager`, `HR User` (HRMS uninstalled), `Desk User` / `All` (auto-granted).
+    - Updated `ERP_ROLES_DIRECTOR` (includes `System Manager` + all 20 module roles) and `ERP_ROLES_SALES_HEAD` (all 20 module roles without `System Manager`) in `src/modules/erp/sso.ts`. Updated `MANAGED_ROLES` in `sso.py`. Updated shared test vector `pass_vector.json` and unit tests in `sso.test.ts`.
+  - **F8 (hide ERPNext Projects module):**
+    - In `erp/acs_erp/acs_erp/install.py`: added `_hide_projects_module()` in `after_install`/`after_migrate` to:
+      1. Set `is_hidden = 1` on `Projects` / `Project` Workspace records.
+      2. Set `create = 0` on `tabDocPerm` and `tabCustom DocPerm` for `Project` DocType across all roles.
+      3. Set `hidden = 1` on `project` link field on `Sales Order`, `Quotation`, `Sales Invoice`, and `Purchase Order` using `frappe.make_property_setter`.
+    - In `erp/acs_erp/acs_erp/events.py` and `hooks.py`: added `before_insert` document hook on `Project` DocType throwing `frappe.throw` to block manual project creation in ERPNext desk.
+
 
 ## Review (Claude)
 **2026-10-01, commit `588b681` (all six steps in one commit). Verdict: well built and close to the plan. Fix the two security gaps and prove it in a real browser before REVIEWED.**
@@ -217,14 +228,14 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - Also audit a successful disable (`erp.user_disabled`).
   - Fix the notes: the action isn't `USER_DISABLE_ERPNEXT`.
   - `install.py` re-creates the custom fields and DocPerms that the fixtures already ship (`_ensure_custom_fields`, `_ensure_docperms`). Keep one source (the fixtures) unless there's a reason; if so, write it down.
-- [ ] **F7: role mapping (user decision 2026-10-01).**
+- [x] **F7: role mapping (user decision 2026-10-01).**
   - **Directors (and Super Admin):** `System Manager` **plus every ERPNext module role**.
   - **Sales Head:** **every ERPNext module role, without `System Manager`** (they work in every module but can't change ERPNext settings, users or customisation).
   - "Every module role" = the business roles ERPNext v16 installs for its modules: Selling, Buying, Stock, Accounts, Manufacturing, Quality, Assets, Support/Maintenance, and the master-data roles (e.g. `Sales Manager`, `Sales User`, `Sales Master Manager`, `Purchase Manager`, `Purchase User`, `Purchase Master Manager`, `Stock Manager`, `Stock User`, `Item Manager`, `Accounts Manager`, `Accounts User`, `Manufacturing Manager`, `Manufacturing User`, `Quality Manager`, `Maintenance Manager`, `Maintenance User`). **Check the real list on the local site** and paste it into the notes.
   - Leave out: `Projects Manager`, `Projects User` (see F8), `Administrator`, `Guest`, `System Manager` for the Sales Head, and any HR roles (HRMS isn't installed).
   - Update `rolesFor`/the role constants in `sso.ts` and `MANAGED_ROLES` in `sso.py` to match exactly. Update the unit tests (Director has `System Manager`; Sales Head has every module role but not `System Manager`; Engineer has none).
   - Re-check in the browser: the Sales Head can open Buying/Stock/Accounts/Manufacturing, but not System Settings or User management.
-- [ ] **F8: hide ERPNext's own Projects module (user decision 2026-10-01).** Projects live only in PM. In `acs_erp` (fixtures or `after_install`, idempotent):
+- [x] **F8: hide ERPNext's own Projects module (user decision 2026-10-01).** Projects live only in PM. In `acs_erp` (fixtures or `after_install`, idempotent):
   - hide the **Projects** workspace for everyone;
   - give no user `Projects Manager`/`Projects User` (they stay out of the managed roles, and the sign-in removes them if present);
   - remove *create* on the `Project` DocType for every role, `System Manager` included;

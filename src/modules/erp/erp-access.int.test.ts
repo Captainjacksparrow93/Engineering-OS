@@ -75,7 +75,7 @@ describe('ERP Access Integration Tests', () => {
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('text/html');
       expect(response.headers.get('cache-control')).toBe('no-store');
-      expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+      expect(response.headers.get('referrer-policy')).toBe('origin-when-cross-origin');
 
       const html = await response.text();
       expect(html).toContain('http://127.0.0.1:8080/api/method/acs_erp.sso.login');

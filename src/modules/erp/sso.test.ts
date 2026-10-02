@@ -8,35 +8,52 @@ describe('SSO Pass & Roles Unit Tests', () => {
   const vector = JSON.parse(fs.readFileSync(vectorPath, 'utf8'));
 
   describe('rolesFor', () => {
-    it('maps DIRECTOR to full ERP management roles', () => {
+    it('maps DIRECTOR to full ERP management roles including System Manager', () => {
       const roles = rolesFor(['DIRECTOR']);
       expect(roles).toEqual([
         'System Manager',
         'Sales Manager',
         'Sales User',
+        'Sales Master Manager',
         'Purchase Manager',
+        'Purchase User',
+        'Purchase Master Manager',
         'Stock Manager',
-        'Accounts Manager',
+        'Stock User',
         'Item Manager',
+        'Delivery Manager',
+        'Delivery User',
+        'Accounts Manager',
+        'Accounts User',
+        'Manufacturing Manager',
+        'Manufacturing User',
+        'Quality Manager',
+        'Maintenance Manager',
+        'Maintenance User',
+        'Fleet Manager',
+        'Support Team',
       ]);
     });
 
     it('maps SUPER_ADMIN to full ERP management roles', () => {
       const roles = rolesFor(['SUPER_ADMIN']);
-      expect(roles).toEqual([
-        'System Manager',
-        'Sales Manager',
-        'Sales User',
-        'Purchase Manager',
-        'Stock Manager',
-        'Accounts Manager',
-        'Item Manager',
-      ]);
+      expect(roles).toContain('System Manager');
+      expect(roles).toContain('Sales Manager');
+      expect(roles).toContain('Accounts Manager');
+      expect(roles).toHaveLength(21);
     });
 
-    it('maps SALES_HEAD to sales roles only', () => {
+    it('maps SALES_HEAD to every module role without System Manager', () => {
       const roles = rolesFor(['SALES_HEAD']);
-      expect(roles).toEqual(['Sales Manager', 'Sales User']);
+      expect(roles).not.toContain('System Manager');
+      expect(roles).toContain('Sales Manager');
+      expect(roles).toContain('Purchase Manager');
+      expect(roles).toContain('Stock Manager');
+      expect(roles).toContain('Accounts Manager');
+      expect(roles).toContain('Manufacturing Manager');
+      expect(roles).toContain('Quality Manager');
+      expect(roles).toContain('Maintenance Manager');
+      expect(roles).toHaveLength(20);
     });
 
     it('returns empty array for roles without ERP access', () => {
