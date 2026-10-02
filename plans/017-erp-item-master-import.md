@@ -1,6 +1,6 @@
 # 017 — ERP: import the item master (demo PLC parts)
 
-**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** partner's Claude (via `Captainjacksparrow93/Engineering-OS`, branch `erp`)
 
 ## Goal
@@ -98,11 +98,11 @@ Evidence (read from the file 2026-10-02):
   - **output:** a summary line (`created / updated / unchanged / skipped / errors`, plus new groups and brands) and one line per non-unchanged row with the reason. Print it, and return it as a dict for the tests.
   - Tests cover: dry run writes nothing; apply creates; second apply → 0 created, 0 updated; one changed field → 1 updated; an error row doesn't stop the other rows but is listed.
 - [x] **4. Custom field `Item-custom_maker_part_no`** in `_ensure_custom_fields`, `fixtures/custom_field.json` and the `hooks.py` fixtures filter. Extend `test_install.py` for it. Rebuild the image as the next `-acsN` tag, recreate the containers, run `bench --site frontend migrate`, and confirm the field shows on the Item form.
-- [ ] **5. Run it on the local ERPNext** with the real file. Copy `docs/erp/demo-items-2026-10-02.xlsx` into the backend container (`docker cp`), then:
+- [x] **5. Run it on the local ERPNext** with the real file. Copy `docs/erp/demo-items-2026-10-02.xlsx` into the backend container (`docker cp`), then:
   - dry run → paste the summary (expect 38 to create, 3 new groups, 1 brand, 0 errors);
   - `apply=True` → paste the summary;
   - `apply=True` again → 0 created, 0 updated.
-- [ ] **6. Check it in a real browser** (signed in through our SSO as a Director):
+- [x] **6. Check it in a real browser** (signed in through our SSO as a Director):
   - Item list filtered to group "SMART PLC" shows 38 items;
   - searching `6ES72881ST400AA1` in the Item list finds `ASPLC0000043`;
   - `ASPLC0000043`'s brand is Siemens and its description has no long padding;
@@ -110,11 +110,11 @@ Evidence (read from the file 2026-10-02):
   Note what you saw.
 
 ## Acceptance criteria
-- [ ] `python -m unittest discover -s erp/acs_erp` passes, and the JS full suite is unchanged and green.
-- [ ] The 38 demo items are in local ERPNext with clean names, descriptions, brand, group tree and maker part number, searchable by part number.
-- [ ] Dry run changes nothing; a second apply changes nothing; nothing is ever deleted.
-- [ ] No change under `src/` or `prisma/`, and no new dependency.
-- [ ] The running image tag is written in the notes.
+- [x] `python -m unittest discover -s erp/acs_erp` passes, and the JS full suite is unchanged and green.
+- [x] The 38 demo items are in local ERPNext with clean names, descriptions, brand, group tree and maker part number, searchable by part number.
+- [x] Dry run changes nothing; a second apply changes nothing; nothing is ever deleted.
+- [x] No change under `src/` or `prisma/`, and no new dependency.
+- [x] The running image tag is written in the notes.
 
 ## Out of scope / open (ask the user, don't guess)
 - Prices, stock opening balances, warehouses, HSN codes, suppliers, BOMs. None of these are in the file.
@@ -133,6 +133,19 @@ Evidence (read from the file 2026-10-02):
 - **Step 4 (custom field):** `Item-custom_maker_part_no` (Data, "Maker part no.", after `item_name`, `in_standard_filter` 1) added to `_ensure_custom_fields`, `fixtures/custom_field.json` and the `hooks.py` fixture filter (only that list; no other hook touched). For "search fields", `_ensure_custom_fields` also appends `custom_maker_part_no` to Item's `search_fields` with a Property Setter, only if it isn't there (idempotent; Custom Field has no search-fields flag of its own). `test_install.py` +3 (field props; property setter set once and not again; fixture + hooks list it), red first (2 failures, 1 error) → green.
   - **Image `acs-erpnext:v16.37.0-acs8`** (same local-only proxy-CA build copy), `CUSTOM_TAG` switched, containers recreated, `bench --site frontend migrate` OK, backend running `acs8`. `frappe.get_meta("Item")`: field "Maker part no." Data, standard filter 1; `search_fields` = `item_name,description,item_group,customer_code,custom_maker_part_no`. In the browser (Director via SSO, full Chromium) the Item form for `PLC` shows "Maker part no.".
   - **Test counts:** acs_erp 46 OK. No JS change in this step.
+- **Step 5 (real file on the local ERPNext, image `acs8`):** `docker compose … cp docs/erp/demo-items-2026-10-02.xlsx backend:/tmp/demo-items.xlsx`, then `bench --site frontend execute acs_erp.item_import.run --kwargs "{'path': '/tmp/demo-items.xlsx', 'apply': …}"`:
+  - dry run: `Dry run (nothing written; pass apply=True to write): 38 created, 0 updated, 0 unchanged, 0 skipped, 0 errors; new item groups: Electronics, PLC, SMART PLC; new brands: Siemens` (the "created" counts are what *would* be created);
+  - `apply=True`: `Applied: 38 created, 0 updated, 0 unchanged, 0 skipped, 0 errors; new item groups: Electronics, PLC, SMART PLC; new brands: Siemens`;
+  - `apply=True` again: `Applied: 0 created, 0 updated, 38 unchanged, 0 skipped, 0 errors; new item groups: none; new brands: none`. ERPNext stores the cleaned descriptions as given, so re-runs compare equal.
+- **Step 6 (browser, Director via our SSO, full Chromium):**
+  - Item list filtered to group "SMART PLC": "20 of 38" (one page of 20, 38 in total; server count 38).
+  - The list's standard filter **Maker part no.** = `6ES72881ST400AA1` → one row, "S7200 smart CPU ST40 DC/DC/DC relay 24DI/16DO" (= ASPLC0000043). Item link search for the same text → `ASPLC0000043` (via the new search field).
+  - `ASPLC0000043`: brand **Siemens** (blank `MakeDesc` in the file, set from the `6ES7` part number), group SMART PLC, part no `6ES72881ST400AA1`, description 169 chars ending "…web server support" (the 3,831 trailing spaces are gone), `stock_uom` Nos, stock item, enabled.
+  - Panel items `PLC` / `SCADA` / `HMI`: names "PLC Panel" / "SCADA Panel" / "HMI Panel", group All Item Groups, no brand, no part no; last modified 22:53 IST (the acs8 migrate), before the import ran at 23:29, so the import never touched them.
+- **Image running at the end:** `acs-erpnext:v16.37.0-acs8`.
+- **Scope check:** `git diff` since before step 1 touches nothing under `src/` or `prisma/`, and no dependency (`openpyxl` comes with Frappe).
+- **Before DONE:** `python3 -m unittest discover -s erp/acs_erp` 46 OK; JS suite unchanged and green: typecheck clean, `npm test` 168 passed, build clean, `npm run test:int` on a fresh throwaway DB 20 files / 113 passed.
+- **Self-review (`review-delta` not installed; by hand):** the import is run by hand only (not referenced from `hooks.py`, `after_install` or `after_migrate`); nothing is deleted; no Custom DocPerm. The `hooks.py` change is one line in the fixture filter. The `install.py` change is the custom-field list plus the idempotent search-fields Property Setter, inside `_ensure_custom_fields`.
 
 ## Review (Claude)
 <verdict, follow-ups>
