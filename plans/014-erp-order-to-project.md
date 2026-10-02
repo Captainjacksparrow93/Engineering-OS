@@ -128,7 +128,7 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
   - **ERP down:** say so with a "Try again" button. Service call creation stays available.
   - **ERP off:** the wizard is exactly as today.
   - Use `ux-writing` for the text and `impeccable` for layout.
-- [ ] **7. Project page and Edit details.**
+- [x] **7. Project page and Edit details.**
   - The project page shows "From sales order SAL-ORD-…" (link to ERPNext) and the client PO when set.
   - `updateProject` refuses changes to client, WO, target date and panel delivery dates on a project with `erpSalesOrder`: "This comes from the sales order. Change it in ERP." The Edit details dialog shows those fields read-only with the same hint. Code, priority, PM and engineers stay editable.
   - Projects without `erpSalesOrder` (all existing ones until plan 015) keep today's behaviour.
@@ -274,6 +274,14 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
     - the waiting list then showed only SAL-ORD-2026-00102;
     - mock ERP down: step 0 showed "ERP isn't responding. Try again in a minute." with Try again; `/pm/projects` still loaded (200); "Create a service call instead" opened the normal client picker; after bringing it up, "Pick a sales order instead" listed the orders again.
   - **Test counts:** typecheck clean; `npm test` 14 files / 165 tests passed; `npm run test:int` 16 files / 91 tests passed; `npm run build` clean.
+- **Step 7 (project page and Edit details):**
+  - `updateProject` (`project.service.ts`): on a project with `erpSalesOrder`, a **change** to WO, client (id or name), target date or any panel delivery date is refused with "This comes from the sales order. Change it in ERP." Values equal to the stored ones pass, because the Edit details dialog sends every field on each save. Code, name, priority, start date, end user and application stay editable. Unlinked projects are unchanged. The API route `PUT /api/pm/projects/[id]` goes through the same function, so it's locked too.
+  - `EditProjectDetailsButton`: new `erpSalesOrder` prop. When set, client, WO, target date and panel dates are disabled, each with "This comes from the sales order. Change it in ERP."; the header says the order's name.
+  - `ProjectPage`: the subtitle shows "From sales order SAL-ORD-…" (link to `ERPNEXT_PUBLIC_URL/app/sales-order/<name>`, or plain text without that setting) and "PO …" when set.
+  - **Tests (TDD, red first):** new `src/modules/erp/order-field-lock.int.test.ts` (4): each order field refused on a linked project (and nothing saved); code, priority and unchanged order values still save on a linked project; unlinked project keeps today's behaviour; PM still forbidden.
+  - **Browser check (mock ERPNext, as in step 6):** on the project from step 6, the subtitle link pointed at `…/app/sales-order/SAL-ORD-2026-00101` and "PO NCL/PO/7781" showed; in Edit details, client, WO, target and panel dates were disabled, code and priority were not; changing priority saved (`HIGH`), WO and target unchanged.
+  - **Found, not fixed (outside this plan; needs its own plan):** Edit details fails with "Expected string, received null" whenever **End user name or Application name is empty**: the dialog sends `null` for an empty field, but `updateProjectSchema` (from `baseProjectSchema`) accepts only `string | undefined` for `endUserName` / `applicationName`. Pre-existing since plan 008 (same code on `main`), so it likely affects the live app. Workaround in the browser check: filled both fields.
+  - **Test counts:** typecheck clean; `npm test` 14 files / 165 tests passed; `npm run test:int` 17 files / 95 tests passed; `npm run build` clean.
 
 ## Review (Claude)
 

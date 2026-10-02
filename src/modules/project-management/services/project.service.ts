@@ -299,6 +299,18 @@ export async function updateProject(
     }
   }
 
+  // Plan 014: on a project made from an ERPNext sales order, the order owns client, WO and dates.
+  if (before.erpSalesOrder) {
+    const day = (d: Date | null) => (d ? startOfDay(d).toISOString().slice(0, 10) : null);
+    const orderFieldChanged =
+      workOrderNo !== before.workOrderNo ||
+      clientId !== before.clientId ||
+      clientName !== before.clientName ||
+      day(targetEndDate) !== day(before.targetEndDate) ||
+      phaseUpdates.length > 0;
+    if (orderFieldChanged) throw new DomainError('This comes from the sales order. Change it in ERP.');
+  }
+
   const data: Record<string, unknown> = {
     name: input.name !== undefined ? input.name : before.name,
     code,

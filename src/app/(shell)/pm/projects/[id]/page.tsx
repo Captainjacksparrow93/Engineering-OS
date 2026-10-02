@@ -1,3 +1,4 @@
+import { config } from '@/core/config';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
@@ -113,6 +114,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       };
     });
 
+  const erpPublicUrl = config().ERPNEXT_PUBLIC_URL?.replace(/\/+$/, '');
+  const erpOrderUrlBase = erpPublicUrl ? `${erpPublicUrl}/app/sales-order/` : null;
+
   let clientHref: string | null = null;
   if (project.clientId) {
     clientHref = `/pm/clients/${project.clientId}`;
@@ -157,6 +161,31 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 <span className="text-muted-soft">·</span>
               </>
             )}
+            {project.erpSalesOrder ? (
+              <>
+                {erpOrderUrlBase ? (
+                  <a
+                    href={`${erpOrderUrlBase}${encodeURIComponent(project.erpSalesOrder)}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-caption text-muted hover:text-primary hover:underline"
+                  >
+                    From sales order <span className="font-mono">{project.erpSalesOrder}</span>
+                  </a>
+                ) : (
+                  <span className="text-caption text-muted">
+                    From sales order <span className="font-mono">{project.erpSalesOrder}</span>
+                  </span>
+                )}
+                <span className="text-muted-soft">·</span>
+              </>
+            ) : null}
+            {project.clientPoNumber ? (
+              <>
+                <span className="text-caption text-muted font-mono">PO {project.clientPoNumber}</span>
+                <span className="text-muted-soft">·</span>
+              </>
+            ) : null}
             <StatusBadge status={project.status} />
             <PriorityBadge priority={project.priority} />
           </span>
@@ -180,6 +209,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                   priority: project.priority,
                   startDate: project.startDate,
                   targetEndDate: project.targetEndDate,
+                  erpSalesOrder: project.erpSalesOrder,
                 }}
                 clients={clients}
                 existingCodes={existingCodes}
