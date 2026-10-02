@@ -81,6 +81,7 @@ The rule in `CLAUDE.md` holds: **ERPNext must be on the VPS before `erp` merges 
      - a disabled user is refused;
      - New project shows the waiting list (empty is fine).
   4. Run the backfill on production: a dry run first, shown to the user, then `--apply` after approval, then `--apply` again (0 created).
+  4b. Import the item master (plan 017): copy the xlsx into the ERPNext backend container, dry run shown to the user, `apply=True` after approval, then `apply=True` again (0 created, 0 updated).
   5. Spot-check 3 projects: the order link both ways, the ACS reference on the customer, and the per-panel dates.
 - [ ] **8. (Claude) Watch for 24 hours (plan 012 step 9).** Memory morning and evening, no out-of-memory kills, app health ok, ERPNext backup present. Check the audit log for `erp.writeback_failed` and `erp.order_synced` errors.
 - [ ] **9. (Claude) Close out.**

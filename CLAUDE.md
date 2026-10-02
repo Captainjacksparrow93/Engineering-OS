@@ -36,6 +36,9 @@ Everything in `AGENTS.md` applies to Claude too.
 - **Deploys (user decision 2026-09-30, option C; replaces the 2026-09-26 build-locally rule; live since 2026-09-30, plan 010):** a green CI on `main` deploys automatically (GitHub builds, private GHCR, SSH deploy with auto-rollback). A push is a production deploy, so Claude rehearses any migration on a production copy **before** the push. Backups stay on the VPS (14 days); copy them to the PC from time to time.
 - Production migration state (read-only check 2026-09-30): the R1 baseline cut-over is done. `_prisma_migrations` holds `20260925000000_baseline`, `20260925000001_service_call` and `20260926150000_revoke_pm_task_create`. Since 2026-09-30 production is deployed by GitHub Actions (plan 010) with all 4 migrations applied, including `20260929125414_project_code_shared` (release plan 009). `scripts/deploy.sh` (stdin bug: skipped the swap while reporting success, plan 009) is deleted by plan 010; deploys go through `.github/workflows/deploy.yml`.
 
+- **Partner collaboration (user decision 2026-10-02):** a second remote `partner` = `git@github.com:Captainjacksparrow93/Engineering-OS.git`, for collaboration only (it deploys nothing). The partner's Claude implements plans there; the user pulls the work back here and Claude reviews it. The **user** pushes, never Claude. `origin` (n8nmonk-wq) stays the deploy repo.
+- **Item master (user, 2026-10-02):** the demo export `docs/erp/demo-items-2026-10-02.xlsx` (38 Siemens PLC parts) is ERPNext-only data, separate from PM. Plan 017 imports it before release 016.
+
 ## Claude Code notes
 - Tool names here: graph `mcp__code-review-graph__*`, Token Savior `mcp__token-savior__*` (`get_function_source`, `find_symbol`, `get_full_context`), `mcp__sequential-thinking__sequentialthinking` for hard problems.
 - Token Savior: `switch_project` with name `Project management` (a path-based switch can land on the parent `Downloads` folder).
