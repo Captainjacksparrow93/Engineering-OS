@@ -4,10 +4,15 @@ import { requirePrincipal } from '@/core/auth/session';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { prisma } from '@/core/db/prisma';
 import { getWorkloads, defaultWindow } from '@/modules/project-management/services/availability.service';
-import { formatDate } from '@/core/utils/dates';
-import { Avatar, Card, EmptyState, PageHeader, ProgressBar, Stat, StatusBadge } from '@/components/ui';
+import { formatDate, addDays, todayInIndia } from '@/core/utils/dates';
+import { PageHeader, Stat } from '@/components/ui';
+import { TeamLoadTable } from './team-load-table';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata = {
+  title: 'Team load',
+};
 
 /**
  * The resource board - the answer to "who is free?".
@@ -45,131 +50,114 @@ export default async function ResourcesPage({
 
   const free = workloads.filter((w) => w.status === 'FREE' || w.status === 'AVAILABLE');
   const overloaded = workloads.filter((w) => w.status === 'OVERLOADED');
-  const onLeave = workloads.filter((w) => w.status === 'ON_LEAVE');
-  const totalFree = Math.round(workloads.reduce((sum, w) => sum + Math.max(0, w.freeHours), 0));
+  const onLeave = workloads.filter((w) => w.status === 'ON_LEAVE' || w.leaveDays > 0);
+  const totalFreeDays = Math.round((workloads.reduce((sum, w) => sum + Math.max(0, w.freeHours), 0) / 8) * 10) / 10;
+
+  const today = todayInIndia();
+  const tomorrow = addDays(today, 1);
+  const dayOfWeek = today.getUTCDay(); // 0 is Sunday
+  // This week: today to Saturday. Past days are excluded deliberately - they still add
+  // capacity but their finished work no longer counts, which makes people look freer
+  // than they are. On a Sunday this runs to the end of the week ahead.
+  const thisWeekStart = today;
+  const thisWeekEnd = addDays(today, dayOfWeek === 0 ? 6 : 6 - dayOfWeek);
+  const next2WeeksEnd = addDays(today, 13);
+
+  const toIsoDate = (d: Date) => d.toISOString().slice(0, 10);
+  const isSingleDay = toIsoDate(from) === toIsoDate(to);
+
+  const buildPresetUrl = (f: Date, t: Date) => {
+    const q = new URLSearchParams();
+    q.set('from', toIsoDate(f));
+    q.set('to', toIsoDate(t));
+    if (params.departmentId) q.set('departmentId', params.departmentId);
+    if (params.projectId) q.set('projectId', params.projectId);
+    if (params.skills) q.set('skills', params.skills);
+    return `/pm/resources?${q.toString()}`;
+  };
+
+  const presets = [
+    { label: 'Today', from: today, to: today },
+    { label: 'Tomorrow', from: tomorrow, to: tomorrow },
+    { label: 'This week', from: thisWeekStart, to: thisWeekEnd },
+    { label: 'Next 2 weeks', from: today, to: next2WeeksEnd },
+  ];
 
   return (
     <>
       <PageHeader
-        title="Resource board"
+        title="Team load"
         subtitle={`Capacity between ${formatDate(from)} and ${formatDate(to)} (Sundays excluded).`}
         actions={
           <Link href="/pm/adhoc" className="btn btn-primary">
-            Assign ad-hoc work
+            Add urgent task
           </Link>
         }
       />
 
-      <form className="mb-4 flex flex-wrap items-end gap-2" action="/pm/resources">
-        <div>
-          <label className="label" htmlFor="from">From</label>
-          <input id="from" name="from" type="date" defaultValue={from.toISOString().slice(0, 10)} className="input w-40" />
+      {/* Date Presets & Filter Form */}
+      <div className="mb-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-caption font-semibold text-muted uppercase mr-1">Presets:</span>
+          {presets.map((preset) => {
+            const isActive = toIsoDate(from) === toIsoDate(preset.from) && toIsoDate(to) === toIsoDate(preset.to);
+            return (
+              <Link
+                key={preset.label}
+                href={buildPresetUrl(preset.from, preset.to)}
+                className={`rounded-pill px-3 py-1 text-xs font-medium transition-colors ${
+                  isActive
+                    ? 'bg-ink text-canvas font-semibold'
+                    : 'bg-surface-strong text-muted hover:text-ink'
+                }`}
+              >
+                {preset.label}
+              </Link>
+            );
+          })}
         </div>
-        <div>
-          <label className="label" htmlFor="to">To</label>
-          <input id="to" name="to" type="date" defaultValue={to.toISOString().slice(0, 10)} className="input w-40" />
-        </div>
-        <div>
-          <label className="label" htmlFor="departmentId">Department</label>
-          <select id="departmentId" name="departmentId" defaultValue={params.departmentId ?? ''} className="select w-52">
-            <option value="">All I can see</option>
-            {departments.map((dept) => (
-              <option key={dept.id} value={dept.id}>{dept.name}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label" htmlFor="skills">Skills</label>
-          <input id="skills" name="skills" defaultValue={params.skills ?? ''} className="input w-52" placeholder="EPLAN, wiring" />
-        </div>
-        {params.projectId ? <input type="hidden" name="projectId" value={params.projectId} /> : null}
-        <button type="submit" className="btn btn-secondary mb-0.5">Apply</button>
-      </form>
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {/* The `key`s matter: these inputs are uncontrolled, so `defaultValue` only applies
+            on mount. Without a key that changes with the window, clicking a preset navigates
+            and re-renders but leaves the old dates sitting in the boxes, contradicting the
+            data on screen. */}
+        <form className="flex flex-wrap items-end gap-2" action="/pm/resources">
+          <div>
+            <label className="label" htmlFor="from">From</label>
+            <input key={`from-${toIsoDate(from)}`} id="from" name="from" type="date" defaultValue={toIsoDate(from)} className="input w-40" />
+          </div>
+          <div>
+            <label className="label" htmlFor="to">To</label>
+            <input key={`to-${toIsoDate(to)}`} id="to" name="to" type="date" defaultValue={toIsoDate(to)} className="input w-40" />
+          </div>
+          <div>
+            <label className="label" htmlFor="departmentId">Department</label>
+            <select id="departmentId" name="departmentId" defaultValue={params.departmentId ?? ''} className="select w-52">
+              <option value="">All I can see</option>
+              {departments.map((dept) => (
+                <option key={dept.id} value={dept.id}>{dept.name}</option>
+              ))}
+            </select>
+          </div>
+          {params.projectId ? <input type="hidden" name="projectId" value={params.projectId} /> : null}
+          <button type="submit" className="btn btn-secondary mb-0.5">Apply</button>
+        </form>
+
+        {isSingleDay && (
+          <p className="text-caption text-muted bg-surface-strong/40 border border-hairline px-3 py-1.5 rounded-md">
+            <span className="font-semibold text-ink">Single-day view notice:</span> Overdue steps allocate their entire remaining estimate into this day rather than prorating. Load figures are strictly accurate for on-schedule work.
+          </p>
+        )}
+      </div>
+
+      <div className="mb-5 grid gap-3 grid-cols-2 lg:grid-cols-4">
         <Stat label="People in view" value={workloads.length} />
         <Stat label="With spare capacity" value={free.length} tone="success" />
         <Stat label="Overloaded" value={overloaded.length} tone={overloaded.length ? 'danger' : 'default'} />
-        <Stat label="Spare hours in window" value={`${totalFree}h`} hint={onLeave.length ? `${onLeave.length} on leave` : undefined} />
+        <Stat label="Spare capacity" value={`${totalFreeDays} days`} hint={onLeave.length ? `${onLeave.length} on leave` : undefined} />
       </div>
 
-      {workloads.length === 0 ? (
-        <EmptyState title="No people in scope" hint="Widen the department filter or ask an administrator for wider resource visibility." />
-      ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {workloads
-            .slice()
-            .sort((a, b) => a.utilizationPercent - b.utilizationPercent)
-            .map((workload) => (
-              <Card key={workload.person.id} bodyClassName="p-4">
-                <div className="mb-3 flex items-start gap-3">
-                  <Avatar name={workload.person.fullName} color={workload.person.avatarColor} size={38} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-body-sm font-semibold text-ink">{workload.person.fullName}</p>
-                    <p className="truncate text-caption text-muted">
-                      {workload.person.designation ?? workload.person.grade.replaceAll('_', ' ').toLowerCase()}
-                      {workload.person.departmentName ? ` · ${workload.person.departmentName}` : ''}
-                    </p>
-                  </div>
-                  <StatusBadge status={workload.status} />
-                </div>
-
-                <div className="mb-1 flex items-center justify-between text-caption text-muted">
-                  <span>
-                    {workload.committedHours}h committed of {workload.capacityHours}h
-                  </span>
-                  <span className={workload.utilizationPercent > 100 ? 'font-semibold text-error' : 'font-medium text-ink'}>
-                    {workload.utilizationPercent}%
-                  </span>
-                </div>
-                <ProgressBar
-                  value={Math.min(100, workload.utilizationPercent)}
-                  tone={workload.utilizationPercent > 100 ? 'danger' : workload.utilizationPercent < 60 ? 'success' : 'default'}
-                />
-
-                <div className="mt-3 flex flex-wrap gap-3 text-caption text-body">
-                  <span><strong className="text-ink">{workload.freeHours}h</strong> free</span>
-                  <span><strong className="text-ink">{workload.openTaskCount}</strong> open tasks</span>
-                  {workload.overdueTaskCount > 0 ? (
-                    <span className="text-error"><strong>{workload.overdueTaskCount}</strong> overdue</span>
-                  ) : null}
-                  {workload.leaveDays > 0 ? (
-                    <span className="text-muted"><strong className="text-body">{workload.leaveDays}</strong> leave day(s)</span>
-                  ) : null}
-                </div>
-
-                {workload.person.skills.length ? (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {workload.person.skills.map((skill) => (
-                      <span key={skill} className="badge bg-surface-strong text-body">{skill}</span>
-                    ))}
-                  </div>
-                ) : null}
-
-                {workload.assignments.length ? (
-                  <ul className="mt-3 space-y-1 border-t border-hairline pt-2">
-                    {workload.assignments.slice(0, 4).map((assignment) => (
-                      <li key={assignment.taskId} className="flex items-center gap-2 text-caption">
-                        <Link href={`/pm/tasks/${assignment.taskId}`} className="min-w-0 flex-1 truncate text-body hover:text-ink">
-                          {assignment.taskTitle}
-                        </Link>
-                        <span className="code text-caption text-muted-soft">{assignment.projectCode}</span>
-                        <StatusBadge status={assignment.status} />
-                      </li>
-                    ))}
-                    {workload.assignments.length > 4 ? (
-                      <li className="text-caption text-muted-soft">+{workload.assignments.length - 4} more</li>
-                    ) : null}
-                  </ul>
-                ) : (
-                  <p className="mt-3 border-t border-hairline pt-2 text-caption text-success">
-                    No open tasks — available immediately.
-                  </p>
-                )}
-              </Card>
-            ))}
-        </div>
-      )}
+      <TeamLoadTable workloads={workloads} />
     </>
   );
 }

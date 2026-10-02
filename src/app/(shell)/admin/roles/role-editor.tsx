@@ -17,13 +17,19 @@ export function RolePermissionEditor({
   const [state, action] = useActionState<ActionState, FormData>(setRolePermissionsAction, {});
   const [editing, setEditing] = useState(false);
 
+  // Map of key -> human description
+  const descMap = new Map<string, string>();
+  Object.values(grouped).forEach((list) => {
+    list.forEach((p) => descMap.set(p.key, p.description));
+  });
+
   if (!editing) {
     return (
       <>
-        <div className="mb-3 flex flex-wrap gap-1">
+        <div className="mb-3 flex flex-wrap gap-1.5">
           {selected.map((key) => (
-            <span key={key} className="code-chip">
-              {key}
+            <span key={key} className="badge bg-surface-strong text-body">
+              {descMap.get(key) ?? key}
             </span>
           ))}
         </div>
@@ -40,20 +46,21 @@ export function RolePermissionEditor({
       <div className="grid gap-4 sm:grid-cols-2">
         {Object.entries(grouped).map(([module, permissions]) => (
           <fieldset key={module} className="rounded-md border border-hairline p-3">
-            <legend className="px-1 text-caption font-semibold uppercase tracking-wide text-muted">{module}</legend>
-            <div className="space-y-1.5">
+            <legend className="px-1 text-caption font-semibold uppercase tracking-wide text-muted">
+              {module === 'admin' ? 'Administration' : module === 'pm' ? 'Project Management' : module}
+            </legend>
+            <div className="space-y-2 pt-1">
               {permissions.map((permission) => (
-                <label key={permission.key} className="flex items-start gap-2 text-body-sm">
+                <label key={permission.key} className="flex items-start gap-2.5 text-body-sm cursor-pointer hover:bg-canvas-soft p-1 rounded transition-colors">
                   <input
                     type="checkbox"
                     name="permissions"
                     value={permission.key}
                     defaultChecked={selected.includes(permission.key)}
-                    className="mt-1 accent-ink"
+                    className="mt-0.5 rounded border-hairline-strong text-primary focus:ring-primary h-4 w-4 accent-ink"
                   />
-                  <span>
-                    <span className="code block text-caption text-muted">{permission.key}</span>
-                    <span className="block text-ink">{permission.description}</span>
+                  <span className="text-ink text-body-sm select-none">
+                    {permission.description}
                   </span>
                 </label>
               ))}
@@ -63,7 +70,9 @@ export function RolePermissionEditor({
       </div>
       <FormMessage state={state} />
       <div className="mt-3 flex gap-2">
-        <SubmitButton size="sm" confirm="Apply these permissions to everyone holding this role?">Save role</SubmitButton>
+        <SubmitButton variant="primary" size="sm" confirm="Apply these permissions to everyone holding this role?">
+          Save role
+        </SubmitButton>
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditing(false)}>
           Cancel
         </button>

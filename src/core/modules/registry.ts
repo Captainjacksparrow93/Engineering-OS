@@ -56,14 +56,12 @@ export const MODULES: ModuleDefinition[] = [
     description: 'Sales orders, purchase, inventory, BOM costing and invoicing.',
     icon: '📊',
     route: '/erp',
-    status: 'COMING_SOON',
-    plannedFor: 'Phase 3',
+    status: 'LIVE',
     scope: [
-      'Sales order creates the project shell in Project Management automatically',
-      'BOM and material readiness block or release engineering tasks',
-      'Actual hours from progress logs post to job costing',
-      'Vendor purchase orders tracked against project milestones',
+      'Orders, customers and all ERPNext modules in ERPNext',
+      'Projects originate from confirmed sales orders (plan 014)',
     ],
+    requires: 'erp.access',
     sortOrder: 30,
   },
   {
@@ -141,4 +139,3 @@ export const MODULES: ModuleDefinition[] = [
 ];
 
 export const getModule = (key: string) => MODULES.find((m) => m.key === key);
-export const comingSoonModules = () => MODULES.filter((m) => m.status === 'COMING_SOON');

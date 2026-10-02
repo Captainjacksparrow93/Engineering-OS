@@ -1,6 +1,8 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/core/db/prisma';
-import { can } from '@/core/rbac/engine';
+import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
+import { teamMemberIds, teamRootOf, type OrgPerson } from '../domain/teams';
+import { isExecutionStaff } from '../domain/availability';
 import { ForbiddenError, NotFoundError } from '@/core/rbac/errors';
 import type { PermissionKey } from '@/core/rbac/permissions';
 import type { Principal } from '@/core/rbac/types';
@@ -27,10 +29,14 @@ export function projectVisibilityWhere(principal: Principal): Prisma.ProjectWher
 
   const clauses: Prisma.ProjectWhereInput[] = [
     { managerId: principal.userId },
-    { sponsorId: principal.userId },
     { members: { some: { userId: principal.userId } } },
     { tasks: { some: { assignments: { some: { userId: principal.userId } } } } },
   ];
+  if (principal.reportIds && principal.reportIds.length > 0) {
+    clauses.push({
+      tasks: { some: { assignments: { some: { userId: { in: principal.reportIds } } } } },
+    });
+  }
   if (projectIds.length) clauses.push({ id: { in: projectIds } });
   if (departmentIds.length) clauses.push({ departmentId: { in: departmentIds } });
 
@@ -97,14 +103,11 @@ const MANAGER_IMPLIED = new Set<PermissionKey>([
   'pm.project.update',
   'pm.project.member.manage',
   'pm.task.read',
-  'pm.task.create',
   'pm.task.update',
-  'pm.task.delete',
   'pm.task.assign',
-  'pm.task.adhoc.create',
-  'pm.task.dependency.manage',
   'pm.progress.review',
-  'pm.handover.override',
+  'pm.handover.request',
+  'pm.handover.decide',
   'pm.resource.read',
   'pm.report.read',
 ]);
@@ -114,12 +117,18 @@ export async function assertProjectVisible(principal: Principal, projectId: stri
   if (project.companyId !== principal.companyId) throw new NotFoundError('Project not found.');
 
   if (can(principal, 'pm.project.read.all')) return project;
-  if (project.managerId === principal.userId || project.sponsorId === principal.userId) return project;
+  if (project.managerId === principal.userId) return project;
   if (principal.memberProjectIds.includes(project.id)) return project;
   if (project.departmentId && principal.coveredDepartmentIds.includes(project.departmentId)) return project;
 
+  const isMember = await prisma.projectMember.count({
+    where: { projectId, userId: principal.userId },
+  });
+  if (isMember > 0) return project;
+
+  const userIdsToCheck = [principal.userId, ...(principal.reportIds ?? [])];
   const assigned = await prisma.taskAssignment.count({
-    where: { userId: principal.userId, task: { projectId } },
+    where: { userId: { in: userIdsToCheck }, task: { projectId } },
   });
   if (assigned > 0) return project;
 
@@ -181,7 +190,11 @@ export async function loadTaskContext(taskId: string): Promise<TaskContext> {
  * ad-hoc task handed to an engineer outside the project team would be invisible to them.
  */
 export function isHolderOfTask(principal: Principal, task: TaskContext): boolean {
-  return task.assigneeIds.includes(principal.userId);
+  if (task.assigneeIds.includes(principal.userId)) return true;
+  if (principal.reportIds && principal.reportIds.length > 0) {
+    return task.assigneeIds.some((id) => principal.reportIds.includes(id));
+  }
+  return false;
 }
 
 export async function assertTaskVisible(principal: Principal, taskId: string): Promise<TaskContext> {
@@ -213,3 +226,156 @@ export async function assertTaskPermission(
 
 /** What the person holding a task may do on it without any project-scoped grant. */
 const HOLDER_IMPLIED = new Set<PermissionKey>(['pm.task.read', 'pm.progress.log', 'pm.handover.request']);
+
+/**
+ * Helper to find all upper management users who should receive oversight notifications.
+ */
+export async function oversightRecipients(
+  companyId: string,
+  departmentId?: string | null,
+  excludeUserId?: string,
+): Promise<string[]> {
+  const users = await prisma.user.findMany({
+    where: {
+      companyId,
+      status: 'ACTIVE',
+      roleAssignments: {
+        some: {
+          role: {
+            permissions: {
+              some: { permission: { key: 'pm.oversight' } },
+            },
+          },
+        },
+      },
+    },
+    select: {
+      id: true,
+      roleAssignments: {
+        select: {
+          scopeType: true,
+          scopeId: true,
+          role: {
+            select: {
+              permissions: { select: { permission: { select: { key: true } } } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const matching = new Set<string>();
+  for (const u of users) {
+    if (excludeUserId && u.id === excludeUserId) continue;
+    for (const a of u.roleAssignments) {
+      const hasOversight = a.role.permissions.some((p) => p.permission.key === 'pm.oversight');
+      if (!hasOversight) continue;
+      if (a.scopeType === 'GLOBAL') {
+        matching.add(u.id);
+        break;
+      }
+      if (a.scopeType === 'DEPARTMENT' && departmentId && a.scopeId === departmentId) {
+        matching.add(u.id);
+        break;
+      }
+    }
+  }
+  return Array.from(matching);
+}
+
+/**
+ * Active project managers and assistant managers in the TECH department.
+ * These people lead project teams and can be assigned as project managers or on tasks.
+ */
+export async function projectManagerPool(companyId: string) {
+  return prisma.user.findMany({
+    where: {
+      companyId,
+      status: 'ACTIVE',
+      department: { code: { in: ['TECH'] } },
+      roleAssignments: { some: { role: { key: { in: ['PROJECT_MANAGER', 'ASST_MANAGER'] } } } },
+    },
+    select: { id: true, fullName: true, designation: true, grade: true, avatarColor: true },
+    orderBy: { fullName: 'asc' },
+  });
+}
+
+/**
+ * Who `principal` may reassign or assign work to: everyone in their own PM's team.
+ * Returns null when unrestricted (Directors, Technical Heads, or PMs/Assistant PMs who can reassign across teams).
+ */
+export async function reassignTeamFor(principal: Principal): Promise<Set<string> | null> {
+  if (hasPermissionAnywhere(principal, 'pm.oversight')) return null;
+  if (principal.roleKeys.includes('PROJECT_MANAGER') || principal.roleKeys.includes('ASST_MANAGER')) return null;
+  if (!isExecutionStaff(principal)) return null;
+  return teamOf(principal.companyId, principal.userId);
+}
+
+/**
+ * Engineers in the team (PM subtree) that `userId` belongs to: people who execute steps,
+ * so the PM, assistant managers and heads are never offered as assignees.
+ */
+export async function teamOf(companyId: string, userId: string): Promise<Set<string>> {
+  const [people, orgPeople] = await Promise.all([
+    prisma.user.findMany({
+      where: { companyId, status: 'ACTIVE' },
+      select: {
+        id: true,
+        grade: true,
+        designation: true,
+      },
+    }),
+    getOrgPeople(companyId),
+  ]);
+  const members = teamMemberIds(userId, orgPeople);
+  return new Set(people.filter((p) => members.has(p.id) && isExecutionStaff(p)).map((p) => p.id));
+}
+
+export const OUTSIDE_TEAM_MESSAGE = 'You can only reassign to engineers in your own team.';
+
+export async function getOrgPeople(companyId: string): Promise<(OrgPerson & { fullName: string })[]> {
+  const [people, pool] = await Promise.all([
+    prisma.user.findMany({
+      where: { companyId, status: 'ACTIVE' },
+      select: {
+        id: true,
+        fullName: true,
+        managerId: true,
+        roleAssignments: {
+          where: { role: { permissions: { some: { permission: { key: 'pm.oversight' } } } } },
+          select: { id: true },
+        },
+      },
+    }),
+    projectManagerPool(companyId),
+  ]);
+  const poolIds = new Set(pool.map((p) => p.id));
+  return people.map((p) => ({
+    id: p.id,
+    fullName: p.fullName,
+    managerId: p.managerId,
+    hasOversight: p.roleAssignments.length > 0,
+    isPoolMember: poolIds.has(p.id),
+  }));
+}
+
+export async function getSquadLeadForUser(companyId: string, userId: string): Promise<string> {
+  const people = await getOrgPeople(companyId);
+  return teamRootOf(userId, people);
+}
+
+export async function isCrossSquad(
+  companyId: string,
+  user1Id: string,
+  user2Id: string,
+): Promise<{ crossSquad: boolean; squad1RootId: string; squad2RootId: string }> {
+  const people = await getOrgPeople(companyId);
+  const squad1RootId = teamRootOf(user1Id, people);
+  const squad2RootId = teamRootOf(user2Id, people);
+  return {
+    crossSquad: squad1RootId !== squad2RootId,
+    squad1RootId,
+    squad2RootId,
+  };
+}

@@ -34,6 +34,7 @@ export interface WorkloadAssignment {
   taskTitle: string;
   projectId: string;
   projectCode: string;
+  projectName?: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   status: 'DRAFT' | 'BLOCKED' | 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'COMPLETED' | 'CANCELLED';
   allocatedHours: number;
@@ -150,6 +151,8 @@ export interface AssignmentSuggestion {
   matchedSkills: string[];
   missingSkills: string[];
   reasons: string[];
+  group?: string;
+  needsApproval?: boolean;
 }
 
 /**
@@ -209,7 +212,7 @@ function capacityFit(workload: Workload, requiredHours: number): number {
   return Math.max(0, Math.min(1, ratio));
 }
 
-const GRADE_RANK: Record<string, number> = {
+export const GRADE_RANK: Record<string, number> = {
   TRAINEE: 1,
   JUNIOR_ENGINEER: 2,
   ENGINEER: 3,
@@ -219,6 +222,335 @@ const GRADE_RANK: Record<string, number> = {
   HEAD: 7,
   DIRECTOR: 8,
 };
+
+export const TARGET_RANK: Record<string, number> = {
+  JUNIOR: 2, // JUNIOR_ENGINEER
+  SENIOR: 4, // SENIOR_ENGINEER
+  ASST_MANAGER: 5, // LEAD_ENGINEER
+};
+
+export function gradeFloor(recommendedSeniority: string): number {
+  const target = TARGET_RANK[recommendedSeniority] ?? 2;
+  return Math.max(1, target - 1);
+}
+
+export interface SmartCandidate {
+  id: string;
+  fullName: string;
+  employeeCode: string;
+  grade: string;
+  designation?: string | null;
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | string;
+  freeHours: number;
+  totalCapacityHours: number;
+  workingDays: number;
+  leaveDays: number;
+  leaves: LeavePeriod[];
+  isPM?: boolean;
+}
+
+export interface SmartStepRequirement {
+  id: string;
+  stepNumber: number;
+  templateInstanceId?: string;
+  name: string;
+  recommendedSeniority: 'JUNIOR' | 'SENIOR' | 'ASST_MANAGER' | string;
+  estimatedHours: number;
+  plannedStart: Date;
+  plannedEnd: Date;
+}
+
+export interface SmartStepAllocation {
+  stepId: string;
+  assignedUserId: string | null;
+  assignedUserName: string | null;
+  score: number;
+  factorBreakdown: { M: number; A: number; C: number; Q: number };
+  escalationRung: number;
+  rationale: string;
+  isWeakMatch: boolean;
+}
+
+export function isCandidateOnHeavyLeave(candidate: SmartCandidate, step: SmartStepRequirement): boolean {
+  const stepWorkingDays = Math.max(1, workingDaysBetween(step.plannedStart, step.plannedEnd));
+  const stepLeaveDays = (candidate.leaves || []).reduce(
+    (sum, leave) =>
+      sum +
+      overlapDays(
+        startOfDay(leave.startDate),
+        startOfDay(leave.endDate),
+        startOfDay(step.plannedStart),
+        startOfDay(step.plannedEnd),
+      ),
+    0,
+  );
+  return stepLeaveDays / stepWorkingDays > 0.5;
+}
+
+/**
+ * People who execute checklist steps: not PMs, assistant managers, heads or directors.
+ * Shared by auto-assign and the dashboards so "free engineers" means the same pool everywhere.
+ * ponytail: grade/designation based until role-based candidate pools land (audit round 2, step 4).
+ */
+export function isExecutionStaff(person: { grade: string; designation?: string | null }): boolean {
+  if (['MANAGER', 'HEAD', 'DIRECTOR'].includes(person.grade)) return false;
+  return !(person.designation && /manager|asst/i.test(person.designation));
+}
+
+export function applyHardRules(candidate: SmartCandidate, step: SmartStepRequirement): boolean {
+  // H5: Inactive account
+  if (candidate.status !== 'ACTIVE') return false;
+
+  // H4: Exclude Upper management (HEAD, DIRECTOR always). PMs / Assistant Managers allowed if candidate.isPM.
+  if (['HEAD', 'DIRECTOR'].includes(candidate.grade)) return false;
+  if (!isExecutionStaff(candidate) && !candidate.isPM) return false;
+
+  // H1: Approved leave covering >50% of the task's working days
+  if (isCandidateOnHeavyLeave(candidate, step)) return false;
+
+  // H2: Grade rank below the step's floor
+  const rank = GRADE_RANK[candidate.grade] ?? 1;
+  const floor = gradeFloor(step.recommendedSeniority);
+  if (rank < floor) return false;
+
+  // H3: Non-zero free hours across the window
+  if (candidate.freeHours <= 0) return false;
+
+  return true;
+}
+
+export interface AllocationContext {
+  pmSquadUserIds: Set<string>;
+  assignedSteps: Array<{
+    stepId: string;
+    stepNumber: number;
+    templateInstanceId?: string;
+    userId: string;
+  }>;
+  /** Max steps each candidate should take in this run before others of the same grade. */
+  fairShare?: Map<string, number>;
+}
+
+/** Score points removed once a candidate already holds their fair share of steps. */
+const OVER_SHARE_PENALTY = 30;
+
+export function scoreForStep(
+  candidate: SmartCandidate,
+  step: SmartStepRequirement,
+  context: AllocationContext,
+): { score: number; breakdown: { M: number; A: number; C: number; Q: number } } {
+  const rank = GRADE_RANK[candidate.grade] ?? 2;
+  const target = TARGET_RANK[step.recommendedSeniority] ?? 2;
+
+  // M — Grade fit (40%): exact match is 100, senior doing junior task is 75 (prefers junior for junior tasks)
+  let M = 0;
+  if (rank >= target) {
+    M = rank === target ? 100 : 75;
+  } else {
+    M = 100 * Math.max(0, 1 - (target - rank) / 2);
+  }
+
+  // A — Availability (35%)
+  // No window-wide "thin capacity" penalty: it halved the only junior's score after a few
+  // steps and pushed junior steps onto seniors. Load spreading is handled by fairShare.
+  const required = Math.max(1, step.estimatedHours);
+  const free = Math.max(0, candidate.freeHours);
+  const A = 100 * Math.min(1, free / (required * 1.5));
+
+  // C — Context Continuity (10%)
+  const sameTemplateAssigned = context.assignedSteps.filter(
+    (s) => s.templateInstanceId === step.templateInstanceId && s.userId === candidate.id,
+  );
+  let C = 0;
+  if (sameTemplateAssigned.some((s) => Math.abs(s.stepNumber - step.stepNumber) === 1)) {
+    C = 40;
+  } else if (sameTemplateAssigned.length > 0) {
+    C = 20;
+  }
+
+  // Q — Squad integrity (15%)
+  const Q = context.pmSquadUserIds.has(candidate.id) ? 100 : 0;
+
+  // Load balance: once someone holds their fair share, peers of the same grade go first.
+  // Continuity (max 4 points) keeps consecutive steps together only within that share.
+  const share = context.fairShare?.get(candidate.id);
+  const held = context.assignedSteps.filter((s) => s.userId === candidate.id).length;
+  const overShare = share !== undefined && held >= share ? OVER_SHARE_PENALTY : 0;
+
+  const score = Math.round(0.4 * M + 0.35 * A + 0.1 * C + 0.15 * Q) - overShare;
+
+  return {
+    score: Math.max(0, Math.min(100, score)),
+    breakdown: {
+      M: Math.round(M),
+      A: Math.round(A),
+      C: Math.round(C),
+      Q: Math.round(Q),
+    },
+  };
+}
+
+function buildDeterministicRationale(
+  candidate: SmartCandidate,
+  step: SmartStepRequirement,
+  score: number,
+  breakdown: { M: number; A: number; C: number; Q: number },
+  inSquad: boolean,
+): string {
+  const rank = GRADE_RANK[candidate.grade] ?? 2;
+  const target = TARGET_RANK[step.recommendedSeniority] ?? 2;
+  const gradeText = rank === target ? 'exact grade match' : rank > target ? 'senior qualified' : 'grade floor match';
+  const hoursPerDay = (candidate.freeHours / Math.max(1, candidate.workingDays)).toFixed(1);
+  const squadText = inSquad ? "in PM's squad" : 'cross-squad';
+  const contText = breakdown.C > 0 ? ', continues adjacent step' : '';
+
+  return `${score}% · ${gradeText}, ${hoursPerDay}h/day free${contText}, ${squadText}`;
+}
+
+/**
+ * How many steps each candidate should take before same-grade peers get priority:
+ * steps meant for their grade split evenly across the peers of that grade (PM squad
+ * first, else everyone eligible). 5 senior steps and 4 seniors -> 2 each, so work
+ * spreads in small consecutive blocks instead of all landing on the first winner.
+ */
+export function computeFairShare(
+  candidates: SmartCandidate[],
+  steps: SmartStepRequirement[],
+  pmSquadUserIds: Set<string>,
+): Map<string, number> {
+  const workers = candidates.filter(
+    (c) =>
+      c.status === 'ACTIVE' &&
+      !['HEAD', 'DIRECTOR'].includes(c.grade) &&
+      (isExecutionStaff(c) || c.isPM),
+  );
+  const squad = workers.filter((c) => pmSquadUserIds.has(c.id));
+  const pool = squad.length > 0 ? squad : workers;
+
+  const share = new Map<string, number>();
+  if (pool.length === 0 || steps.length === 0) return share;
+  const overall = Math.ceil(steps.length / pool.length);
+
+  for (const c of workers) {
+    const rank = GRADE_RANK[c.grade] ?? 2;
+    const peers = pool.filter((p) => (GRADE_RANK[p.grade] ?? 2) === rank).length;
+    const stepsForGrade = steps.filter((s) => (TARGET_RANK[s.recommendedSeniority] ?? 2) === rank).length;
+    share.set(c.id, peers > 0 && stepsForGrade > 0 ? Math.ceil(stepsForGrade / peers) : overall);
+  }
+  return share;
+}
+
+/**
+ * Sequential, capacity-consuming team allocation across project steps.
+ */
+export function allocateTeamForSteps(
+  rawCandidates: SmartCandidate[],
+  steps: SmartStepRequirement[],
+  pmSquadUserIds: Set<string> = new Set(),
+): SmartStepAllocation[] {
+  // Deep copy candidates so capacity decrementing is scoped to this run
+  const candidates: SmartCandidate[] = rawCandidates.map((c) => ({
+    ...c,
+    leaves: [...(c.leaves || [])],
+  }));
+
+  const assignedSteps: Array<{
+    stepId: string;
+    stepNumber: number;
+    templateInstanceId?: string;
+    userId: string;
+  }> = [];
+
+  const results: SmartStepAllocation[] = [];
+  const fairShare = computeFairShare(candidates, steps, pmSquadUserIds);
+
+  // Team isolation: with a PM team given, only that team is ever considered.
+  const teamOnly = pmSquadUserIds.size > 0;
+  const inScope = (c: SmartCandidate) => !teamOnly || pmSquadUserIds.has(c.id);
+
+  for (const step of steps) {
+    let eligible = candidates.filter((c) => inScope(c) && applyHardRules(c, step));
+    let escalationRung = 0;
+
+    // Escalation ladder if no candidate passed standard Layer 1
+    if (eligible.length === 0) {
+      // Rung 3: Accept candidate at grade floor short on hours (freeHours > 0)
+      const floorQualified = candidates.filter(
+        (c) =>
+          inScope(c) &&
+          c.status === 'ACTIVE' &&
+          !['HEAD', 'DIRECTOR'].includes(c.grade) &&
+          (isExecutionStaff(c) || c.isPM) &&
+          (GRADE_RANK[c.grade] ?? 1) >= gradeFloor(step.recommendedSeniority) &&
+          !isCandidateOnHeavyLeave(c, step),
+      );
+      if (floorQualified.length > 0) {
+        eligible = floorQualified;
+        escalationRung = 3;
+      }
+    }
+
+    if (eligible.length === 0) {
+      results.push({
+        stepId: step.id,
+        assignedUserId: null,
+        assignedUserName: null,
+        score: 0,
+        factorBreakdown: { M: 0, A: 0, C: 0, Q: 0 },
+        escalationRung: 4,
+        rationale: teamOnly
+          ? "No one in the PM's team is free for this step"
+          : 'No eligible engineer available — needs Department Head decision',
+        isWeakMatch: true,
+      });
+      continue;
+    }
+
+    const pool = eligible;
+
+    const scored = pool.map((candidate) => {
+      const { score, breakdown } = scoreForStep(candidate, step, {
+        pmSquadUserIds,
+        assignedSteps,
+        fairShare,
+      });
+      return { candidate, score, breakdown };
+    });
+
+    // Deterministic tie-breaking: score desc -> freeHours desc -> employeeCode asc
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (b.candidate.freeHours !== a.candidate.freeHours) return b.candidate.freeHours - a.candidate.freeHours;
+      return a.candidate.employeeCode.localeCompare(b.candidate.employeeCode);
+    });
+
+    const winner = scored[0];
+    winner.candidate.freeHours -= step.estimatedHours;
+    assignedSteps.push({
+      stepId: step.id,
+      stepNumber: step.stepNumber,
+      templateInstanceId: step.templateInstanceId,
+      userId: winner.candidate.id,
+    });
+
+    const isWeak = winner.score < 40 || escalationRung > 0;
+    const inSquad = pmSquadUserIds.has(winner.candidate.id);
+    const rationale = buildDeterministicRationale(winner.candidate, step, winner.score, winner.breakdown, inSquad);
+
+    results.push({
+      stepId: step.id,
+      assignedUserId: winner.candidate.id,
+      assignedUserName: winner.candidate.fullName,
+      score: winner.score,
+      factorBreakdown: winner.breakdown,
+      escalationRung,
+      rationale,
+      isWeakMatch: isWeak,
+    });
+  }
+
+  return results;
+}
 
 const PRIORITY_TARGET_GRADE: Record<string, number> = {
   LOW: 2,

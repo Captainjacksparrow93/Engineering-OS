@@ -1,9 +1,14 @@
+import { formatName, cleanTaskTitle } from '@/core/utils/strings';
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
 import { getTaskDetail } from '@/modules/project-management/services/task.service';
 import { handoverCandidates, peersForHandover } from '@/modules/project-management/services/availability.service';
-import { formatDate, daysUntil } from '@/core/utils/dates';
+import { getOrgPeople } from '@/modules/project-management/services/access';
+import { hasPermissionAnywhere, can, isReadOnly } from '@/core/rbac/engine';
+import { groupEngineersBySquad } from '@/modules/project-management/domain/teams';
+import { formatDate, formatDateRange, daysUntil } from '@/core/utils/dates';
 import { Alert, Avatar, Card, PageHeader, PriorityBadge, ProgressBar, StatusBadge } from '@/components/ui';
 import { ProgressForm } from './progress-form';
 import { HandoverForm } from './handover-form';
@@ -17,53 +22,88 @@ export const dynamic = 'force-dynamic';
 export default async function TaskPage({ params }: { params: Promise<{ id: string }> }) {
   const principal = await requirePrincipal();
   const { id } = await params;
-  const { task, blockers, downstreamCount, permissions } = await getTaskDetail(principal, id);
 
-  const [candidates, peers, projectTasks, assignableUsers] = await Promise.all([
+  let detail;
+  try {
+    detail = await getTaskDetail(principal, id);
+  } catch {
+    notFound();
+  }
+
+  const { task, blockers, downstreamCount, permissions } = detail;
+
+  const [candidates, peers, assignableUsers, projectTasks, people] = await Promise.all([
     permissions.canHandover ? handoverCandidates(principal, task.id) : Promise.resolve([]),
     permissions.canHandover ? peersForHandover(principal, task.id) : Promise.resolve([]),
-    permissions.canManageDependencies
-      ? prisma.task.findMany({
-          where: { projectId: task.projectId, id: { not: task.id } },
-          select: { id: true, code: true, title: true },
-          orderBy: { code: 'asc' },
-        })
-      : Promise.resolve([]),
     permissions.canAssign
       ? prisma.user.findMany({
-          where: { companyId: principal.companyId, status: 'ACTIVE' },
+          where: {
+            companyId: principal.companyId,
+            status: 'ACTIVE',
+            roleAssignments: { some: { role: { key: { in: ['SENIOR_ENGINEER', 'JUNIOR_ENGINEER', 'PM_BASE', 'PROJECT_MANAGER', 'ASST_MANAGER'] } } } },
+          },
           select: { id: true, fullName: true, designation: true },
           orderBy: { fullName: 'asc' },
         })
       : Promise.resolve([]),
+    permissions.canManageDependencies
+      ? prisma.task.findMany({
+          where: { projectId: task.projectId, id: { not: task.id }, status: { not: 'CANCELLED' } },
+          select: { id: true, code: true, title: true },
+          orderBy: { plannedStart: 'asc' },
+        })
+      : Promise.resolve([]),
+    permissions.canAssign ? getOrgPeople(principal.companyId) : Promise.resolve([]),
   ]);
+
+  const hasOversight = hasPermissionAnywhere(principal, 'pm.oversight') || can(principal, 'pm.project.read.all');
+  const leadNameMap = new Map(people.map((p) => [p.id, p.fullName]));
+  const squadGroups = permissions.canAssign
+    ? groupEngineersBySquad(assignableUsers, people, principal.userId, hasOversight, leadNameMap)
+    : undefined;
 
   const activeAssignments = task.assignments.filter((a) => a.status === 'ACTIVE');
   const pastAssignments = task.assignments.filter((a) => a.status !== 'ACTIVE');
-  const pendingHandover = task.handovers.find((h) => h.status === 'PENDING');
+  const pendingHandover = task.handovers.find((h) => h.status === 'PENDING' || h.status === 'AWAITING_HEAD_APPROVAL');
   const due = daysUntil(task.plannedEnd);
+
+  // Status pill is derived from the same blockers list the banner uses
+  const displayStatus =
+    (task.status === 'TODO' || task.status === 'BLOCKED') && blockers.length > 0
+      ? 'BLOCKED'
+      : task.status;
+
+  const assignedNames = activeAssignments.map((a) => formatName(a.user.fullName)).join(', ');
 
   return (
     <>
       <PageHeader
         breadcrumb={[
           { label: 'Projects', href: '/pm/projects' },
-          { label: task.project.code, href: `/pm/projects/${task.project.id}` },
-          { label: task.code },
+          { label: task.project.name, href: `/pm/projects/${task.project.id}` },
+          { label: cleanTaskTitle(task.title) },
         ]}
-        title={task.title}
+        title={cleanTaskTitle(task.title)}
         subtitle={
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="code text-caption">{task.code}</span>
-            <StatusBadge status={task.status} />
-            <PriorityBadge priority={task.priority} />
-            {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
-            {task.parent ? (
-              <Link href={`/pm/tasks/${task.parent.id}`} className="text-caption text-ink hover:underline">
-                under {task.parent.code}
-              </Link>
-            ) : null}
-          </span>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={displayStatus} />
+              {task.priority !== 'MEDIUM' ? <PriorityBadge priority={task.priority} /> : null}
+              {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
+              {task.parent ? (
+                <Link href={`/pm/tasks/${task.parent.id}`} className="text-caption text-ink hover:underline">
+                  under {cleanTaskTitle(task.parent.title)}
+                </Link>
+              ) : null}
+            </div>
+            {assignedNames ? (
+              <p className="text-caption text-muted">
+                Assigned to <span className="font-medium text-ink">{assignedNames}</span>
+              </p>
+            ) : (
+              <p className="text-caption text-muted-soft">Unassigned</p>
+            )}
+          </div>
         }
       />
 
@@ -74,8 +114,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             {blockers.map((blocker, index) => (
               <span key={blocker.predecessorId}>
                 {index > 0 ? ', ' : ''}
-                <Link href={`/pm/tasks/${blocker.predecessorId}`} className="code underline">
-                  {blocker.predecessorCode}
+                <Link href={`/pm/tasks/${blocker.predecessorId}`} className="font-semibold text-error underline">
+                  {blocker.predecessorTitle}
                 </Link>{' '}
                 ({blocker.reason})
               </span>
@@ -88,10 +128,13 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       {pendingHandover ? (
         <div className="mb-4">
           <Alert tone="warning">
-            Handover pending: <strong>{pendingHandover.fromUser.fullName}</strong> →{' '}
-            <strong>{pendingHandover.toUser.fullName}</strong> ({pendingHandover.remainingPercent}% remaining).{' '}
-            <Link href="/pm/handovers" className="underline">
-              Open handovers
+            {pendingHandover.status === 'AWAITING_HEAD_APPROVAL'
+              ? 'Reassign request awaiting head approval: '
+              : 'Reassign request pending: '}
+            <strong>{formatName(pendingHandover.fromUser.fullName)}</strong> →{' '}
+            <strong>{formatName(pendingHandover.toUser.fullName)}</strong> ({pendingHandover.remainingPercent}% remaining).{' '}
+            <Link href="/pm/handovers" className="underline font-semibold">
+              View in Requests
             </Link>
           </Alert>
         </div>
@@ -110,47 +153,34 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
               <div>
                 <p className="label">Planned</p>
                 <p className={`text-body-sm ${due !== null && due < 0 ? 'font-medium text-error' : 'text-ink'}`}>
-                  {formatDate(task.plannedStart)} → {formatDate(task.plannedEnd)}
+                  {formatDateRange(task.plannedStart, task.plannedEnd)}
                 </p>
               </div>
               <div>
-                <p className="label">Effort</p>
+                <p className="label">Planned duration</p>
                 <p className="text-body-sm text-ink">
-                  {Math.round(task.actualHours)}h spent of {Math.round(task.estimatedHours)}h
+                  {task.estimatedHours} h ({Math.max(1, Math.ceil(task.estimatedHours / 8))} {Math.max(1, Math.ceil(task.estimatedHours / 8)) === 1 ? 'working day' : 'working days'})
                 </p>
               </div>
               <div>
-                <p className="label">Downstream</p>
-                <p className="text-body-sm text-ink">{downstreamCount} task(s) wait on this</p>
+                <p className="label">Next steps waiting</p>
+                <p className="text-body-sm text-ink">{downstreamCount} step(s)</p>
               </div>
               <div>
                 <p className="label">Raised by</p>
                 <p className="flex items-center gap-1.5 text-body-sm text-ink">
-                  <Avatar name={task.createdBy.fullName} color={task.createdBy.avatarColor} size={18} />
-                  {task.createdBy.fullName}
+                  <Avatar name={formatName(task.createdBy.fullName)} color={task.createdBy.avatarColor} size={18} />
+                  {formatName(task.createdBy.fullName)}
                 </p>
               </div>
             </div>
-
-            {task.requiredSkills.length ? (
-              <div className="mt-3">
-                <p className="label">Skills needed</p>
-                <div className="flex flex-wrap gap-1">
-                  {task.requiredSkills.map((skill) => (
-                    <span key={skill} className="badge bg-surface-strong text-body">
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
 
             <div className="mt-4 border-t border-hairline pt-3">
               <div className="mb-1 flex items-center justify-between text-caption text-muted">
                 <span>Progress</span>
                 <span className="font-medium text-ink">{task.percentComplete}%</span>
               </div>
-              <ProgressBar value={task.percentComplete} tone={task.status === 'BLOCKED' ? 'danger' : undefined} />
+              <ProgressBar value={task.percentComplete} tone={displayStatus === 'BLOCKED' ? 'danger' : undefined} />
             </div>
           </Card>
 
@@ -164,7 +194,6 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                         <Link href={`/pm/tasks/${child.id}`} className="text-body-sm text-ink hover:text-ink">
                           {child.title}
                         </Link>
-                        <span className="code ml-2 text-caption text-muted-soft">{child.code}</span>
                       </td>
                       <td className="w-28">
                         <ProgressBar value={child.percentComplete} />
@@ -190,12 +219,11 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
               <ul className="divide-y divide-hairline">
                 {task.progressLogs.map((log) => (
                   <li key={log.id} className="flex gap-3 px-4 py-3">
-                    <Avatar name={log.user.fullName} color={log.user.avatarColor} size={26} />
+                    <Avatar name={formatName(log.user.fullName)} color={log.user.avatarColor} size={26} />
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-center gap-2 text-body-sm">
-                        <span className="font-medium text-ink">{log.user.fullName}</span>
+                        <span className="font-medium text-ink">{formatName(log.user.fullName)}</span>
                         <span className="badge bg-canvas-soft text-ink">{log.percentComplete}%</span>
-                        {log.hoursSpent > 0 ? <span className="text-caption text-muted">{log.hoursSpent}h</span> : null}
                         <span className="text-caption text-muted-soft">{formatDate(log.loggedFor)}</span>
                       </p>
                       <p className="mt-0.5 whitespace-pre-wrap text-body-sm text-body">{log.note}</p>
@@ -211,7 +239,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             )}
           </Card>
 
-          <CommentBox taskId={task.id} comments={task.comments} />
+          <CommentBox taskId={task.id} comments={task.comments} canPost={!isReadOnly(principal)} />
         </div>
 
         <div className="space-y-4">
@@ -219,44 +247,47 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             task={{ id: task.id, status: task.status, projectId: task.project.id }}
             permissions={permissions}
             assignableUsers={assignableUsers}
+            squadGroups={squadGroups}
           />
 
-          <Card title="Who is on this">
-            {activeAssignments.length === 0 ? (
-              <p className="muted">Nobody is holding this task.</p>
-            ) : (
-              <ul className="space-y-2">
-                {activeAssignments.map((assignment) => (
-                  <li key={assignment.id} className="flex items-center gap-2">
-                    <Avatar name={assignment.user.fullName} color={assignment.user.avatarColor} size={26} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-body-sm font-medium text-ink">{assignment.user.fullName}</p>
-                      <p className="truncate text-caption text-muted">
-                        {assignment.role.toLowerCase()} · {Math.round(assignment.allocatedHours)}h allocated
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {pastAssignments.length > 0 ? (
-              <div className="mt-3 border-t border-hairline pt-3">
-                <p className="label">Previously</p>
-                <ul className="space-y-1.5">
-                  {pastAssignments.map((assignment) => (
-                    <li key={assignment.id} className="flex items-center gap-2 text-caption text-muted">
-                      <Avatar name={assignment.user.fullName} color={assignment.user.avatarColor} size={18} />
-                      <span className="flex-1 truncate">{assignment.user.fullName}</span>
-                      <StatusBadge status={assignment.status} />
+          {permissions.canReviewOrManage ? (
+            <Card title="Who is on this">
+              {activeAssignments.length === 0 ? (
+                <p className="muted">Nobody is holding this task.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {activeAssignments.map((assignment) => (
+                    <li key={assignment.id} className="flex items-center gap-2">
+                      <Avatar name={formatName(assignment.user.fullName)} color={assignment.user.avatarColor} size={26} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-body-sm font-medium text-ink">{formatName(assignment.user.fullName)}</p>
+                        <p className="truncate text-caption text-muted">
+                          {assignment.role.toLowerCase()} · {Math.round(assignment.allocatedHours)}h allocated
+                        </p>
+                      </div>
                     </li>
                   ))}
                 </ul>
-              </div>
-            ) : null}
-          </Card>
+              )}
 
-          {permissions.canHandover && !pendingHandover && !['COMPLETED', 'CANCELLED'].includes(task.status) ? (
+              {pastAssignments.length > 0 ? (
+                <div className="mt-3 border-t border-hairline pt-3">
+                  <p className="label">Previously</p>
+                  <ul className="space-y-1.5">
+                    {pastAssignments.map((assignment) => (
+                      <li key={assignment.id} className="flex items-center gap-2 text-caption text-muted">
+                        <Avatar name={formatName(assignment.user.fullName)} color={assignment.user.avatarColor} size={18} />
+                        <span className="flex-1 truncate">{formatName(assignment.user.fullName)}</span>
+                        <StatusBadge status={assignment.status} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
+
+          {permissions.canHandover && !permissions.canAssign && !pendingHandover && !['COMPLETED', 'CANCELLED'].includes(task.status) ? (
             <HandoverForm
               taskId={task.id}
               remainingPercent={100 - task.percentComplete}
@@ -268,8 +299,14 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                 freeHours: c.workload.freeHours,
                 status: c.workload.status,
                 matchedSkills: c.matchedSkills,
+                needsApproval: c.needsApproval,
               }))}
-              fallbackPeers={peers.map((p) => ({ id: p.id, fullName: p.fullName, designation: p.designation }))}
+              fallbackPeers={peers.map((p) => ({
+                id: p.id,
+                fullName: p.fullName,
+                designation: p.designation,
+                needsApproval: p.needsApproval,
+              }))}
             />
           ) : null}
 
@@ -282,16 +319,16 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           />
 
           {task.handovers.length > 0 ? (
-            <Card title="Handover history">
+            <Card title="Reassign history">
               <ul className="space-y-2">
                 {task.handovers.map((handover) => (
                   <li key={handover.id} className="rounded-md border border-hairline p-2">
                     <p className="flex items-center gap-1.5 text-caption">
-                      <Avatar name={handover.fromUser.fullName} color={handover.fromUser.avatarColor} size={16} />
-                      <span className="text-body">{handover.fromUser.fullName}</span>
+                      <Avatar name={formatName(handover.fromUser.fullName)} color={handover.fromUser.avatarColor} size={16} />
+                      <span className="text-body">{formatName(handover.fromUser.fullName)}</span>
                       <span className="text-muted-soft">→</span>
-                      <Avatar name={handover.toUser.fullName} color={handover.toUser.avatarColor} size={16} />
-                      <span className="text-body">{handover.toUser.fullName}</span>
+                      <Avatar name={formatName(handover.toUser.fullName)} color={handover.toUser.avatarColor} size={16} />
+                      <span className="text-body">{formatName(handover.toUser.fullName)}</span>
                       <StatusBadge status={handover.status} className="ml-auto" />
                     </p>
                     <p className="mt-1 text-caption text-muted">{handover.reason}</p>

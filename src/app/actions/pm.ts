@@ -6,21 +6,56 @@ import { requirePrincipal } from '@/core/auth/session';
 import { drainOutbox } from '@/core/events/bus';
 import {
   assignTaskSchema,
+  autoAssignTeamSchema,
   changeTaskStatusSchema,
-  createProjectSchema,
   createTaskSchema,
-  dependencySchema,
   handoverDecisionSchema,
   handoverRequestSchema,
   progressSchema,
   updateProjectSchema,
 } from '@/modules/project-management/validation/schemas';
-import { addProjectMember, createProject, removeProjectMember, updateProject } from '@/modules/project-management/services/project.service';
-import { addComment, assignTask, changeTaskStatus, createTask, deleteTask } from '@/modules/project-management/services/task.service';
+import {
+  addProjectMember,
+  cancelProject,
+  completeAutomationProject,
+  deleteProject,
+  getProjectTimeline,
+  holdProject,
+  quickFind,
+  reassignAllMemberTasks,
+  removeProjectMember,
+  restoreProject,
+  resumeProject,
+  updateProject,
+} from '@/modules/project-management/services/project.service';
+import {
+  addComment,
+  approveTaskReview,
+  assignTask,
+  changeTaskStatus,
+  createTask,
+  deleteTask,
+  disapproveTaskReview,
+  flagRoadblock,
+} from '@/modules/project-management/services/task.service';
 import { addDependency, removeDependency } from '@/modules/project-management/services/dependency.service';
 import { logProgress } from '@/modules/project-management/services/progress.service';
-import { cancelHandover, decideHandover, requestHandover } from '@/modules/project-management/services/handover.service';
-import { markRead } from '@/core/notifications/notify';
+import {
+  cancelHandover,
+  cancelProjectHandover,
+  decideHandover,
+  decideProjectHandover,
+  requestHandover,
+  requestProjectHandover,
+  requestPanelHandover,
+  decidePanelHandover,
+} from '@/modules/project-management/services/handover.service';
+import { createClient, updateClient, listClients, nextClientRef } from '@/modules/project-management/services/client.service';
+import { autoAssignAutomationTeam } from '@/modules/project-management/services/automation-project.service';
+import { markAllRead, markRead } from '@/core/notifications/notify';
+import { toState, value, list, type ActionState } from '@/core/utils/actions';
+
+export type { ActionState };
 
 /**
  * Server actions are the write path for the UI. Each one authenticates, validates,
@@ -28,12 +63,6 @@ import { markRead } from '@/core/notifications/notify';
  * drains the event outbox. No business logic lives in this file on purpose - the API
  * routes call the same services.
  */
-
-export interface ActionState {
-  error?: string;
-  success?: string;
-  fieldErrors?: Record<string, string[]>;
-}
 
 async function run<T>(fn: () => Promise<T>, onSuccess?: (result: T) => void): Promise<ActionState> {
   try {
@@ -53,92 +82,8 @@ function isRedirectError(error: unknown): boolean {
     (error as { digest: string }).digest.startsWith('NEXT_REDIRECT');
 }
 
-function toState(error: unknown): ActionState {
-  if (error && typeof error === 'object' && 'issues' in error && Array.isArray((error as { issues: unknown[] }).issues)) {
-    const zodError = error as { issues: Array<{ path: (string | number)[]; message: string }> };
-    const fieldErrors: Record<string, string[]> = {};
-    for (const issue of zodError.issues) {
-      const key = issue.path.join('.') || 'form';
-      fieldErrors[key] = [...(fieldErrors[key] ?? []), issue.message];
-    }
-    return { error: zodError.issues[0]?.message ?? 'Please check the form.', fieldErrors };
-  }
-  return { error: error instanceof Error ? error.message : 'Something went wrong.' };
-}
-
-const value = (form: FormData, key: string) => {
-  const raw = form.get(key);
-  if (raw === null) return undefined;
-  const text = String(raw).trim();
-  return text === '' ? undefined : text;
-};
-
-const list = (form: FormData, key: string) =>
-  String(form.get(key) ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
 
 // ------------------------------------------------------------------- projects
-
-export async function createProjectAction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  const principal = await requirePrincipal();
-  let projectId: string | null = null;
-
-  const state = await run(async () => {
-    const input = createProjectSchema.parse({
-      name: value(form, 'name'),
-      code: value(form, 'code'),
-      description: value(form, 'description'),
-      clientName: value(form, 'clientName'),
-      poNumber: value(form, 'poNumber'),
-      orderValue: value(form, 'orderValue'),
-      panelType: value(form, 'panelType'),
-      panelCount: value(form, 'panelCount') ?? 0,
-      priority: value(form, 'priority') ?? 'MEDIUM',
-      status: value(form, 'status') ?? 'PLANNING',
-      startDate: value(form, 'startDate') ?? '',
-      targetEndDate: value(form, 'targetEndDate') ?? '',
-      managerId: value(form, 'managerId'),
-      sponsorId: value(form, 'sponsorId'),
-      departmentId: value(form, 'departmentId'),
-    });
-    const project = await createProject(principal, input);
-    projectId = project.id;
-    return project;
-  });
-
-  if (state.error) return state;
-  revalidatePath('/pm/projects');
-  if (projectId) redirect(`/pm/projects/${projectId}`);
-  return state;
-}
-
-export async function updateProjectAction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  const principal = await requirePrincipal();
-  const projectId = String(form.get('projectId'));
-
-  const state = await run(async () => {
-    const input = updateProjectSchema.parse({
-      name: value(form, 'name'),
-      description: value(form, 'description'),
-      clientName: value(form, 'clientName'),
-      poNumber: value(form, 'poNumber'),
-      orderValue: value(form, 'orderValue'),
-      panelType: value(form, 'panelType'),
-      panelCount: value(form, 'panelCount'),
-      priority: value(form, 'priority'),
-      status: value(form, 'status'),
-      startDate: value(form, 'startDate') ?? '',
-      targetEndDate: value(form, 'targetEndDate') ?? '',
-      managerId: value(form, 'managerId'),
-    });
-    return updateProject(principal, projectId, input);
-  });
-
-  revalidatePath(`/pm/projects/${projectId}`);
-  return state;
-}
 
 export async function addMemberAction(_prev: ActionState, form: FormData): Promise<ActionState> {
   const principal = await requirePrincipal();
@@ -213,6 +158,7 @@ export async function changeTaskStatusAction(_prev: ActionState, form: FormData)
 export async function assignTaskAction(_prev: ActionState, form: FormData): Promise<ActionState> {
   const principal = await requirePrincipal();
   const taskId = String(form.get('taskId'));
+  const projectId = form.get('projectId') ? String(form.get('projectId')) : undefined;
   const state = await run(async () => {
     const input = assignTaskSchema.parse({
       userId: value(form, 'userId'),
@@ -223,6 +169,8 @@ export async function assignTaskAction(_prev: ActionState, form: FormData): Prom
     return assignTask(principal, taskId, input);
   });
   revalidatePath(`/pm/tasks/${taskId}`);
+  if (projectId) revalidatePath(`/pm/projects/${projectId}`);
+  revalidatePath('/dashboard');
   return state;
 }
 
@@ -246,27 +194,40 @@ export async function addCommentAction(_prev: ActionState, form: FormData): Prom
 
 // --------------------------------------------------------------- dependencies
 
-export async function addDependencyAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+export async function addDependencyAction(input: {
+  predecessorId: string;
+  successorId: string;
+  type?: 'FINISH_TO_START' | 'START_TO_START' | 'FINISH_TO_FINISH' | 'START_TO_FINISH';
+  lagDays?: number;
+}) {
   const principal = await requirePrincipal();
-  const successorId = String(form.get('successorId'));
-  const state = await run(async () => {
-    const input = dependencySchema.parse({
-      predecessorId: value(form, 'predecessorId'),
-      successorId,
-      type: value(form, 'type') ?? 'FINISH_TO_START',
-      lagDays: value(form, 'lagDays') ?? 0,
-    });
-    return addDependency(principal, input);
-  });
-  revalidatePath(`/pm/tasks/${successorId}`);
-  return state;
+  try {
+    const dep = await addDependency(principal, input);
+    await drainOutbox();
+    revalidatePath(`/pm/tasks/${input.successorId}`);
+    revalidatePath('/pm/projects/[id]', 'page');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    return { success: true, data: dep };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to add dependency.' };
+  }
 }
 
-export async function removeDependencyAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+export async function removeDependencyAction(dependencyId: string, taskId?: string) {
   const principal = await requirePrincipal();
-  const state = await run(() => removeDependency(principal, String(form.get('dependencyId'))));
-  revalidatePath(`/pm/tasks/${String(form.get('taskId'))}`);
-  return state;
+  try {
+    await removeDependency(principal, dependencyId);
+    await drainOutbox();
+    if (taskId) revalidatePath(`/pm/tasks/${taskId}`);
+    revalidatePath('/pm/tasks/[id]', 'page');
+    revalidatePath('/pm/projects/[id]', 'page');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to remove dependency.' };
+  }
 }
 
 // ------------------------------------------------------------------- progress
@@ -306,6 +267,7 @@ export async function requestHandoverAction(_prev: ActionState, form: FormData):
   });
   revalidatePath(`/pm/tasks/${taskId}`);
   revalidatePath('/pm/handovers');
+  revalidatePath('/pm/approvals');
   return state.error ? state : { success: 'Handover sent for acceptance.' };
 }
 
@@ -317,6 +279,7 @@ export async function decideHandoverAction(_prev: ActionState, form: FormData): 
     return decideHandover(principal, handoverId, input.decision, input.note);
   });
   revalidatePath('/pm/handovers');
+  revalidatePath('/pm/approvals');
   revalidatePath('/pm/my-work');
   revalidatePath('/dashboard');
   return state;
@@ -326,7 +289,96 @@ export async function cancelHandoverAction(_prev: ActionState, form: FormData): 
   const principal = await requirePrincipal();
   const state = await run(() => cancelHandover(principal, String(form.get('handoverId'))));
   revalidatePath('/pm/handovers');
+  revalidatePath('/pm/approvals');
   return state;
+}
+
+export async function requestPanelHandoverAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const phaseTaskId = String(form.get('phaseTaskId'));
+  const projectId = form.get('projectId') ? String(form.get('projectId')) : undefined;
+  const toUserId = String(form.get('toUserId') || '');
+  const reason = String(form.get('reason') || '');
+
+  if (!toUserId) return { error: 'Please choose an engineer to take over remaining tasks.' };
+  if (!reason.trim() || reason.trim().length < 5) return { error: 'Please provide a reason of at least 5 characters.' };
+
+  const state = await run(async () => {
+    return requestPanelHandover(principal, {
+      phaseTaskId,
+      toUserId,
+      reason,
+    });
+  });
+
+  if (projectId) revalidatePath(`/pm/projects/${projectId}`);
+  revalidatePath('/pm/handovers');
+  revalidatePath('/pm/approvals');
+  return state.error ? state : { success: 'Panel handover requested.' };
+}
+
+export async function decidePanelHandoverAction(
+  phaseTaskId: string,
+  decision: 'ACCEPTED' | 'DECLINED' | 'REJECTED',
+  note?: string,
+) {
+  const principal = await requirePrincipal();
+  try {
+    const result = await decidePanelHandover(principal, { phaseTaskId, decision, note });
+    revalidatePath('/pm/handovers');
+    revalidatePath('/pm/approvals');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    return { success: true, count: result.count };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to decide panel handover.' };
+  }
+}
+
+export async function createClientAction(name: string, refNumber: string) {
+  const principal = await requirePrincipal();
+  try {
+    const client = await createClient(principal, { name, refNumber });
+    revalidatePath('/pm/clients');
+    return { success: true, client };
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to create client.' };
+  }
+}
+
+export async function updateClientAction(clientId: string, name: string, refNumber: string) {
+  const principal = await requirePrincipal();
+  try {
+    const client = await updateClient(principal, clientId, { name, refNumber });
+    await drainOutbox().catch(() => undefined);
+    revalidatePath('/pm/clients');
+    revalidatePath(`/pm/clients/${clientId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/dashboard');
+    return { success: true, client };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to update client.' };
+  }
+}
+
+export async function getNextClientRefAction() {
+  const principal = await requirePrincipal();
+  try {
+    const nextRef = await nextClientRef(principal.companyId);
+    return { success: true, nextRef };
+  } catch (err: unknown) {
+    return { success: false, error: 'Failed to generate next client ref.' };
+  }
+}
+
+export async function getClientsAction() {
+  const principal = await requirePrincipal();
+  try {
+    const clients = await listClients(principal.companyId);
+    return { success: true, clients };
+  } catch (err: unknown) {
+    return { success: false, error: 'Failed to list clients.' };
+  }
 }
 
 // -------------------------------------------------------------- notifications
@@ -337,3 +389,373 @@ export async function markNotificationReadAction(_prev: ActionState, form: FormD
   revalidatePath('/notifications');
   return state;
 }
+
+export async function markAllNotificationsReadAction(_prev: ActionState, _form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const state = await run(() => markAllRead(principal.userId));
+  revalidatePath('/notifications');
+  return state;
+}
+
+// -------------------------------------------------------------- PM quality gate & review
+
+
+export async function flagRoadblockAction(taskId: string, comment: string) {
+  const principal = await requirePrincipal();
+  try {
+    await flagRoadblock(principal, taskId, comment);
+    revalidatePath(`/pm/tasks/${taskId}`);
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to flag roadblock.' };
+  }
+}
+
+export async function completeAutomationProjectAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    await completeAutomationProject(principal, projectId);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to complete project.' };
+  }
+}
+
+export async function holdProjectAction(projectId: string, reason: string) {
+  const principal = await requirePrincipal();
+  try {
+    await holdProject(principal, projectId, reason);
+    await drainOutbox().catch(() => undefined);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/pm/resources');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to place project on hold.' };
+  }
+}
+
+export async function resumeProjectAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    await resumeProject(principal, projectId);
+    await drainOutbox().catch(() => undefined);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/pm/resources');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to resume project.' };
+  }
+}
+
+export async function cancelProjectAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    await cancelProject(principal, projectId);
+    await drainOutbox().catch(() => undefined);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/pm/resources');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to cancel project.' };
+  }
+}
+
+export async function restoreProjectAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    await restoreProject(principal, projectId);
+    await drainOutbox().catch(() => undefined);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/pm/resources');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to restore project.' };
+  }
+}
+
+export async function updateProjectAction(projectId: string, input: unknown) {
+  const principal = await requirePrincipal();
+  try {
+    const data = updateProjectSchema.parse(input);
+    const project = await updateProject(principal, projectId, data);
+    await drainOutbox().catch(() => undefined);
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/dashboard');
+    if (project.clientId) {
+      revalidatePath(`/pm/clients/${project.clientId}`);
+    }
+    return { success: true, project };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to update project.' };
+  }
+}
+
+export async function deleteProjectAction(projectId: string, confirmationCode: string) {
+  const principal = await requirePrincipal();
+  try {
+    await deleteProject(principal, projectId, confirmationCode);
+    await drainOutbox().catch(() => undefined);
+    revalidatePath('/pm/projects');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to delete project.' };
+  }
+}
+
+export async function handoverProjectAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const projectId = String(form.get('projectId'));
+  const newManagerId = String(form.get('newManagerId'));
+  const reason = form.get('reason') ? String(form.get('reason')) : undefined;
+
+  if (!projectId || !newManagerId) {
+    return { error: 'Missing required fields' };
+  }
+
+  const state = await run(async () => {
+    await requestProjectHandover(principal, { projectId, toUserId: newManagerId, reason });
+    return 'Project handover request sent for acceptance.';
+  });
+
+  if (!state.error) {
+    revalidatePath('/pm/projects/' + projectId);
+    revalidatePath('/pm/handovers');
+    revalidatePath('/pm/approvals');
+    revalidatePath('/dashboard');
+  }
+  return state;
+}
+
+export async function decideProjectHandoverAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const handoverId = String(form.get('handoverId'));
+  const decision = String(form.get('decision')) as 'ACCEPTED' | 'DECLINED' | 'REJECTED';
+  const note = form.get('note') ? String(form.get('note')) : undefined;
+
+  if (!handoverId || !['ACCEPTED', 'DECLINED', 'REJECTED'].includes(decision)) {
+    return { error: 'Invalid handover decision.' };
+  }
+
+  const state = await run(async () => {
+    await decideProjectHandover(principal, handoverId, decision, note);
+    return decision === 'ACCEPTED' ? 'Project handover accepted.' : 'Project handover declined.';
+  });
+
+  revalidatePath('/pm/handovers');
+  revalidatePath('/pm/approvals');
+  revalidatePath('/pm/projects');
+  revalidatePath('/dashboard');
+  return state;
+}
+
+export async function cancelProjectHandoverAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const handoverId = String(form.get('handoverId'));
+  if (!handoverId) return { error: 'Missing handover ID' };
+
+  const state = await run(async () => {
+    await cancelProjectHandover(principal, handoverId);
+    return 'Project handover request cancelled.';
+  });
+
+  revalidatePath('/pm/handovers');
+  revalidatePath('/pm/approvals');
+  revalidatePath('/dashboard');
+  return state;
+}
+
+export async function reassignMemberTasksAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const projectId = String(form.get('projectId'));
+  const fromUserId = String(form.get('fromUserId'));
+  const toUserId = String(form.get('toUserId'));
+
+  const state = await run(async () => {
+    return reassignAllMemberTasks(principal, projectId, fromUserId, toUserId);
+  });
+
+  revalidatePath(`/pm/projects/${projectId}`);
+  revalidatePath(`/pm/resources`);
+  revalidatePath(`/dashboard`);
+  return state;
+}
+
+export async function autoAssignAutomationTeamAction(rawInput: unknown) {
+  const principal = await requirePrincipal();
+  try {
+    const input = autoAssignTeamSchema.parse(rawInput);
+    const result = await autoAssignAutomationTeam(principal, input);
+    return { success: true, assignments: result.assignments };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Auto-assignment failed.' };
+  }
+}
+
+export async function approveTaskReviewAction(taskId: string, feedback?: string) {
+  const principal = await requirePrincipal();
+  try {
+    const result = await approveTaskReview(principal, taskId, feedback);
+    revalidatePath(`/pm/tasks/${taskId}`);
+    revalidatePath('/pm/approvals');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    if (result.projectId) revalidatePath(`/pm/projects/${result.projectId}`);
+    return { success: true, allTasksCompleted: result.allTasksCompleted };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to approve task.' };
+  }
+}
+
+export async function disapproveTaskReviewAction(taskId: string, feedback: string) {
+  const principal = await requirePrincipal();
+  try {
+    await disapproveTaskReview(principal, taskId, feedback);
+    revalidatePath(`/pm/tasks/${taskId}`);
+    revalidatePath('/pm/approvals');
+    revalidatePath('/pm/my-work');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to send back task.' };
+  }
+}
+
+export async function quickFindAction(query: string) {
+  const principal = await requirePrincipal();
+  try {
+    const results = await quickFind(principal, query);
+    return { success: true, data: results };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Search failed.' };
+  }
+}
+
+export async function getProjectTimelineAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    const timeline = await getProjectTimeline(principal, projectId);
+    return timeline;
+  } catch (error) {
+    console.error('getProjectTimelineAction error:', error);
+    return null;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Site Commissioning Actions
+// -----------------------------------------------------------------------------
+
+export async function assignEngineerToCommissioningAction(projectId: string, userId: string) {
+  const principal = await requirePrincipal();
+  try {
+    const { assignEngineerToCommissioning } = await import('@/modules/project-management/services/commissioning.service');
+    const result = await assignEngineerToCommissioning(principal, projectId, userId);
+    revalidatePath('/pm/commissioning');
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/dashboard');
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to assign commissioning engineer.' };
+  }
+}
+
+export async function releaseEngineerFromCommissioningAction(projectId: string, userId: string) {
+  const principal = await requirePrincipal();
+  try {
+    const { releaseEngineerFromCommissioning } = await import('@/modules/project-management/services/commissioning.service');
+    await releaseEngineerFromCommissioning(principal, projectId, userId);
+    revalidatePath('/pm/commissioning');
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to release engineer.' };
+  }
+}
+
+export async function closeCommissioningAction(projectId: string) {
+  const principal = await requirePrincipal();
+  try {
+    const { closeCommissioning } = await import('@/modules/project-management/services/commissioning.service');
+    await closeCommissioning(principal, projectId);
+    revalidatePath('/pm/commissioning');
+    revalidatePath(`/pm/projects/${projectId}`);
+    revalidatePath('/pm/projects');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to close commissioning.' };
+  }
+}
+
+export async function createCommissioningLogAction(input: {
+  projectId: string;
+  loggedFor: string;
+  workDone: string;
+  blocker?: string | null;
+}) {
+  const principal = await requirePrincipal();
+  try {
+    const { createCommissioningLog } = await import('@/modules/project-management/services/commissioning.service');
+    const log = await createCommissioningLog(principal, input);
+    revalidatePath('/pm/commissioning/my');
+    revalidatePath('/pm/approvals');
+    revalidatePath('/dashboard');
+    return { success: true, data: log };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to create site log.' };
+  }
+}
+
+export async function approveCommissioningLogAction(logId: string) {
+  const principal = await requirePrincipal();
+  try {
+    const { approveCommissioningLog } = await import('@/modules/project-management/services/commissioning.service');
+    await approveCommissioningLog(principal, logId);
+    revalidatePath('/pm/approvals');
+    revalidatePath('/pm/commissioning/my');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to approve commissioning log.' };
+  }
+}
+
+export async function rejectCommissioningLogAction(logId: string, decisionNote?: string) {
+  const principal = await requirePrincipal();
+  try {
+    const { rejectCommissioningLog } = await import('@/modules/project-management/services/commissioning.service');
+    await rejectCommissioningLog(principal, logId, decisionNote);
+    revalidatePath('/pm/approvals');
+    revalidatePath('/pm/commissioning/my');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: toState(error).error ?? 'Failed to reject commissioning log.' };
+  }
+}
+
+
+
+
+
+

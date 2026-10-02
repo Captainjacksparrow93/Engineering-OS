@@ -2,16 +2,10 @@
 
 import { revalidatePath } from 'next/cache';
 import { requirePrincipal } from '@/core/auth/session';
-import { assignRole, createUser, revokeRole, setRolePermissions, setUserStatus } from '@/modules/admin/services/admin.service';
-import type { ActionState } from './pm';
+import { assignRole, createUser, resetUserPassword, setRolePermissions, setUserStatus } from '@/modules/admin/services/admin.service';
+import { toState, value, type ActionState } from '@/core/utils/actions';
 import type { ScopeType } from '@prisma/client';
 
-const value = (form: FormData, key: string) => {
-  const raw = form.get(key);
-  if (raw === null) return undefined;
-  const text = String(raw).trim();
-  return text === '' ? undefined : text;
-};
 
 async function run(fn: () => Promise<unknown>, paths: string[]): Promise<ActionState> {
   try {
@@ -19,9 +13,10 @@ async function run(fn: () => Promise<unknown>, paths: string[]): Promise<ActionS
     for (const path of paths) revalidatePath(path);
     return { success: 'Saved.' };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Something went wrong.' };
+    return toState(error);
   }
 }
+
 
 export async function createUserAction(_prev: ActionState, form: FormData): Promise<ActionState> {
   const principal = await requirePrincipal();
@@ -61,11 +56,6 @@ export async function assignRoleAction(_prev: ActionState, form: FormData): Prom
   );
 }
 
-export async function revokeRoleAction(_prev: ActionState, form: FormData): Promise<ActionState> {
-  const principal = await requirePrincipal();
-  return run(() => revokeRole(principal, String(form.get('assignmentId'))), ['/admin/users']);
-}
-
 export async function setUserStatusAction(_prev: ActionState, form: FormData): Promise<ActionState> {
   const principal = await requirePrincipal();
   return run(
@@ -80,4 +70,18 @@ export async function setRolePermissionsAction(_prev: ActionState, form: FormDat
     () => setRolePermissions(principal, String(form.get('roleKey')), form.getAll('permissions').map(String)),
     ['/admin/roles'],
   );
+}
+
+export async function resetUserPasswordAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const principal = await requirePrincipal();
+  const userId = String(form.get('userId') ?? '');
+  const password = String(form.get('password') ?? '');
+
+  try {
+    const res = await resetUserPassword(principal, userId, password);
+    revalidatePath('/admin/users');
+    return { success: `Password updated for ${res.fullName}` };
+  } catch (error) {
+    return toState(error);
+  }
 }

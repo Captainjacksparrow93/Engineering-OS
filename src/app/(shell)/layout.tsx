@@ -1,8 +1,12 @@
 import { redirect } from 'next/navigation';
 import { getPrincipal } from '@/core/auth/session';
 import { unreadCount } from '@/core/notifications/notify';
+import { countPendingApprovals } from '@/modules/project-management/services/task.service';
+import { listHandovers } from '@/modules/project-management/services/handover.service';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
+import { ShellContainer } from '@/components/shell/shell-container';
+import { FreshCountsListener } from '@/components/shell/fresh-counts-listener';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,18 +19,29 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   const principal = await getPrincipal();
   if (!principal) redirect('/login');
 
-  const notifications = await unreadCount(principal.userId);
+  const [notifications, handoversList, pendingApprovals] = await Promise.all([
+    unreadCount(principal.userId),
+    listHandovers(principal).catch(() => ({ incoming: [], incomingProjects: [] })),
+    countPendingApprovals(principal),
+  ]);
+
+  const pendingHandovers = handoversList.incoming.length + handoversList.incomingProjects.length;
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar principal={principal} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar principal={principal} unread={notifications} />
-        <main className="mx-auto w-full max-w-content flex-1 px-base py-xl md:px-xl">{children}</main>
-        <footer className="border-t border-hairline px-base py-md text-caption text-muted-soft md:px-xl">
-          Engineering OS · Project Management module · Further modules are on the roadmap
-        </footer>
-      </div>
-    </div>
+    <ShellContainer
+      sidebar={
+        <Sidebar
+          key="shell-sidebar"
+          principal={principal}
+          pendingHandovers={pendingHandovers}
+          pendingApprovals={pendingApprovals}
+        />
+      }
+      topbar={<Topbar key="shell-topbar" principal={principal} unread={notifications} />}
+    >
+
+      {children}
+      <FreshCountsListener />
+    </ShellContainer>
   );
 }

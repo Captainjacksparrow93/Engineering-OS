@@ -22,7 +22,7 @@ export function LoginForm() {
         <label className="label" htmlFor="email">
           Work email
         </label>
-        <input id="email" name="email" type="email" autoComplete="username" required className="input" placeholder="name@vidyutswitchgear.com" />
+        <input id="email" name="email" type="email" autoComplete="username" required className="input" placeholder="name@acsengitech.com" />
       </div>
 
       <div className="field">

@@ -25,7 +25,7 @@ export function ComingSoon({ moduleKey }: { moduleKey: string }) {
       />
 
       <div className="mb-xl rounded-lg border border-hairline bg-canvas-soft px-lg py-md">
-        <span className="badge badge-outline">Coming soon{module.plannedFor ? ` — ${module.plannedFor}` : ''}</span>
+        <span className="badge badge-outline">Coming soon{module.plannedFor ? ` - ${module.plannedFor}` : ''}</span>
         <p className="mt-sm max-w-3xl text-body-md text-body">
           This module is planned but not built yet. The platform, database and access control it needs are already in
           place, so it can be switched on without disturbing the modules you use today.
@@ -65,7 +65,7 @@ export function ComingSoon({ moduleKey }: { moduleKey: string }) {
             </p>
             <p>
               Access is already expressed as scoped permissions, so switching this module on is a matter of adding its
-              permission keys to the catalogue and granting them — no rework of existing roles.
+              permission keys to the catalogue and granting them - no rework of existing roles.
             </p>
           </div>
         </section>

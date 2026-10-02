@@ -15,6 +15,7 @@ const principal = (grants: Grant[], overrides: Partial<Principal> = {}): Princip
   grants,
   coveredDepartmentIds: [],
   memberProjectIds: [],
+  reportIds: [],
   roleKeys: [],
   ...overrides,
 });
@@ -78,5 +79,45 @@ describe('hasPermissionAnywhere', () => {
     const p = principal([{ permission: 'pm.resource.read', scopeType: 'PROJECT', scopeId: 'proj-1' }]);
     expect(hasPermissionAnywhere(p, 'pm.resource.read')).toBe(true);
     expect(can(p, 'pm.resource.read')).toBe(false);
+  });
+
+  it('correctly checks pm.template.manage', () => {
+    const pWithTemplate = principal([{ permission: 'pm.template.manage', scopeType: 'GLOBAL', scopeId: null }]);
+    expect(hasPermissionAnywhere(pWithTemplate, 'pm.template.manage')).toBe(true);
+    const pWithoutTemplate = principal([{ permission: 'pm.task.read', scopeType: 'GLOBAL', scopeId: null }]);
+    expect(hasPermissionAnywhere(pWithoutTemplate, 'pm.template.manage')).toBe(false);
+  });
+
+  it('passes hasPermissionAnywhere for department-scoped grants where scopeless can() fails', () => {
+    // Technical Head holds commissioning permissions at DEPARTMENT scope
+    const techHead = principal([
+      { permission: 'pm.commissioning.manage', scopeType: 'DEPARTMENT', scopeId: 'dept-tech' },
+      { permission: 'pm.commissioning.approve', scopeType: 'DEPARTMENT', scopeId: 'dept-tech' },
+    ], { coveredDepartmentIds: ['dept-tech', 'dept-design'] });
+
+    // Scope-less can() fails because DEPARTMENT grants require a target departmentId
+    expect(can(techHead, 'pm.commissioning.manage')).toBe(false);
+    expect(can(techHead, 'pm.commissioning.approve')).toBe(false);
+
+    // hasPermissionAnywhere correctly recognizes the grant exists
+    expect(hasPermissionAnywhere(techHead, 'pm.commissioning.manage')).toBe(true);
+    expect(hasPermissionAnywhere(techHead, 'pm.commissioning.approve')).toBe(true);
+  });
+});
+
+
+describe('isReadOnly', () => {
+  it('is true only when every grant is a read key', async () => {
+    const { isReadOnly } = await import('./engine');
+    const reader = principal([
+      { permission: 'pm.project.read.all', scopeType: 'GLOBAL', scopeId: null },
+      { permission: 'pm.commissioning.read', scopeType: 'GLOBAL', scopeId: null },
+    ]);
+    expect(isReadOnly(reader)).toBe(true);
+    const writer = principal([
+      { permission: 'pm.project.read', scopeType: 'GLOBAL', scopeId: null },
+      { permission: 'pm.progress.log', scopeType: 'GLOBAL', scopeId: null },
+    ]);
+    expect(isReadOnly(writer)).toBe(false);
   });
 });

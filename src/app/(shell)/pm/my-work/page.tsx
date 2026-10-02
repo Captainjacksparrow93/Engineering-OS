@@ -1,124 +1,87 @@
 import Link from 'next/link';
 import { requirePrincipal } from '@/core/auth/session';
 import { listMyTasks } from '@/modules/project-management/services/task.service';
-import { formatDate, daysUntil } from '@/core/utils/dates';
-import { Card, EmptyState, PageHeader, PriorityBadge, ProgressBar, Stat, StatusBadge } from '@/components/ui';
+import { Card, EmptyState, PageHeader, Stat } from '@/components/ui';
+import { MyWorkTable } from './my-work-table';
 
 export const dynamic = 'force-dynamic';
 
-/** The engineer's queue: what they hold, what is late, and what is blocked and why. */
+export const metadata = {
+  title: 'My work',
+};
+
+/** The engineer's queue: active work vs completed deliverables. */
 export default async function MyWorkPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; all?: string }>;
+  searchParams: Promise<{ status?: string; view?: string; all?: string }>;
 }) {
   const principal = await requirePrincipal();
   const params = await searchParams;
-  const rows = await listMyTasks(principal, { status: params.status, includeCompleted: params.all === '1' });
+  const isCompletedView = params.view === 'completed' || params.status === 'COMPLETED';
+
+  const rows = await listMyTasks(principal, {
+    status: isCompletedView ? 'COMPLETED' : params.status,
+    onlyCompleted: isCompletedView,
+  });
 
   const today = new Date();
-  const overdue = rows.filter((r) => r.task.plannedEnd && r.task.plannedEnd < today);
+  const overdue = rows.filter((r) => r.task.plannedEnd && new Date(r.task.plannedEnd) < today && r.task.status !== 'COMPLETED');
   const blocked = rows.filter((r) => r.task.status === 'BLOCKED');
   const inProgress = rows.filter((r) => r.task.status === 'IN_PROGRESS');
-  const totalHours = rows.reduce((sum, r) => sum + r.assignment.allocatedHours * (1 - r.task.percentComplete / 100), 0);
+  const inReview = rows.filter((r) => r.task.status === 'IN_REVIEW');
 
   return (
     <>
       <PageHeader
         title="My work"
-        subtitle="Everything currently assigned to you, across every project."
+        subtitle={
+          isCompletedView
+            ? 'Your completed steps and past deliverables across all projects.'
+            : 'Everything currently assigned to you, across every project.'
+        }
         actions={
-          <Link href={params.all === '1' ? '/pm/my-work' : '/pm/my-work?all=1'} className="btn btn-secondary">
-            {params.all === '1' ? 'Hide closed' : 'Show closed'}
+          <Link
+            href={isCompletedView ? '/pm/my-work' : '/pm/my-work?view=completed'}
+            className="btn btn-secondary font-medium text-xs"
+          >
+            {isCompletedView ? 'Show active tasks' : 'Show completed'}
           </Link>
         }
       />
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Open tasks" value={rows.length} />
-        <Stat label="In progress" value={inProgress.length} />
-        <Stat label="Blocked" value={blocked.length} tone={blocked.length ? 'warning' : 'default'} />
-        <Stat label="Remaining effort" value={`${Math.round(totalHours)}h`} tone={overdue.length ? 'danger' : 'default'} hint={`${overdue.length} overdue`} />
+        {isCompletedView ? (
+          <>
+            <Stat label="Completed steps" value={rows.length} tone="success" />
+          </>
+        ) : (
+          <>
+            <Stat label="Open steps" value={rows.length} />
+            <Stat label="In progress" value={inProgress.length} />
+            <Stat label="Waiting / Review" value={blocked.length + inReview.length} tone={blocked.length ? 'danger' : 'default'} hint={blocked.length ? `${blocked.length} blocked` : undefined} />
+            <Stat
+              label="Overdue"
+              value={overdue.length}
+              tone={overdue.length ? 'danger' : 'default'}
+              hint={overdue.length ? 'Needs attention' : 'All on track'}
+            />
+          </>
+        )}
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState title="Nothing on your plate" hint="Tasks assigned or handed to you show up here immediately." />
+        <EmptyState
+          title={isCompletedView ? 'No completed tasks yet' : 'Nothing on your plate'}
+          hint={
+            isCompletedView
+              ? 'Tasks you complete will appear here.'
+              : 'Tasks assigned or handed to you show up here immediately.'
+          }
+        />
       ) : (
         <Card bodyClassName="p-0">
-          <div className="overflow-x-auto">
-            <table className="table min-w-[860px]">
-              <thead>
-                <tr>
-                  <th className="w-[34%]">Task</th>
-                  <th>Project</th>
-                  <th>Due</th>
-                  <th>Progress</th>
-                  <th>Status</th>
-                  <th>Waiting on</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(({ task, assignment, unmetDependencies }) => {
-                  const due = daysUntil(task.plannedEnd);
-                  return (
-                    <tr key={assignment.id}>
-                      <td>
-                        <Link href={`/pm/tasks/${task.id}`} className="font-medium text-ink hover:text-ink">
-                          {task.title}
-                        </Link>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                          <span className="code text-caption text-muted-soft">{task.code}</span>
-                          <PriorityBadge priority={task.priority} />
-                          {task.type === 'ADHOC' ? <span className="badge bg-surface-strong text-ink">ad-hoc</span> : null}
-                          {assignment.role !== 'OWNER' ? (
-                            <span className="badge bg-surface-strong text-body">{assignment.role.toLowerCase()}</span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="text-caption text-muted">
-                        <Link href={`/pm/projects/${task.project.id}`} className="hover:text-ink">
-                          {task.project.code}
-                        </Link>
-                        <span className="block text-caption text-muted-soft">{task.project.clientName}</span>
-                      </td>
-                      <td className="whitespace-nowrap text-caption">
-                        {task.plannedEnd ? (
-                          <>
-                            <span className={due !== null && due < 0 ? 'font-medium text-error' : 'text-body'}>
-                              {formatDate(task.plannedEnd)}
-                            </span>
-                            <span className="block text-caption text-muted-soft">
-                              {due !== null ? (due < 0 ? `${-due}d late` : `in ${due}d`) : ''}
-                            </span>
-                          </>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="w-28">
-                        <ProgressBar value={task.percentComplete} tone={task.status === 'BLOCKED' ? 'danger' : undefined} />
-                        <span className="mt-1 block text-caption text-muted">{task.percentComplete}%</span>
-                      </td>
-                      <td>
-                        <StatusBadge status={task.status} />
-                      </td>
-                      <td className="text-caption">
-                        {unmetDependencies.length === 0 ? (
-                          <span className="text-success">clear</span>
-                        ) : (
-                          unmetDependencies.map((dep) => (
-                            <Link key={dep.id} href={`/pm/tasks/${dep.id}`} className="code block text-caption text-error hover:underline">
-                              {dep.code}
-                            </Link>
-                          ))
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <MyWorkTable rows={rows} />
         </Card>
       )}
     </>

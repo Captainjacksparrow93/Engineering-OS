@@ -1,0 +1,184 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches:
+      - main
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Git commit SHA to deploy (defaults to HEAD of main)'
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Production VPS
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
+
+    steps:
+      - name: Wait for VPS SSH to be reachable
+        run: |
+          HOST="${{ secrets.VPS_HOST || '72.62.248.38' }}"
+          PORT="${{ secrets.VPS_PORT || 22 }}"
+          echo "==> Checking TCP reachability for ${HOST}:${PORT}..."
+          CONNECTED=false
+          for i in $(seq 1 6); do
+            echo "Attempt $i/6: Connecting to ${HOST}:${PORT}..."
+            if nc -z -w 10 "$HOST" "$PORT"; then
+              echo "==> SSH port ${HOST}:${PORT} is reachable."
+              CONNECTED=true
+              break
+            fi
+            echo "Connection attempt $i failed. Retrying in 20s..."
+            sleep 20
+          done
+          if [ "$CONNECTED" != true ]; then
+            echo "Error: Could not reach VPS SSH port ${HOST}:${PORT} after 6 attempts." >&2
+            exit 1
+          fi
+
+      - name: SSH to VPS & Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST || '72.62.248.38' }}
+          username: ${{ secrets.VPS_USER || 'root' }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          timeout: 60s
+          script_stop: true
+          script: |
+            set -euo pipefail
+
+            TARGET_SHA="${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}"
+            if [[ ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Error: TARGET_SHA '$TARGET_SHA' must be exactly 40 lowercase hex characters." >&2
+              exit 1
+            fi
+
+            cd /root/engos-docker
+
+            echo "==> Deploying commit: ${TARGET_SHA}"
+
+            # 1. Bring the checkout to exactly the deployed SHA
+            echo "==> Fetching and checking out ${TARGET_SHA}..."
+            git fetch origin main
+            git checkout "${TARGET_SHA}"
+
+            # 2. Take a database backup before making any changes. Stops if backup fails.
+            echo "==> Running pre-deploy database backup..."
+            ./scripts/backup.sh </dev/null
+            NEWEST_BACKUP="$(ls -1t backups/backup_*.sql.gz 2>/dev/null | head -n 1 || true)"
+            echo "==> Backup completed: ${NEWEST_BACKUP}"
+
+            # 3. Record OLD = the SHA the currently running container uses
+            OLD=""
+            if [ -f .deployed-sha ] && [ -s .deployed-sha ]; then
+              OLD="$(tr -d ' \r\n' < .deployed-sha)"
+            fi
+            echo "==> Currently deployed SHA: ${OLD:-none}"
+
+            rollback() {
+              trap - ERR
+              set +e
+              echo "==> Deploy failed. Initiating rollback..." >&2
+              docker compose logs --tail 150 app </dev/null || true
+
+              if [ -n "$OLD" ]; then
+                echo "==> Restoring git checkout to $OLD..." >&2
+                git checkout "$OLD" </dev/null || true
+
+                if docker image inspect "engineering-os:$OLD" >/dev/null 2>&1; then
+                  echo "==> Rolling back to previous image engineering-os:${OLD}..." >&2
+                  APP_IMAGE="engineering-os:${OLD}" docker compose up -d --no-build app </dev/null || true
+                  for i in $(seq 1 36); do
+                    STATUS="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' engos_app 2>/dev/null || true)"
+                    if [ "$STATUS" = "healthy" ]; then
+                      echo "==> Rollback to ${OLD} successful and healthy." >&2
+                      break
+                    fi
+                    sleep 5
+                  done
+                else
+                  echo "==> WARNING: Could not automatically rollback (image engineering-os:$OLD not available)." >&2
+                fi
+              else
+                echo "==> WARNING: Could not automatically rollback (no previous SHA recorded)." >&2
+              fi
+
+              echo "==> Deploy FAILED. Live container rolled back to previous state if available." >&2
+              exit 1
+            }
+
+            trap 'rollback' ERR
+
+            # 4. Pull the new image from private GHCR and tag it locally
+            echo "==> Pulling ghcr.io/n8nmonk-wq/engineering-os:${TARGET_SHA}..."
+            docker pull "ghcr.io/n8nmonk-wq/engineering-os:${TARGET_SHA}" </dev/null
+            docker tag "ghcr.io/n8nmonk-wq/engineering-os:${TARGET_SHA}" "engineering-os:${TARGET_SHA}"
+
+            # 5. Swap the app container
+            echo "==> Swapping app container to engineering-os:${TARGET_SHA}..."
+            APP_IMAGE="engineering-os:${TARGET_SHA}" docker compose up -d --no-build app </dev/null
+
+            # 6. Wait up to 3 minutes for health check and verify running image
+            echo "==> Waiting for engos_app to report healthy with image engineering-os:${TARGET_SHA}..."
+            HEALTHY=false
+            for i in $(seq 1 36); do
+              STATUS="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' engos_app 2>/dev/null || true)"
+              RUNNING_IMG="$(docker inspect -f '{{.Config.Image}}' engos_app 2>/dev/null || true)"
+
+              if [ "$STATUS" = "healthy" ] && [ "$RUNNING_IMG" = "engineering-os:${TARGET_SHA}" ]; then
+                HEALTHY=true
+                echo "==> engos_app is healthy (check $i/36) running engineering-os:${TARGET_SHA}"
+                break
+              fi
+              echo "Waiting for engos_app healthy (check $i/36, status: ${STATUS:-unknown}, image: ${RUNNING_IMG:-unknown})..."
+              sleep 5
+            done
+
+            if [ "$HEALTHY" != true ]; then
+              rollback
+            fi
+
+            trap - ERR
+
+            # 7. On success: tag current, record shas, and prune old images
+            echo "==> Deploy succeeded. Updating tags and records..."
+            docker tag "engineering-os:${TARGET_SHA}" engineering-os:current
+            if [ -n "$OLD" ]; then
+              echo "$OLD" > .previous-sha
+            fi
+            echo "${TARGET_SHA}" > .deployed-sha
+
+            echo "==> Cleaning up older engineering-os images..."
+            docker images "engineering-os" --format "{{.Repository}}:{{.Tag}}" | while read -r img; do
+              tag="${img#engineering-os:}"
+              if [ "$tag" != "current" ] && [ "$tag" != "${TARGET_SHA}" ]; then
+                if [ -z "$OLD" ] || [ "$tag" != "$OLD" ]; then
+                  echo "Removing old local image: $img"
+                  docker rmi "$img" 2>/dev/null || true
+                fi
+              fi
+            done
+
+            docker images "ghcr.io/n8nmonk-wq/engineering-os" --format "{{.Repository}}:{{.Tag}}" | while read -r img; do
+              tag="${img#ghcr.io/n8nmonk-wq/engineering-os:}"
+              if [ "$tag" != "${TARGET_SHA}" ]; then
+                if [ -z "$OLD" ] || [ "$tag" != "$OLD" ]; then
+                  echo "Removing old ghcr image: $img"
+                  docker rmi "$img" 2>/dev/null || true
+                fi
+              fi
+            done
+
+            echo "==> Deploy of ${TARGET_SHA} finished successfully."
+            exit 0

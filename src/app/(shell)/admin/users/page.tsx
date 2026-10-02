@@ -4,10 +4,14 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/core/db/prisma';
 import { listUsers } from '@/modules/admin/services/admin.service';
 import { SYSTEM_ROLES } from '@/core/rbac/permissions';
-import { Avatar, Card, PageHeader, StatusBadge } from '@/components/ui';
-import { UserAdminPanel } from './user-admin-panel';
+import { PageHeader } from '@/components/ui';
+import { UsersTable } from './users-table';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata = {
+  title: 'People',
+};
 
 /**
  * People and their access.
@@ -20,114 +24,101 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   if (!hasPermissionAnywhere(principal, 'admin.user.read')) redirect('/dashboard');
 
   const params = await searchParams;
-  const [users, departments, projects] = await Promise.all([
-    listUsers(principal, params.q),
-    prisma.department.findMany({
-      where: { companyId: principal.companyId },
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.project.findMany({
-      where: { companyId: principal.companyId, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
-      select: { id: true, code: true, name: true },
-      orderBy: { code: 'asc' },
-    }),
-  ]);
+  let users: Awaited<ReturnType<typeof listUsers>> = [];
+  let departments: Array<{ id: string; name: string }> = [];
+  let projects: Array<{ id: string; code: string; name: string }> = [];
+  let lastSignInMap = new Map<string, Date>();
+  let workloadMap = new Map<string, { openTasks: number; loadHours: number }>();
+
+  try {
+    const [userList, deptList, projList, signIns, activeAssignments] = await Promise.all([
+      listUsers(principal, params.q),
+      prisma.department.findMany({
+        where: { companyId: principal.companyId },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.project.findMany({
+        where: { companyId: principal.companyId, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+        select: { id: true, code: true, name: true },
+        orderBy: { code: 'asc' },
+      }),
+      prisma.auditLog.groupBy({
+        by: ['entityId'],
+        where: {
+          module: 'core',
+          action: 'auth.signed_in',
+          entityType: 'User',
+          actor: { companyId: principal.companyId },
+        },
+        _max: { createdAt: true },
+      }),
+      prisma.taskAssignment.findMany({
+        where: {
+          user: { companyId: principal.companyId },
+          status: 'ACTIVE',
+          task: {
+            status: { in: ['TODO', 'IN_PROGRESS', 'IN_REVIEW'] },
+            project: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+          },
+        },
+        select: {
+          userId: true,
+          allocatedHours: true,
+          task: { select: { estimatedHours: true } },
+        },
+      }),
+    ]);
+
+    users = userList;
+    departments = deptList;
+    projects = projList;
+
+    for (const s of signIns) {
+      const createdAt = s._max?.createdAt;
+      if (createdAt) lastSignInMap.set(s.entityId, createdAt);
+    }
+
+    for (const a of activeAssignments) {
+      const current = workloadMap.get(a.userId) ?? { openTasks: 0, loadHours: 0 };
+      current.openTasks += 1;
+      current.loadHours += a.allocatedHours || a.task.estimatedHours || 0;
+      workloadMap.set(a.userId, current);
+    }
+  } catch (error) {
+    console.error('Failed to load users page data:', error);
+    redirect('/dashboard');
+  }
 
   const canManage = hasPermissionAnywhere(principal, 'admin.user.manage');
   const canAssign = hasPermissionAnywhere(principal, 'admin.role.assign');
+  const canResetPassword = hasPermissionAnywhere(principal, 'admin.user.password.reset');
   const roleOptions = Object.entries(SYSTEM_ROLES).map(([key, role]) => ({ key, name: role.name }));
 
-  const scopeName = (scopeType: string, scopeId: string | null) => {
-    if (scopeType === 'GLOBAL') return 'company-wide';
-    if (scopeType === 'DEPARTMENT') return departments.find((d) => d.id === scopeId)?.name ?? 'a department';
-    return projects.find((p) => p.id === scopeId)?.code ?? 'a project';
-  };
+  const userRows = users.map((u) => ({
+    ...u,
+    createdAt: u.createdAt,
+    lastSignInAt: lastSignInMap.get(u.id) ?? null,
+    openTasksCount: workloadMap.get(u.id)?.openTasks ?? 0,
+    loadHours: workloadMap.get(u.id)?.loadHours ?? 0,
+  }));
 
   return (
     <>
       <PageHeader
         title="People & access"
-        subtitle={`${users.length} account${users.length === 1 ? '' : 's'}. Roles are always granted at a scope — company, department or a single project.`}
       />
 
-      <form className="mb-4 flex items-end gap-2" action="/admin/users">
-        <div>
-          <label className="label" htmlFor="q">Search</label>
-          <input id="q" name="q" defaultValue={params.q ?? ''} className="input w-64" placeholder="Name, email or employee code" />
-        </div>
-        <button type="submit" className="btn btn-secondary mb-0.5">Search</button>
-      </form>
-
-      {canManage || canAssign ? (
-        <div className="mb-4">
-          <UserAdminPanel
-            canCreate={canManage}
-            canAssign={canAssign}
-            roles={roleOptions}
-            departments={departments}
-            projects={projects}
-            users={users.map((u) => ({ id: u.id, fullName: u.fullName, employeeCode: u.employeeCode }))}
-          />
-        </div>
-      ) : null}
-
-      <Card bodyClassName="p-0">
-        <div className="overflow-x-auto">
-          <table className="table min-w-[900px]">
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>Department</th>
-                <th>Reports to</th>
-                <th>Capacity</th>
-                <th>Roles & scope</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td>
-                    <span className="flex items-center gap-2">
-                      <Avatar name={user.fullName} color={user.avatarColor} size={28} />
-                      <span className="min-w-0">
-                        <span className="block truncate text-body-sm font-medium text-ink">{user.fullName}</span>
-                        <span className="block truncate text-caption text-muted-soft">
-                          {user.employeeCode} · {user.email}
-                        </span>
-                      </span>
-                    </span>
-                  </td>
-                  <td className="text-caption text-body">
-                    {user.department?.name ?? '—'}
-                    <span className="block text-caption text-muted-soft">{user.designation}</span>
-                  </td>
-                  <td className="text-caption text-body">{user.manager?.fullName ?? '—'}</td>
-                  <td className="text-caption text-body">{user.dailyCapacityHours}h/day</td>
-                  <td>
-                    {user.roleAssignments.length === 0 ? (
-                      <span className="text-caption text-error">no access</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {user.roleAssignments.map((assignment) => (
-                          <span key={assignment.id} className="badge bg-surface-strong text-body" title={assignment.role.name}>
-                            {assignment.role.key.replaceAll('_', ' ').toLowerCase()}
-                            <span className="text-muted-soft"> @ {scopeName(assignment.scopeType, assignment.scopeId)}</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <StatusBadge status={user.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <UsersTable
+        users={userRows}
+        departments={departments}
+        projects={projects}
+        canManage={canManage}
+        canAssign={canAssign}
+        canResetPassword={canResetPassword}
+        roleOptions={roleOptions}
+        searchQuery={params.q ?? ''}
+      />
     </>
   );
 }

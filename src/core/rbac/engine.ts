@@ -45,11 +45,26 @@ function scopeMatches(principal: Principal, grant: Grant, scope: AccessScope): b
   }
 }
 
-/** Permissions this principal holds anywhere - used to decide what to render in the nav. */
-export function permissionsAnywhere(principal: Principal): Set<PermissionKey> {
-  return new Set(principal.grants.map((g) => g.permission));
-}
-
 export function hasPermissionAnywhere(principal: Principal, permission: PermissionKey): boolean {
   return principal.grants.some((g) => g.permission === permission);
+}
+
+/** Permissions that only let someone look. A principal holding nothing else is read-only. */
+const READ_ONLY_PERMISSIONS: ReadonlySet<PermissionKey> = new Set<PermissionKey>([
+  'admin.user.read',
+  'admin.role.read',
+  'admin.audit.read',
+  'pm.project.read',
+  'pm.project.read.all',
+  'pm.task.read',
+  'pm.resource.read',
+  'pm.report.read',
+  'pm.commissioning.read',
+  'pm.template.read',
+  'erp.access',
+]);
+
+/** True when every grant is a pure read, e.g. the Sales Head. Such users cannot post or change anything. */
+export function isReadOnly(principal: Principal): boolean {
+  return principal.grants.every((g) => READ_ONLY_PERMISSIONS.has(g.permission));
 }

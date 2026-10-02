@@ -72,7 +72,7 @@ One contract, mapped centrally in `src/core/http/api.ts`:
 ```bash
 # Sign in
 curl -c jar -H 'content-type: application/json' \
-  -d '{"email":"priya.nair@vidyutswitchgear.com","password":"…"}' \
+  -d '{"email":"parth.nagar@acsengitech.com","password":"…"}' \
   http://localhost:3000/api/auth/login
 
 # Who can take 8 hours of schematic work right now?

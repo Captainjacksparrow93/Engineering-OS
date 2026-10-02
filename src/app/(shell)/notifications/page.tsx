@@ -2,9 +2,13 @@ import Link from 'next/link';
 import { requirePrincipal } from '@/core/auth/session';
 import { prisma } from '@/core/db/prisma';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
-import { MarkReadButton } from './mark-read';
+import { MarkAllReadButton, MarkReadButton } from './mark-read';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata = {
+  title: 'Notifications',
+};
 
 export default async function NotificationsPage() {
   const principal = await requirePrincipal();
@@ -14,9 +18,15 @@ export default async function NotificationsPage() {
     take: 60,
   });
 
+  const unreadCount = notifications.filter((n) => !n.readAt).length;
+
   return (
     <>
-      <PageHeader title="Notifications" subtitle="Assignments, handovers, blockers and approvals that involve you." />
+      <PageHeader
+        title="Notifications"
+        subtitle="Assignments, handovers, blockers and approvals that involve you."
+        actions={unreadCount > 0 ? <MarkAllReadButton /> : null}
+      />
 
       {notifications.length === 0 ? (
         <EmptyState title="Nothing yet" hint="You will be told when work is assigned to you or something you depend on moves." />

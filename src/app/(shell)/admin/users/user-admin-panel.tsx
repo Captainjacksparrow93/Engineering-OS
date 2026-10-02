@@ -1,6 +1,8 @@
 'use client';
+import { formatName } from '@/core/utils/strings';
 
 import { useActionState, useState } from 'react';
+import clsx from 'clsx';
 import { assignRoleAction, createUserAction, setUserStatusAction } from '@/app/actions/admin';
 import type { ActionState } from '@/app/actions/pm';
 import { FormMessage, SubmitButton } from '@/components/form';
@@ -16,6 +18,18 @@ const GRADES = [
   'DIRECTOR',
 ];
 
+interface UserAdminPanelProps {
+  canCreate: boolean;
+  canAssign: boolean;
+  roles: Array<{ key: string; name: string }>;
+  departments: Array<{ id: string; name: string }>;
+  projects: Array<{ id: string; code: string; name: string }>;
+  users: Array<{ id: string; fullName: string; employeeCode: string }>;
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
+  columnsButton?: React.ReactNode;
+}
+
 export function UserAdminPanel({
   canCreate,
   canAssign,
@@ -23,14 +37,10 @@ export function UserAdminPanel({
   departments,
   projects,
   users,
-}: {
-  canCreate: boolean;
-  canAssign: boolean;
-  roles: Array<{ key: string; name: string }>;
-  departments: Array<{ id: string; name: string }>;
-  projects: Array<{ id: string; code: string; name: string }>;
-  users: Array<{ id: string; fullName: string; employeeCode: string }>;
-}) {
+  searchQuery = '',
+  onSearchChange,
+  columnsButton,
+}: UserAdminPanelProps) {
   const [tab, setTab] = useState<'none' | 'create' | 'grant' | 'status'>('none');
   const [createState, createAction] = useActionState<ActionState, FormData>(createUserAction, {});
   const [grantState, grantAction] = useActionState<ActionState, FormData>(assignRoleAction, {});
@@ -39,21 +49,69 @@ export function UserAdminPanel({
 
   return (
     <section className="card">
-      <header className="card-header">
-        <h2 className="card-title">Administration</h2>
-        <div className="flex gap-2">
+      <header className="card-header flex flex-wrap items-center justify-between gap-3">
+        {/* Instant Live Search Bar */}
+        <div className="relative flex items-center">
+          <div className="absolute left-2.5 text-muted pointer-events-none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
+            className="input !h-8 w-64 pl-8 pr-7 text-body-sm"
+            placeholder="Search name, department, role..."
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => onSearchChange && onSearchChange('')}
+              className="absolute right-2 text-muted hover:text-ink text-xs"
+              title="Clear search"
+            >
+              ✕
+            </button>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {columnsButton}
           {canCreate ? (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTab(tab === 'create' ? 'none' : 'create')}>
+            <button
+              type="button"
+              className={clsx(
+                'btn btn-sm transition-all',
+                tab === 'create' ? 'border-ink bg-ink text-canvas font-semibold shadow-xs' : 'btn-secondary'
+              )}
+              onClick={() => setTab(tab === 'create' ? 'none' : 'create')}
+            >
               Add employee
             </button>
           ) : null}
           {canAssign ? (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTab(tab === 'grant' ? 'none' : 'grant')}>
+            <button
+              type="button"
+              className={clsx(
+                'btn btn-sm transition-all',
+                tab === 'grant' ? 'border-ink bg-ink text-canvas font-semibold shadow-xs' : 'btn-secondary'
+              )}
+              onClick={() => setTab(tab === 'grant' ? 'none' : 'grant')}
+            >
               Grant role
             </button>
           ) : null}
           {canCreate ? (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTab(tab === 'status' ? 'none' : 'status')}>
+            <button
+              type="button"
+              className={clsx(
+                'btn btn-sm transition-all',
+                tab === 'status' ? 'border-ink bg-ink text-canvas font-semibold shadow-xs' : 'btn-secondary'
+              )}
+              onClick={() => setTab(tab === 'status' ? 'none' : 'status')}
+            >
               Change status
             </button>
           ) : null}
@@ -64,15 +122,15 @@ export function UserAdminPanel({
         <form action={createAction} className="card-body grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="field">
             <label className="label" htmlFor="fullName">Full name *</label>
-            <input id="fullName" name="fullName" required className="input" />
+            <input id="fullName" name="fullName" required className="input" placeholder="e.g. Rahul Sharma" />
           </div>
           <div className="field">
             <label className="label" htmlFor="employeeCode">Employee code *</label>
-            <input id="employeeCode" name="employeeCode" required className="input" placeholder="VS-0016" />
+            <input id="employeeCode" name="employeeCode" required className="input" placeholder="ACS-0016" />
           </div>
           <div className="field">
             <label className="label" htmlFor="email">Work email *</label>
-            <input id="email" name="email" type="email" required className="input" />
+            <input id="email" name="email" type="email" required className="input" placeholder="name@acsengitech.com" />
           </div>
           <div className="field">
             <label className="label" htmlFor="password">Initial password *</label>
@@ -81,7 +139,7 @@ export function UserAdminPanel({
           </div>
           <div className="field">
             <label className="label" htmlFor="designation">Designation</label>
-            <input id="designation" name="designation" className="input" />
+            <input id="designation" name="designation" className="input" placeholder="e.g. Electrical Design Engineer" />
           </div>
           <div className="field">
             <label className="label" htmlFor="grade">Grade</label>
@@ -105,17 +163,13 @@ export function UserAdminPanel({
             <select id="managerId" name="managerId" className="select" defaultValue="">
               <option value="">None</option>
               {users.map((user) => (
-                <option key={user.id} value={user.id}>{user.fullName}</option>
+                <option key={user.id} value={user.id}>{formatName(user.fullName)}</option>
               ))}
             </select>
           </div>
           <div className="field">
             <label className="label" htmlFor="dailyCapacityHours">Daily capacity (h)</label>
             <input id="dailyCapacityHours" name="dailyCapacityHours" type="number" min="1" max="16" step="0.5" defaultValue={8} className="input" />
-          </div>
-          <div className="field">
-            <label className="label" htmlFor="skills">Skills</label>
-            <input id="skills" name="skills" className="input" placeholder="schematics, EPLAN" />
           </div>
           <div className="field">
             <label className="label" htmlFor="roleKey">Base role</label>
@@ -127,7 +181,9 @@ export function UserAdminPanel({
             <p className="hint">Scoped to their department automatically.</p>
           </div>
           <div className="flex items-end">
-            <SubmitButton className="w-full">Create account</SubmitButton>
+            <SubmitButton variant="primary" className="w-full font-semibold">
+              Create account
+            </SubmitButton>
           </div>
           <div className="sm:col-span-2 lg:col-span-4">
             <FormMessage state={createState} />
@@ -142,7 +198,7 @@ export function UserAdminPanel({
             <select id="grant-user" name="userId" required className="select" defaultValue="">
               <option value="" disabled>Select</option>
               {users.map((user) => (
-                <option key={user.id} value={user.id}>{user.fullName} ({user.employeeCode})</option>
+                <option key={user.id} value={user.id}>{formatName(user.fullName)}</option>
               ))}
             </select>
           </div>
@@ -180,13 +236,15 @@ export function UserAdminPanel({
                 : null}
               {scopeType === 'PROJECT'
                 ? projects.map((project) => (
-                    <option key={project.id} value={project.id}>{project.code} — {project.name}</option>
+                    <option key={project.id} value={project.id}>{project.name}</option>
                   ))
                 : null}
             </select>
           </div>
           <div className="flex items-end">
-            <SubmitButton className="w-full">Grant</SubmitButton>
+            <SubmitButton variant="primary" className="w-full font-semibold">
+              Grant
+            </SubmitButton>
           </div>
           <div className="sm:col-span-2 lg:col-span-4">
             <FormMessage state={grantState} />
@@ -201,7 +259,7 @@ export function UserAdminPanel({
             <select id="status-user" name="userId" required className="select" defaultValue="">
               <option value="" disabled>Select</option>
               {users.map((user) => (
-                <option key={user.id} value={user.id}>{user.fullName} ({user.employeeCode})</option>
+                <option key={user.id} value={user.id}>{formatName(user.fullName)}</option>
               ))}
             </select>
           </div>
@@ -215,7 +273,9 @@ export function UserAdminPanel({
             <p className="hint">Suspending or exiting revokes every live session immediately.</p>
           </div>
           <div className="flex items-end">
-            <SubmitButton className="w-full" confirm="Change this account's status?">Apply</SubmitButton>
+            <SubmitButton variant="primary" className="w-full font-semibold" confirm="Change this account's status?">
+              Apply
+            </SubmitButton>
           </div>
           <div className="sm:col-span-3">
             <FormMessage state={statusState} />

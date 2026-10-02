@@ -1,10 +1,13 @@
 import { prisma } from '@/core/db/prisma';
 import { assertCan } from '@/core/rbac/guard';
-import { DomainError } from '@/core/rbac/errors';
+import { can, hasPermissionAnywhere } from '@/core/rbac/engine';
+import { DomainError, ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
 import { hashPassword, passwordIssues } from '@/core/auth/password';
 import type { ScopeType } from '@prisma/client';
+import { buildPass } from '@/modules/erp/sso';
+import { config } from '@/core/config';
 
 /**
  * Administration: people, role grants and the audit trail.
@@ -14,16 +17,28 @@ import type { ScopeType } from '@prisma/client';
  */
 
 export async function listUsers(principal: Principal, search?: string) {
-  assertCan(principal, 'admin.user.read');
+  if (!hasPermissionAnywhere(principal, 'admin.user.read')) {
+    throw new ForbiddenError('Missing permission: admin.user.read');
+  }
+
+  // Global permission holders see all company users; department-scoped heads see their department.
+  const hasGlobal = can(principal, 'admin.user.read');
+  const departmentFilter = hasGlobal
+    ? {}
+    : { departmentId: { in: principal.coveredDepartmentIds } };
+
   return prisma.user.findMany({
     where: {
       companyId: principal.companyId,
+      ...departmentFilter,
       ...(search
         ? {
             OR: [
               { fullName: { contains: search, mode: 'insensitive' as const } },
               { email: { contains: search, mode: 'insensitive' as const } },
               { employeeCode: { contains: search, mode: 'insensitive' as const } },
+              { designation: { contains: search, mode: 'insensitive' as const } },
+              { department: { name: { contains: search, mode: 'insensitive' as const } } },
             ],
           }
         : {}),
@@ -120,8 +135,8 @@ export async function setUserStatus(principal: Principal, userId: string, status
   assertCan(principal, 'admin.user.manage');
   if (userId === principal.userId) throw new DomainError('You cannot change your own account status.');
 
-  return prisma.$transaction(async (tx) => {
-    const user = await tx.user.update({ where: { id: userId }, data: { status } });
+  const user = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({ where: { id: userId }, data: { status } });
     if (status !== 'ACTIVE') {
       // Revoking sessions is the point of keeping them in the database.
       await tx.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
@@ -137,7 +152,116 @@ export async function setUserStatus(principal: Principal, userId: string, status
       },
       tx,
     );
-    return user;
+    return updated;
+  });
+
+  // Best-effort ERP user disable on SUSPENDED or EXITED
+  if (status !== 'ACTIVE') {
+    let erpnextUrl: string | undefined;
+    let ssoSecret: string | undefined;
+    try {
+      const cfg = config();
+      erpnextUrl = cfg.ERPNEXT_URL;
+      ssoSecret = cfg.ERP_SSO_SECRET;
+    } catch {
+      erpnextUrl = process.env.ERPNEXT_URL;
+      ssoSecret = process.env.ERP_SSO_SECRET;
+    }
+    erpnextUrl = erpnextUrl || process.env.ERPNEXT_URL;
+    ssoSecret = ssoSecret || process.env.ERP_SSO_SECRET;
+
+    if (erpnextUrl && ssoSecret) {
+      try {
+        const pass = buildPass({ email: user.email, name: user.fullName }, 'disable', ssoSecret);
+        const res = await fetch(`${erpnextUrl.replace(/\/+$/, '')}/api/method/acs_erp.sso.disable_user`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `pass=${encodeURIComponent(pass)}`,
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          await audit({
+            actorId: principal.userId,
+            module: 'admin',
+            action: 'erp.user_disable_failed',
+            entityType: 'User',
+            entityId: userId,
+            diff: { status: res.status, statusText: res.statusText, body: text.slice(0, 500) },
+          });
+        } else {
+          await audit({
+            actorId: principal.userId,
+            module: 'admin',
+            action: 'erp.user_disabled',
+            entityType: 'User',
+            entityId: userId,
+            diff: { email: user.email, status: res.status },
+          });
+        }
+      } catch (err) {
+        await audit({
+          actorId: principal.userId,
+          module: 'admin',
+          action: 'erp.user_disable_failed',
+          entityType: 'User',
+          entityId: userId,
+          diff: { error: err instanceof Error ? err.message : String(err) },
+        });
+      }
+    }
+  }
+
+  return user;
+}
+
+export async function resetUserPassword(
+  principal: Principal,
+  userId: string,
+  newPassword: string,
+) {
+  assertCan(principal, 'admin.user.password.reset');
+
+  const issues = passwordIssues(newPassword);
+  if (issues.length) throw new DomainError(issues.join(' '));
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, companyId: true, fullName: true, employeeCode: true, email: true },
+  });
+  if (!target || target.companyId !== principal.companyId) {
+    throw new DomainError('Target user not found.');
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  return prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    await tx.session.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'admin',
+        action: 'user.password_reset',
+        entityType: 'User',
+        entityId: userId,
+        diff: {
+          employeeCode: target.employeeCode,
+          fullName: target.fullName,
+        },
+      },
+      tx,
+    );
+
+    return { userId, fullName: target.fullName, employeeCode: target.employeeCode };
   });
 }
 

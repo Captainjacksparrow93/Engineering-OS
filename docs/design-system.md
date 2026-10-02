@@ -55,20 +55,22 @@ That is the entire palette; the app adds nothing.
 | Confirmation | `success` | Completed, on track, spare capacity |
 | Work stage | `stage-*` | Lifecycle stage pills only — see below |
 
-### Judgement call: the stage pastels
+### Judgement call: the stage pastels and status pills
 
-The source scopes the five pastels to "in-product agent timeline visualizations" and
-forbids them as generic system action colours. This app's closest equivalent is the
-**work-stage timeline** a task moves along, so the pastels mark exactly that and
-nothing else:
+Per owner decisions (Audit Round 2, Steps 3 & 7), status pill semantics are:
+- `COMPLETED` / Approved: `success` (solid green, `bg-success text-on-primary`) to unequivocally signal completion/approval.
+- `TODO`: neutral (`bg-surface-strong text-ink border border-hairline`), never green so green is reserved for approved.
+- `BLOCKED` / `LATE`: `error` (semantic red).
+- `IN_PROGRESS`: `stage-edit` (lavender).
+- `IN_REVIEW` ("Waiting for approval"): `stage-read` (blue).
 
-| Stage | Token | Original meaning |
+| Stage | Token | Treatment |
 |---|---|---|
 | Project `PLANNING` | `stage-thinking` (peach) | Thinking |
-| Task `TODO` | `stage-grep` (mint) | Grepping |
-| Task `IN_PROGRESS` | `stage-edit` (lavender) | Editing |
-| Task `IN_REVIEW` | `stage-read` (blue) | Reading |
-| Task `COMPLETED` | `stage-done` (gold) | Done |
+| Task `TODO` | Neutral (`surface-strong`) | Queued / To do |
+| Task `IN_PROGRESS` | `stage-edit` (lavender) | In progress |
+| Task `IN_REVIEW` | `stage-read` (blue) | Waiting for approval |
+| Task `COMPLETED` | `success` (green) | Approved / Completed |
 
 States that are **not** stages deliberately fall through to neutral or semantic
 treatments, so a pastel always means "work is at this stage":
@@ -112,6 +114,24 @@ everywhere.
 | `.table` | Dense data: cream header, hairline rows, uppercase captions |
 | `.stat` / `.stat-label` / `.stat-value` | KPI tiles |
 | `.code` / `.code-chip` / `.code-block` | Identifiers and payloads |
+
+## ERP (ERPNext, restyled)
+
+User decision 2026-10-01: people use **ERPNext's own screens and dashboards** (all modules), restyled to belong to Engineering OS. The look comes from the custom Frappe app `acs_erp` (CSS only, loaded on ERPNext's desk via the app's `app_include_css` hook). ERPNext's layouts and widgets stay ERPNext's; **the target is "same family", not pixel-identical** (accepted by the user).
+
+**Map our tokens onto ERPNext's desk** (override Frappe's CSS variables first, and write selectors only where a variable doesn't exist):
+- **Floor:** page background → `canvas` #f7f7f4; cards, forms and list rows → `surface` (white).
+- **Type:** Inter for UI text, page and section titles at weight 400 with negative tracking. JetBrains Mono for document numbers (`SO-…`, WO, item codes) wherever ERPNext renders them as names or IDs. Ship the font files in the app (same files as `src/app/fonts/`), with no Google Fonts.
+- **Depth:** remove shadows (cards, dropdowns, modals use 1px `hairline` borders instead). Radius: 8px for controls, 12px for cards and modals, 9999px for pills.
+- **Orange is scarce:** ERPNext's primary button (the one main action per page) uses `primary`. Every other button is secondary/ink. Links and the active sidebar item use ink weight and `surface-strong`, not orange or blue.
+- **Status colours:** ERPNext indicators map to ours: green → `success`, red → `error`, blue and other neutrals → neutral `surface-strong`/ink. Don't introduce amber; "warning" indicators use the `error` tint, as in our app.
+- **Branding (user request 2026-10-02): no "ERPNext" or "Frappe" anywhere in normal use.** "Engineering OS · ERP" as the name (tab titles, top bar, login), our ACS logo, favicon and splash, "ERPNext" labels renamed through custom translations, no "Powered by" footers (pages, prints and PDFs, emails), and a Help menu cut down to About (kept for the GPLv3 notice). All of it from `acs_erp`, never by editing ERPNext's own files.
+
+**Getting there from Engineering OS:** an **ERP** item in our sidebar and in the module launcher (registry entry `erp` → live, opening ERPNext's address in a new tab). It signs the user in automatically (see `CLAUDE.md`, "One login"). Don't embed ERPNext in an iframe.
+
+**Links between the two:** our project page shows "From sales order `SO-0042`" linking to that order in ERPNext. The order in ERPNext shows the project code with a link back to `/pm/projects/[id]` (a field set by the integration).
+
+**Checking it:** before shipping a theme change, screenshot ERPNext's Selling workspace, a Sales Order list, a Sales Order form and a Customer form next to our Director dashboard and Clients page, and check the checklist below where it applies.
 
 ## Checklist before shipping a UI change
 

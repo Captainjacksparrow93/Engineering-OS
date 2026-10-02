@@ -14,3 +14,32 @@ coverage/
 next-env.d.ts
 *.tsbuildinfo
 prisma/*.db
+.code-review-graph/
+.token-savior-cache.json
+*Vertex*.json
+*vertex*.json
+
+# Cloud credentials: never commit
+*key*.json
+*.credentials.json
+secrets/
+
+# Agent session state
+.claude/
+
+# Database dumps - never commit live data
+*.sql.bak
+vps-snapshot.sql
+backups/
+
+# Deployment state
+.deployed-sha
+.previous-sha
+
+
+# Python (acs_erp)
+__pycache__/
+*.pyc
+
+# Local verification screenshots
+docs/screenshots/

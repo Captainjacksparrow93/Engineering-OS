@@ -62,6 +62,7 @@ export async function loadPrincipal(userId: string): Promise<Principal | null> {
   }
 
   const coveredDepartmentIds = await expandDepartmentSubtrees(user.companyId, [...departmentScopeIds]);
+  const reportIds = await expandReportSubtree(user.companyId, user.id);
   for (const pm of user.projectMembers) projectScopeIds.add(pm.projectId);
 
   return {
@@ -77,6 +78,7 @@ export async function loadPrincipal(userId: string): Promise<Principal | null> {
     grants: dedupeGrants(grants),
     coveredDepartmentIds,
     memberProjectIds: [...projectScopeIds],
+    reportIds,
     roleKeys: [...new Set(roleKeys)],
   };
 }
@@ -110,6 +112,35 @@ export async function expandDepartmentSubtrees(companyId: string, rootIds: strin
     for (const child of childrenByParent.get(current) ?? []) queue.push(child);
   }
   return [...covered];
+}
+
+/**
+ * Loads the org-chart tree for the company and returns all direct/indirect reports
+ * of the given user via in-memory BFS.
+ */
+export async function expandReportSubtree(companyId: string, managerId: string): Promise<string[]> {
+  const users = await prisma.user.findMany({
+    where: { companyId, status: 'ACTIVE' },
+    select: { id: true, managerId: true },
+  });
+
+  const childrenByManager = new Map<string, string[]>();
+  for (const u of users) {
+    if (!u.managerId) continue;
+    const list = childrenByManager.get(u.managerId) ?? [];
+    list.push(u.id);
+    childrenByManager.set(u.managerId, list);
+  }
+
+  const reports = new Set<string>();
+  const queue = [...(childrenByManager.get(managerId) ?? [])];
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (reports.has(current)) continue;
+    reports.add(current);
+    for (const child of childrenByManager.get(current) ?? []) queue.push(child);
+  }
+  return [...reports];
 }
 
 function dedupeGrants(grants: Grant[]): Grant[] {

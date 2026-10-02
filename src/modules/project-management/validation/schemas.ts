@@ -2,29 +2,35 @@ import { z } from 'zod';
 
 /** Input contracts shared by route handlers, server actions and tests. */
 
-const isoDate = z
+const dateString = z
   .string()
   .trim()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD')
-  .transform((value) => new Date(`${value}T00:00:00.000Z`));
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD');
+
+const isoDate = dateString.transform((value) => new Date(`${value}T00:00:00.000Z`));
 
 const optionalDate = z.union([isoDate, z.literal('').transform(() => null), z.null()]).optional();
 
-export const createProjectSchema = z.object({
+export const projectKindEnum = z.enum(['WORK_ORDER', 'SERVICE_CALL']);
+
+export const baseProjectSchema = z.object({
+  kind: projectKindEnum.default('WORK_ORDER'),
   name: z.string().trim().min(3, 'Project name is too short').max(160),
   code: z
     .string()
-    .trim()
-    .regex(/^[A-Z0-9][A-Z0-9-]{2,19}$/, 'Use 3-20 uppercase letters, digits or dashes')
+    .transform((v) => v.trim().toUpperCase().replace(/[\s_]+/g, '-'))
+    .pipe(z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,19}$/, 'Project code must be 3-20 characters: letters, digits or dashes (e.g. ACS-0042-0001)'))
     .optional(),
+  workOrderNo: z.string().trim().regex(/^\d+$/, 'Work Order No. must contain digits only').optional().nullable(),
   description: z.string().trim().max(4000).optional(),
+  clientId: z.string().optional(),
   clientName: z.string().trim().min(2, 'Client name is required').max(160),
-  poNumber: z.string().trim().max(60).optional(),
-  orderValue: z.coerce.number().nonnegative().optional(),
+  endUserName: z.string().trim().max(160).optional(),
+  applicationName: z.string().trim().max(160).optional(),
   panelType: z.string().trim().max(120).optional(),
   panelCount: z.coerce.number().int().min(0).max(10_000).default(0),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).default('MEDIUM'),
-  status: z.enum(['DRAFT', 'PLANNING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED']).default('PLANNING'),
+  status: z.enum(['DRAFT', 'PLANNING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'COMMISSIONING', 'CLOSED', 'CANCELLED']).default('PLANNING'),
   startDate: optionalDate,
   targetEndDate: optionalDate,
   managerId: z.string().min(1, 'Pick a project manager'),
@@ -32,7 +38,24 @@ export const createProjectSchema = z.object({
   departmentId: z.string().optional(),
 });
 
-export const updateProjectSchema = createProjectSchema.partial().omit({ code: true });
+export const updateProjectSchema = baseProjectSchema
+  .partial()
+  .omit({ managerId: true, sponsorId: true, departmentId: true, status: true, kind: true })
+  .extend({
+    panelDeliveryDates: z.record(z.string(), dateString).optional(),
+  });
+
+export const createProjectSchema = baseProjectSchema.superRefine((data, ctx) => {
+  if (data.kind === 'WORK_ORDER' || !data.kind) {
+    if (!data.workOrderNo || !/^\d+$/.test(data.workOrderNo)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Work Order No. must contain digits only',
+        path: ['workOrderNo'],
+      });
+    }
+  }
+});
 
 export const createTaskSchema = z
   .object({
@@ -102,21 +125,131 @@ export const handoverRequestSchema = z.object({
 });
 
 export const handoverDecisionSchema = z.object({
-  decision: z.enum(['ACCEPTED', 'REJECTED']),
+  decision: z.enum(['ACCEPTED', 'DECLINED', 'REJECTED']),
   note: z.string().trim().max(1000).optional(),
 });
 
-export const adhocTaskSchema = createTaskSchema;
+export const createAutomationProjectSchema = z
+  .object({
+    kind: projectKindEnum.default('WORK_ORDER'),
+    name: z.string().trim().min(3, 'Project name is too short').max(160).optional(),
+    workOrderNo: z.string().trim().regex(/^\d+$/, 'Work Order No. must contain digits only').optional().nullable(),
+    code: z
+      .string()
+      .transform((v) => v.trim().toUpperCase().replace(/[\s_]+/g, '-'))
+      .pipe(z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,19}$/, 'Project code must be 3-20 characters: letters, digits or dashes (e.g. ACS-0042-0001)'))
+      .optional(),
+    clientId: z.string().min(1, 'Client is required'),
+    clientName: z.string().trim().min(2, 'Client name is required').max(160),
+    clientRefNumber: z.string().trim().optional(),
+    endUserName: z.string().trim().max(160).optional(),
+    applicationName: z.string().trim().max(160).optional(),
+    priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
+    description: z.string().trim().max(4000).optional(),
+    managerId: z.string().min(1, 'Pick a project manager'),
+    departmentId: z.string().optional(),
+    startDate: z.string().optional(),
+    targetEndDate: z.string().optional(),
+    scopes: z
+      .array(
+        z.object({
+          templateCode: z.string().min(1),
+          name: z.string().optional(),
+          quantity: z.coerce.number().int().min(1).max(20),
+        }),
+      )
+      .max(20)
+      .default([]),
+    tasks: z
+      .array(
+        z.object({
+          templateCode: z.string().min(1),
+          unitIndex: z.coerce.number().int().min(1).max(20),
+          stepNumber: z.coerce.number().int().min(1).max(100),
+          title: z.string().trim().min(1).max(200),
+          assigneeId: z.string().optional(),
+          plannedStart: z.string().optional(),
+          plannedEnd: z.string().optional(),
+          estimatedHours: z.coerce.number().min(0.5).max(1000).optional(),
+        }),
+      )
+      .max(500)
+      .default([]),
+    panelDeliveryDates: z.record(z.string(), dateString).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.kind === 'WORK_ORDER' || !data.kind) {
+      if (!data.workOrderNo || !/^\d+$/.test(data.workOrderNo)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Work Order No. must contain digits only',
+          path: ['workOrderNo'],
+        });
+      }
+      if (!data.scopes || data.scopes.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Select at least one automation scope',
+          path: ['scopes'],
+        });
+      }
+    }
+  });
 
-export const availabilityQuerySchema = z.object({
-  from: z.string().optional(),
-  to: z.string().optional(),
+export const createServiceCallSchema = z.object({
+  clientId: z.string().min(1, 'Client is required'),
+  clientName: z.string().trim().min(2, 'Client name is required').max(160),
+  clientRefNumber: z.string().trim().optional(),
+  managerId: z.string().min(1, 'Pick a project manager'),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).default('HIGH'),
+  description: z.string().trim().max(4000).optional(),
   departmentId: z.string().optional(),
-  skills: z.string().optional(),
-  requiredHours: z.coerce.number().min(0).max(2000).optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
+  targetEndDate: z.string().optional(),
 });
 
+export const autoAssignTeamSchema = z.object({
+  managerId: z.string().min(1),
+  startDate: z.string().optional(),
+  targetEndDate: z.string().optional(),
+  scopes: z
+    .array(
+      z.object({
+        templateCode: z.string().min(1),
+        name: z.string().optional(),
+        quantity: z.coerce.number().int().min(1).max(20),
+      }),
+    )
+    .optional(),
+  tasks: z
+    .array(
+      z.object({
+        templateCode: z.string().min(1),
+        unitIndex: z.coerce.number().int().min(1).max(20).optional(),
+        stepNumber: z.coerce.number().int().min(1).max(100),
+        title: z.string().trim().min(1).max(200),
+        recommendedSeniority: z.string().optional(),
+        plannedStart: z.string().optional(),
+        plannedEnd: z.string().optional(),
+        estimatedHours: z.coerce.number().min(0.5).max(1000).optional(),
+      }),
+    )
+    .max(500),
+});
+
+export const templateItemSchema = z.object({
+  title: z.string().trim().min(3, 'Title is too short').max(200),
+  description: z.string().trim().max(4000).optional(),
+  recommendedSeniority: z.string().trim().optional(),
+  defaultDurationHours: z.coerce.number().min(0.5, "At least 0.5 hours").max(200, "At most 200 hours").multipleOf(0.5, "Use steps of 0.5 hours").optional(),
+  dependsOnStep: z.coerce.number().int().min(1).max(100).nullable().optional(),
+});
+
+export const updateTemplateItemSchema = templateItemSchema.partial();
+
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
+export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type ProgressInput = z.infer<typeof progressSchema>;
+export type CreateAutomationProjectInputSchema = z.infer<typeof createAutomationProjectSchema>;
+export type AutoAssignTeamInputSchema = z.infer<typeof autoAssignTeamSchema>;
+export type TemplateItemInputSchema = z.infer<typeof templateItemSchema>;

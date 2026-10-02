@@ -1,3 +1,4 @@
+import { formatName } from '@/core/utils/strings';
 import clsx from 'clsx';
 import Link from 'next/link';
 
@@ -23,7 +24,8 @@ export function Avatar({
   size?: number;
   title?: string;
 }) {
-  const initials = name
+  const displayName = formatName(name);
+  const initials = displayName
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
@@ -32,11 +34,11 @@ export function Avatar({
 
   // The stored per-person colour is used at low opacity only: enough to tell people
   // apart at a glance without introducing saturated colour into a restrained palette.
-  const tint = color ? `${color}22` : '#e6e5e0';
+  const tint = color ? `${color}22` : 'var(--color-surface-strong)';
 
   return (
     <span
-      title={title ?? name}
+      title={title ?? displayName}
       className="inline-flex shrink-0 items-center justify-center rounded-pill border border-hairline font-medium text-ink"
       style={{ backgroundColor: tint, width: size, height: size, fontSize: size * 0.36 }}
     >
@@ -45,60 +47,63 @@ export function Avatar({
   );
 }
 
-export function AvatarStack({ people }: { people: Array<{ id: string; fullName: string; avatarColor?: string | null }> }) {
-  if (people.length === 0) return <span className="text-caption text-muted-soft">Unassigned</span>;
-  return (
-    <span className="flex -space-x-1.5">
-      {people.slice(0, 4).map((person) => (
-        <span key={person.id} className="rounded-pill ring-2 ring-surface">
-          <Avatar name={person.fullName} color={person.avatarColor} size={24} />
-        </span>
-      ))}
-      {people.length > 4 ? (
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-pill border border-hairline bg-surface-strong text-caption font-medium text-ink ring-2 ring-surface">
-          +{people.length - 4}
-        </span>
-      ) : null}
-    </span>
-  );
-}
+const STATUS_LABELS: Record<string, string> = {
+  IN_REVIEW: 'Waiting for approval',
+  TODO: 'To do',
+  IN_PROGRESS: 'In progress',
+  COMPLETED: 'Completed',
+  BLOCKED: 'Blocked',
+  CANCELLED: 'Cancelled',
+  ON_HOLD: 'On hold',
+  DRAFT: 'Draft',
+  PENDING: 'Pending',
+  AWAITING_HEAD_APPROVAL: 'Awaiting Head Approval',
+  ACCEPTED: 'Accepted',
+  DECLINED: 'Declined',
+  WITHDRAWN: 'Withdrawn',
+  COMMISSIONING: 'Commissioning',
+  CLOSED: 'Closed',
+};
 
 /**
  * Work-stage pills.
  *
- * The five pastels mark stages of work in flight — the direct analogue of the agent
- * action timeline they were designed for. States that are not stages (blocked,
- * cancelled, on hold) deliberately fall through to semantic or neutral treatments so
- * the pastels keep meaning only one thing.
+ * Colour discipline per owner decision (Step 3 & 7):
+ * - Completed = green (bg-success text-on-primary)
+ * - To do = neutral (bg-surface-strong text-ink border border-hairline)
+ * - In progress & Waiting for approval = stage pastels
  */
 const STAGE_STYLES: Record<string, string> = {
-  // Project lifecycle
   PLANNING: 'bg-stage-thinking',
-  // Task lifecycle
-  TODO: 'bg-stage-grep',
+  TODO: 'bg-surface-strong text-ink border border-hairline',
   IN_PROGRESS: 'bg-stage-edit',
   IN_REVIEW: 'bg-stage-read',
-  COMPLETED: 'bg-stage-done text-on-primary',
+  COMPLETED: 'bg-success text-on-primary',
+  COMMISSIONING: 'bg-stage-read text-ink',
 };
 
 const STATE_STYLES: Record<string, string> = {
-  // Risk and terminal states — never a stage pastel.
+  // Risk and terminal states - never a stage pastel.
   BLOCKED: 'badge-error',
   CANCELLED: 'badge-neutral text-muted line-through',
   ON_HOLD: 'badge-outline',
   DRAFT: 'badge-outline',
+  CLOSED: 'badge-neutral text-muted',
 
-  // Assignment and handover bookkeeping — system state, not work stage.
+  // Assignment and handover bookkeeping - system state, not work stage.
   ACTIVE: 'badge-ink',
   PENDING: 'badge-outline',
+  AWAITING_HEAD_APPROVAL: 'badge-outline text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800',
   ACCEPTED: 'badge-success',
   REJECTED: 'badge-error',
+  DECLINED: 'badge-error',
+  WITHDRAWN: 'badge-neutral text-muted',
   HANDED_OVER: 'badge-neutral',
   RELEASED: 'badge-neutral text-muted',
   SUSPENDED: 'badge-error',
   EXITED: 'badge-neutral text-muted',
 
-  // Capacity signals — good/bad, so the two semantic tokens carry them.
+  // Capacity signals - good/bad, so the two semantic tokens carry them.
   FREE: 'badge-success',
   AVAILABLE: 'badge-success',
   BUSY: 'badge-neutral',
@@ -107,7 +112,7 @@ const STATE_STYLES: Record<string, string> = {
 };
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
-  const label = status.replaceAll('_', ' ');
+  const label = STATUS_LABELS[status] ?? status.replaceAll('_', ' ');
   const stage = STAGE_STYLES[status];
 
   if (stage) {
@@ -244,7 +249,7 @@ export function Card({
 
 /**
  * Only three tones exist. "Warning" is the error token held back to a tint rather than
- * a fourth colour — the palette has exactly two semantic hues and keeps them.
+ * a fourth colour - the palette has exactly two semantic hues and keeps them.
  */
 export function Alert({
   tone = 'info',
@@ -260,9 +265,4 @@ export function Alert({
     success: 'border-success/30 bg-success/[0.07] text-ink',
   }[tone];
   return <div className={clsx('rounded-md border px-base py-sm text-body-sm', styles)}>{children}</div>;
-}
-
-/** Monospace chip for identifiers: task codes, project codes, employee codes. */
-export function CodeRef({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <span className={clsx('code', className)}>{children}</span>;
 }

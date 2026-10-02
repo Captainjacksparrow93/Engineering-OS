@@ -4,75 +4,85 @@ import { useActionState, useState } from 'react';
 import { logProgressAction, type ActionState } from '@/app/actions/pm';
 import { FormMessage, SubmitButton } from '@/components/form';
 
-/**
- * The punch-in. Deliberately short: percent, hours, what moved, and an optional
- * blocker. Anything longer and engineers stop filling it in, which is how progress
- * reporting dies in practice.
- */
+const TICKS = [0, 25, 50, 75, 100];
+
 export function ProgressForm({ taskId, currentPercent }: { taskId: string; currentPercent: number }) {
   const [state, action] = useActionState<ActionState, FormData>(logProgressAction, {});
-  const [percent, setPercent] = useState(currentPercent);
-  const [showBlocker, setShowBlocker] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+  const [percent, setPercent] = useState(Math.min(100, Math.max(currentPercent, 25)));
 
   return (
     <section className="card border-hairline">
-      <header className="card-header bg-canvas-soft">
-        <h2 className="card-title">Punch in progress</h2>
+      <header className="card-header bg-canvas-soft flex items-center justify-between">
+        <h2 className="card-title">Update progress</h2>
         <span className="text-caption text-muted">Currently {currentPercent}%</span>
       </header>
-      <form action={action} className="card-body">
+      <form action={action} className="card-body space-y-4">
         <input type="hidden" name="taskId" value={taskId} />
 
         <div className="field">
-          <label className="label" htmlFor="percentComplete">
-            Completion: <span className="text-ink">{percent}%</span>
+          <label htmlFor="percentComplete" className="label flex items-baseline justify-between mb-xs cursor-pointer">
+            <span>New completion</span>
+            <span className="text-display-sm font-semibold text-ink normal-case tracking-normal">{percent}%</span>
           </label>
-          <input
-            id="percentComplete"
-            name="percentComplete"
-            type="range"
-            min={currentPercent}
-            max={100}
-            step={5}
-            value={percent}
-            onChange={(event) => setPercent(Number(event.target.value))}
-            className="w-full accent-ink"
-          />
-          <p className="hint">Progress cannot be reduced. If work was undone, say so in the note and raise a blocker.</p>
-        </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="field">
-            <label className="label" htmlFor="hoursSpent">Hours since last update</label>
-            <input id="hoursSpent" name="hoursSpent" type="number" min="0" max="24" step="0.5" defaultValue={0} className="input" />
+          <div className="relative">
+            {currentPercent > 0 ? (
+              <div
+                className="absolute left-0 top-1/2 -translate-y-1/2 h-1.5 rounded-l bg-muted/20 pointer-events-none z-0"
+                style={{ width: `${currentPercent}%` }}
+                aria-hidden="true"
+              />
+            ) : null}
+            <input
+              id="percentComplete"
+              type="range"
+              name="percentComplete"
+              min={0}
+              max={100}
+              step={5}
+              value={percent}
+              onChange={(e) => setPercent(Math.max(currentPercent, Number(e.target.value)))}
+              className="w-full accent-ink cursor-pointer relative z-10 bg-transparent"
+              aria-label="New completion"
+              aria-valuetext={`${percent}%`}
+            />
           </div>
-          <div className="field">
-            <label className="label" htmlFor="loggedFor">For date</label>
-            <input id="loggedFor" name="loggedFor" type="date" max={today} defaultValue={today} className="input" />
+
+          <div className="relative mt-1 h-4 text-caption text-muted select-none" aria-hidden="true">
+            {TICKS.map((val) => (
+              <span
+                key={val}
+                style={{ left: `${val}%` }}
+                className={`absolute ${
+                  val === 0 ? 'translate-x-0' : val === 100 ? '-translate-x-full' : '-translate-x-1/2'
+                }`}
+              >
+                {val}
+              </span>
+            ))}
           </div>
+
+          <p className="hint mt-2 text-caption text-muted">
+            {currentPercent > 0 ? `Can't go below ${currentPercent}%. ` : ''}Progress cannot be reduced. If 100% is submitted, task moves to waiting for approval.
+          </p>
         </div>
 
         <div className="field">
           <label className="label" htmlFor="note">What moved forward? *</label>
-          <textarea id="note" name="note" rows={2} required className="textarea" placeholder="e.g. Completed schematics for feeders 1-6; feeder 7 pending client input." />
+          <textarea
+            id="note"
+            name="note"
+            rows={2}
+            required
+            className="textarea w-full"
+            placeholder="e.g. Completed wiring and verified I/O mapping."
+          />
         </div>
-
-        {showBlocker ? (
-          <div className="field">
-            <label className="label" htmlFor="blocker">Blocker</label>
-            <textarea id="blocker" name="blocker" rows={2} className="textarea" placeholder="What is stopping you, and who needs to act?" />
-            <p className="hint">Raising a blocker notifies the project manager and the sponsor immediately.</p>
-          </div>
-        ) : null}
 
         <FormMessage state={state} />
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <SubmitButton pendingLabel="Recording…">Record progress</SubmitButton>
-          <button type="button" className="btn btn-secondary" onClick={() => setShowBlocker((v) => !v)}>
-            {showBlocker ? 'Remove blocker' : 'Raise a blocker'}
-          </button>
+        <div className="pt-1">
+          <SubmitButton pendingLabel="Recording…">Update progress</SubmitButton>
         </div>
       </form>
     </section>

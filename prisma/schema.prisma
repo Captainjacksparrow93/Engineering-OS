@@ -41,6 +41,7 @@ model Company {
   departments Department[]
   users       User[]
   projects    Project[]
+  clients     Client[]
 
   @@map("core_companies")
 }
@@ -115,12 +116,21 @@ model User {
   sponsoredProjects Project[]         @relation("ProjectSponsor")
   projectMembers    ProjectMember[]
   createdTasks      Task[]            @relation("TaskCreatedBy")
+  completedTasks    Task[]            @relation("TaskCompletedBy")
   taskAssignments   TaskAssignment[]
   progressLogs      TaskProgressLog[]
-  handoversFrom     TaskHandover[]    @relation("HandoverFrom")
-  handoversTo       TaskHandover[]    @relation("HandoverTo")
-  handoversDecided  TaskHandover[]    @relation("HandoverDecidedBy")
+  handoversFrom                TaskHandover[]    @relation("HandoverFrom")
+  handoversTo                  TaskHandover[]    @relation("HandoverTo")
+  handoversRequested           TaskHandover[]    @relation("HandoverRequestedBy")
+  handoversDecided             TaskHandover[]    @relation("HandoverDecidedBy")
+  taskHandoversHeadApproved    TaskHandover[]    @relation("TaskHandoverHeadApprovedBy")
+  projectHandoversFrom         ProjectHandover[] @relation("ProjectHandoverFrom")
+  projectHandoversTo           ProjectHandover[] @relation("ProjectHandoverTo")
+  projectHandoversDecided      ProjectHandover[] @relation("ProjectHandoverDecidedBy")
+  projectHandoversHeadApproved ProjectHandover[] @relation("ProjectHandoverHeadApprovedBy")
   comments          TaskComment[]
+  commissioningAssignments CommissioningAssignment[]
+  commissioningLogs        CommissioningLog[]
 
   @@index([companyId])
   @@index([departmentId])
@@ -363,8 +373,27 @@ model Leave {
 }
 
 // =====================================================================================
-// PM :: Projects
+// PM :: Clients & Projects
 // =====================================================================================
+
+model Client {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  refNumber   String   // e.g. ACS-0042 — the client reference number
+  erpCustomer String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projects Project[]
+
+  @@unique([companyId, name])
+  @@unique([companyId, refNumber])
+  @@unique([companyId, erpCustomer])
+  @@map("pm_clients")
+}
 
 enum ProjectStatus {
   DRAFT
@@ -372,7 +401,14 @@ enum ProjectStatus {
   IN_PROGRESS
   ON_HOLD
   COMPLETED
+  COMMISSIONING
+  CLOSED
   CANCELLED
+}
+
+enum ProjectKind {
+  WORK_ORDER
+  SERVICE_CALL
 }
 
 enum ProjectPriority {
@@ -385,39 +421,53 @@ enum ProjectPriority {
 /// A customer order for control panels. Higher management ("sponsor") defines it,
 /// a manager runs it, and the WBS below it is where engineers actually work.
 model Project {
-  id            String          @id @default(cuid())
-  companyId     String
-  code          String          @unique
-  name          String
-  description   String?
-  clientName    String
-  /// Panel-manufacturing specifics. ERP will later own the commercial fields and PM
-  /// will read them through the ERP service instead of storing them here.
-  poNumber      String?
-  orderValue    Decimal?        @db.Decimal(14, 2)
-  panelType     String?
-  panelCount    Int             @default(0)
-  status        ProjectStatus   @default(DRAFT)
-  priority      ProjectPriority @default(MEDIUM)
-  startDate     DateTime?       @db.Date
-  targetEndDate DateTime?       @db.Date
-  actualEndDate DateTime?       @db.Date
-  managerId     String
-  sponsorId     String?
-  departmentId  String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id               String          @id @default(cuid())
+  companyId        String
+  code             String
+  kind             ProjectKind     @default(WORK_ORDER)
+  workOrderNo      String?         @unique
+  erpSalesOrder    String?         @unique
+  clientPoNumber   String?
+  erpOrderModified String?
+  name             String
+  description      String?
+  clientId         String?
+  clientName       String
+  endUserName      String?
+  applicationName  String?
+  panelType        String?
+  panelCount       Int             @default(0)
+  /// Checklist packages in this project: PLC, SCADA, HMI (drives the dashboard type cards).
+  automationTypes  String[]        @default([])
+  status           ProjectStatus   @default(DRAFT)
+  priority         ProjectPriority @default(MEDIUM)
+  holdReason       String?
+  heldAt           DateTime?
+  startDate        DateTime?       @db.Date
+  targetEndDate    DateTime?       @db.Date
+  actualEndDate    DateTime?       @db.Date
+  managerId        String
+  sponsorId        String?
+  departmentId     String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client  Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
   manager User    @relation("ProjectManager", fields: [managerId], references: [id])
   sponsor User?   @relation("ProjectSponsor", fields: [sponsorId], references: [id], onDelete: SetNull)
 
   members    ProjectMember[]
   tasks      Task[]
   milestones Milestone[]
+  handovers  ProjectHandover[]
+  commissioningAssignments CommissioningAssignment[]
+  commissioningLogs        CommissioningLog[]
 
   @@index([companyId, status])
+  @@index([companyId, code])
   @@index([managerId])
+  @@index([clientId])
   @@map("pm_projects")
 }
 
@@ -507,9 +557,11 @@ model Task {
   type        TaskType     @default(PROJECT)
   status      TaskStatus   @default(TODO)
   priority    TaskPriority @default(MEDIUM)
+  /// Order item row name plus unit number, e.g. `a1b2c3#2` (on panel PHASE tasks).
+  erpOrderItem String?
 
   estimatedHours  Float @default(8)
-  /// Sum of hours punched in on progress logs. Denormalised for capacity queries.
+  /// ponytail: actual hours are no longer tracked in UI/workflows; column kept for schema compatibility.
   actualHours     Float @default(0)
   /// 0-100. Leaf tasks take it from the latest progress log; PHASE tasks roll it up
   /// from children weighted by estimated hours.
@@ -519,6 +571,9 @@ model Task {
   plannedEnd   DateTime? @db.Date
   actualStart  DateTime?
   actualEnd    DateTime?
+  submittedAt  DateTime?
+  completedAt  DateTime?
+  completedById String?
 
   /// Skills a candidate assignee should have. Drives the "who can take this" ranking.
   requiredSkills String[] @default([])
@@ -526,11 +581,12 @@ model Task {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parent    Task?      @relation("TaskTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children  Task[]     @relation("TaskTree")
-  milestone Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
-  createdBy User       @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent      Task?      @relation("TaskTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Task[]     @relation("TaskTree")
+  milestone   Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  createdBy   User       @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  completedBy User?      @relation("TaskCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
 
   assignments  TaskAssignment[]
   progressLogs TaskProgressLog[]
@@ -614,7 +670,10 @@ model TaskAssignment {
 
 enum HandoverStatus {
   PENDING
+  AWAITING_HEAD_APPROVAL
   ACCEPTED
+  DECLINED
+  WITHDRAWN
   REJECTED
   CANCELLED
 }
@@ -627,26 +686,59 @@ model TaskHandover {
   taskId           String
   fromUserId       String
   toUserId         String
+  requestedById    String?
   reason           String
   /// Percent of the task still to do at the moment of handover.
   remainingPercent Int
   remainingHours   Float
   status           HandoverStatus @default(PENDING)
-  /// Who accepted/rejected. Usually the receiver; a manager may force it through.
+  /// Who accepted/rejected/withdrew.
   decidedById      String?
   decidedAt        DateTime?
   decisionNote     String?
+  headApprovedById String?
+  headApprovedAt   DateTime?
+  headDecisionNote String?
   createdAt        DateTime       @default(now())
 
-  task      Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  fromUser  User  @relation("HandoverFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  toUser    User  @relation("HandoverTo", fields: [toUserId], references: [id], onDelete: Cascade)
-  decidedBy User? @relation("HandoverDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  task           Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromUser       User  @relation("HandoverFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser         User  @relation("HandoverTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  requestedBy    User? @relation("HandoverRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  decidedBy      User? @relation("HandoverDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  headApprovedBy User? @relation("TaskHandoverHeadApprovedBy", fields: [headApprovedById], references: [id], onDelete: SetNull)
 
   @@index([taskId])
   @@index([toUserId, status])
   @@index([fromUserId, status])
   @@map("pm_task_handovers")
+}
+
+model ProjectHandover {
+  id               String         @id @default(cuid())
+  projectId        String
+  fromUserId       String
+  toUserId         String
+  reason           String?
+  status           HandoverStatus @default(PENDING)
+  decidedById      String?
+  decidedAt        DateTime?
+  decisionNote     String?
+  headApprovedById String?
+  headApprovedAt   DateTime?
+  headDecisionNote String?
+  createdAt        DateTime       @default(now())
+
+  project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fromUser       User    @relation("ProjectHandoverFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser         User    @relation("ProjectHandoverTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  decidedBy      User?   @relation("ProjectHandoverDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  headApprovedBy User?   @relation("ProjectHandoverHeadApprovedBy", fields: [headApprovedById], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([toUserId, status])
+  @@index([fromUserId, status])
+  @@map("pm_project_handovers")
 }
 
 /// Append-only progress ledger. Task.percentComplete/actualHours are projections of
@@ -686,3 +778,88 @@ model TaskComment {
   @@index([taskId, createdAt])
   @@map("pm_task_comments")
 }
+
+// =====================================================================================
+// PM :: Checklist Templates (Automation Standard Packages)
+// =====================================================================================
+
+model ChecklistTemplate {
+  id          String   @id @default(cuid())
+  code        String   @unique // PLC, SCADA, HMI
+  name        String
+  description String?
+  category    String   @default("AUTOMATION")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items ChecklistTemplateItem[]
+
+  @@map("pm_checklist_templates")
+}
+
+model ChecklistTemplateItem {
+  id                  String   @id @default(cuid())
+  templateId          String
+  stepNumber          Int
+  code                String
+  title               String
+  description         String?
+  recommendedSeniority String  @default("JUNIOR") // ASST_MANAGER, SENIOR, JUNIOR, TRAINEE
+  /// ponytail: legacy whole-day duration, no longer read; kept so old rows are not lost. Use defaultDurationHours.
+  defaultDurationDays Int      @default(1)
+  defaultDurationHours Float   @default(8)
+  isSimulationSignoff Boolean  @default(false)
+  dependsOnStep       Int?
+  sortOrder           Int      @default(1)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  template ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, stepNumber])
+  @@map("pm_checklist_template_items")
+}
+
+// =====================================================================================
+// PM :: Site Commissioning
+// =====================================================================================
+
+model CommissioningAssignment {
+  id           String    @id @default(cuid())
+  projectId    String
+  userId       String
+  assignedById String
+  assignedAt   DateTime  @default(now())
+  releasedAt   DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("pm_commissioning_assignments")
+}
+
+model CommissioningLog {
+  id           String    @id @default(cuid())
+  projectId    String
+  userId       String
+  loggedFor    DateTime  @db.Date     // the day on site - drives "days on site"
+  workDone     String
+  blocker      String?
+  approvedById String?
+  approvedAt   DateTime?
+  rejectedAt   DateTime?
+  decisionNote String?
+  createdAt    DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId, loggedFor])   // one log per engineer per project per day
+  @@index([projectId, loggedFor])
+  @@index([userId, loggedFor])
+  @@map("pm_commissioning_logs")
+}
+
