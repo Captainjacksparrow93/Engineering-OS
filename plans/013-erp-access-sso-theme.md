@@ -322,7 +322,11 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - Recreate the containers on it (volumes kept), then run `bench --site frontend migrate`.
   - In the notes, record the tag running and `docker inspect` creation times of image and container.
   - Re-check F7 (Director 21 roles, Sales Head 20 without `System Manager`), F8 and F9 **on the running containers**.
-- [ ] **F12: login page and desk look.**
+- [ ] **F12: login page and desk look.** Also fix what the F3 screenshots (`erpnext_selling_workspace.png`, `erpnext_sales_order_form.png`) show:
+  - **The child table (Sales Order items) renders as a solid black row**, and so does the "Add row/Add multiple" bar. A theme rule is painting the grid with `ink`; grid rows should be `surface` with `hairline` borders.
+  - **Input fields have no visible border** (e.g. Customer, WO Number, Delivery Date), so they read as plain text. Inputs need the `.input` look: 1px `hairline-strong` border, 8px radius, ink focus ring.
+  - **Hide ERPNext's "Getting Started" onboarding panel** and its sidebar entry for everyone (setting or CSS; record which).
+  - Chart colours (the pink line) should use ink/neutral, or `success`/`error` only where they mean something.
   - Our ACS logo instead of ERPNext's on the login page and the desk top bar.
   - Hide the "Login with Email Link" button (turn the setting off for real, and confirm the button is gone).
   - Make sure F8 hides the **Projects** tile on the `/desk` home screen in v16 (whatever setting drives it), and record which one.
@@ -335,3 +339,19 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - **Help menu:** remove the links to Frappe/ERPNext docs, forum and "What's new". Keep only **About**, because ERPNext and Frappe are GPLv3 and the license notice must stay reachable (nowhere prominent is needed). Don't remove license or copyright files from the source.
   - **Prove it:** search the rendered login page, desk home, a Sales Order form, a printed Sales Order PDF and a test email preview for "ERPNext" and "Frappe" (case-insensitive) and paste the hits, which should be none except the About dialog. Screenshots go with F3.
 - [ ] **F3 (still open):** the browser screenshots, **after F10–F13**: login page, desk home, Selling workspace, Sales Order list, Sales Order form, Customer form, next to our Director dashboard and Clients page. Plus the network tab showing nothing from Google.
+
+**Re-review 2026-10-02, commit `ec349f4` (F10, plus F3 evidence). Verdict: F10 accepted; F3 evidence received but it shows UI defects (added to F12); F11, F12, F13 and F14 open.**
+- **F10 ok:**
+  - Fixtures no longer ship the role or Custom DocPerms. Patch `acs_erp.patches.drop_engos_integration` deletes the `EngOS Integration` Custom DocPerms, resets custom perms for Sales Order, Customer and Item, moves `engos-api` to `Sales User`, and deletes the role.
+  - `sso.login` refuses any user with an `api_key`.
+  - Claude confirmed the API-key guard and the patch are present **inside** the running container.
+  - Notes show Director and Sales Head can read and create Customer, Item, Sales Order and Quotation; a Sales Order was submitted as the Sales Head; `engos-api` writes the link fields and its SSO pass gets 401.
+- **F11 still matters:** the running backend container was created 2026-10-01 from an image that now has no tag (`b873fbcc1104`). The new code got there by copying files into the container, not from a fresh tagged image. For the VPS, the image must contain everything: rebuild as `-acs2`, recreate, migrate, and re-check.
+- **F3 evidence:** 10 screenshots plus a Playwright walkthrough (`scripts/verify_browser.py`): SSO as Director (System Manager + 20 roles) and Sales Head (20 roles, System Settings blocked); 0 requests to Google or CDNs. Good proof of the flow. The look still needs F12 and F13, so F3 gets re-shot after them.
+- **The F3 notes contradict F10:** they say `_ensure_docperms()` now calls `setup_custom_perms()` "before adding EngOS Integration", but F10 removed both. Correct the F3 note.
+
+**New follow-up:**
+- [ ] **F14: evidence hygiene.**
+  - `scripts/verify_browser.py` hard-codes a fallback password (`SEED_PASSWORD` default). `AGENTS.md`: never hard-code a password. Read it **only** from the environment, and stop with a clear message if it's missing.
+  - Screenshots of local data don't belong in the repo (1.5 MB of images showing employee names and project data). Move `docs/screenshots/erp/` out of git (`git rm -r --cached`, add `docs/screenshots/` to `.gitignore`) and keep them locally, or in the plan notes as file paths only.
+  - Python dependencies for that script (Playwright) aren't part of the app; say in the notes how to install them, and don't add them to `package.json`.
