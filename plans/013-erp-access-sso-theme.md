@@ -242,3 +242,16 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - hide the `project` link field on Sales Order (and on Quotation, Sales Invoice and Purchase Order if present) with Property Setters, so nobody links an order to an ERPNext Project by mistake.
   - Check in the browser as a Director: no Projects workspace in the sidebar, no Project field on the Sales Order form, and `/app/project/new` refuses to create one.
 
+**Re-review 2026-10-02, commits `1941126` (F1, F2, F4, F5, F6) and `15a2de4` (F7, F8). Verdict: F1, F2 and F4–F8 accepted; F3 is still open, and one new follow-up (F9).**
+- **F1 ok:** `passcodec` refuses `administrator`/`guest` and malformed emails (plain-Python tested). `sso.login` refuses existing users holding `Administrator` or `EngOS Integration`, or who aren't `System User`.
+- **F2 ok (with a trade-off):** reproduced in real Chrome. Fixed by sending our origin as the referrer (`Referrer-Policy: origin-when-cross-origin` on `/erp/open`; the pass is in the POST body, so only our origin leaks) and allowing that origin in ERPNext's `allowed_referrers`. That relaxes Frappe's CSRF check for POSTs coming from our own app's origin only, which is acceptable because that origin is ours. **But it's a manual site setting, not in the repo** → F9.
+- **F4 ok:** no `.pyc` tracked; `.gitignore` covers it.
+- **F5 ok:** `bench build` failures now fail the image. `apps.txt`: on the VPS the `sites` volume is created fresh from the `acs-erpnext` image, so it already lists `acs_erp`. Only the old local volume needed the manual step.
+- **F6 ok:** the audit body is capped at 500; `erp.user_disabled` is audited on success.
+- **F7 ok:** roles taken from the real local site. Directors = `System Manager` + every module role (Sales/Purchase/Stock/Item/Delivery/Accounts/Manufacturing/Quality/Maintenance/Fleet/Support, plus the master-data roles). Sales Head = the same list without `System Manager`. Projects and HR roles left out. The TS and Python lists match.
+- **F8 ok:** the Projects workspace is hidden; `create` is removed on Project (standard and custom DocPerms, re-applied on every migrate); `before_insert` on Project throws a clear message; the `project` field is hidden on Sales Order, Quotation, Sales Invoice and Purchase Order (Property Setters).
+- **Tests re-run by Claude:** typecheck clean · `npm test` 13 files / 157 · `python -m unittest` OK. `npm run test:int` on a fresh CI-like database **not re-run**: Docker Desktop was stopped on the review host. Re-run at the F3 review.
+
+**Follow-ups (implementer):**
+- [ ] **F9: make the F2 setting reproducible.** Nothing in the repo sets `allowed_referrers` today, so the VPS install would bring back the "Invalid Request" bug. In `acs_erp`'s `after_install`/`after_migrate`, read the Engineering OS origin from a site-config key (e.g. `acs_erp_engos_origin`, such as `http://127.0.0.1:3001` locally) and make sure it is in `allowed_referrers` (idempotent, never removing other entries). Write the exact key and the local value in the notes. Claude will set the production origin in plan 012 part B.
+- F3 is still open: the browser check with screenshots (Director and Sales Head, the five ERPNext screens next to our Director dashboard and Clients page, and the network tab showing nothing from Google).

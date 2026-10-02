@@ -110,6 +110,7 @@ Prove, with measurements and real API calls, that ERPNext can run **on the curre
 
 ### B. VPS (Claude only, each step after the user approves it). Antigravity: stop after step 5
 **Deferred (user decision 2026-10-01): all ERP development is done and tested locally first (plans 013–015). Part B runs after plan 015 is reviewed, using the `acs-erpnext` image from plan 013 instead of the stock one, and adds the public HTTPS route (Traefik) at that point.**
+**For part B (from plan 013's review):** set `acs_erp_sso_secret` and `acs_erp_engos_origin` (the production Engineering OS origin, for `allowed_referrers`) in the site config; build the `sites` volume fresh from the `acs-erpnext` image; set `ERPNEXT_PUBLIC_URL`, `ERPNEXT_URL` and `ERP_SSO_SECRET` in `/root/engos-docker/.env`.
 - [ ] **6. Check headroom (gate 2, read-only).**
   - Record `free -m` and `docker stats --no-stream` at 3 different times of a working day.
   - Gate: available memory minus the **sum of the ERPNext `mem_limit` caps** (the most ERPNext can ever take, not the measured peak) must leave **≥ 1.5 GB**.
