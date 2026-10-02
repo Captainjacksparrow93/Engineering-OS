@@ -106,7 +106,7 @@ Plan 014 links new projects to orders (`Project.erpSalesOrder`, `Task.erpOrderIt
     - run `--apply` a second time and show 0 created;
     - open three imported orders in ERPNext in the browser.
   - Paste the summaries into notes.
-- [ ] **3. `syncOrderChanges`.** It fetches linked orders modified after the stored `erpOrderModified`, then applies these rules per project:
+- [x] **3. `syncOrderChanges`.** It fetches linked orders modified after the stored `erpOrderModified`, then applies these rules per project:
   - **Client PO** → `clientPoNumber`.
   - **Order delivery date** → `targetEndDate`.
   - **Item row delivery dates** → the matching panels' PHASE `plannedEnd` (matched by `Task.erpOrderItem`). ERP wins even if a task ends later; the existing Late logic shows it.
@@ -220,5 +220,20 @@ Projects: 4 created, 0 linked, 8 skipped, 0 failed
     - Second `--apply`: `Clients: 0 created, 0 linked, 0 skipped, 0 failed` / `Projects: 0 created, 0 linked, 8 skipped, 0 failed`
     - In ERPNext (desk, Director via SSO): SAL-ORD-2026-00005 (To Deliver, ACS-0006-0001, 2 × PLC + 1 × HMI), SAL-ORD-2026-00006 (To Deliver, ACS-0009-0001, SCADA rows with two dates), SAL-ORD-2026-00007 (**Closed**, ACS-0008-0001): each shows "Imported from Engineering OS" ticked, WO, project code and link.
   - **Test counts:** typecheck clean; `npm test` 14 files / 168 passed; `npm run test:int` 18 files / 99 passed; build clean; acs_erp 25 OK.
+- **Step 3 (`syncOrderChanges`, `src/modules/erp/sync.ts`):**
+  - **Which orders:** linked projects of the company; one `erpList` of orders with `modified >` the **oldest** stored `erpOrderModified` (for one project: also `name =` its order; for all: `custom_project_link is set`). Then each order is applied only if its `modified` is newer than **that project's** `erpOrderModified`. The plan says "since the newest". With the newest, a change to an order whose project was synced earlier than another's would be skipped forever, so I used the oldest. `modified` stays ERPNext's own string and is only compared as a string or passed back in a filter.
+  - **Rules, in order, for one order:**
+    1. `docstatus` 2 → alert only ("Order cancelled in ERP. Nothing was changed or deleted here."). Nothing else is applied.
+    2. Status Closed while the project is open → alert.
+    3. `po_no` → `clientPoNumber`.
+    4. `delivery_date` → `targetEndDate`.
+    5. `custom_wo_number` → `workOrderNo`; another project already has it, or it isn't digits → alert, WO unchanged.
+    6. Customer: if `order.customer` is the linked customer, or a customer with the same `custom_acs_reference` (a renamed ERPNext doc), its `customer_name` renames our client through **`renameClientCascade`**. That function is extracted from `updateClient` (which now uses it), so the project `clientName` cascade is shared. A different customer, or a name another client already has → alert, client unchanged.
+    7. Rows, matched by `Task.erpOrderItem`: a row's `delivery_date` → its panels' PHASE `plannedEnd` (ERP wins). More units than we have, or a new row → panels appended. Fewer units → alert naming the kept panels. A row gone → alert naming the kept panels. An item that isn't an active template → alert.
+  - **Appended panels:** built by **`createPanelTasks`**, extracted from `createAutomationProject` (which now calls it per panel; all existing tests unchanged and green): PHASE + template steps + in-panel dependencies. Next "<TYPE> Panel N", next `-PH`/`-T` numbers, every step assigned to the PM, `erpOrderItem` = `<row>#<unit>`, the type added to `automationTypes`, and an alert "PLC Panel 3, HMI Panel 1 added from the sales order and assigned to the PM: assign engineers."
+  - **Alerts:** new lines are appended to `erpOrderAlert` (a line that is already there is not repeated, so a standing condition like "order closed" doesn't re-alert on later changes), `erpOrderAlertAt` set, and `notify` each active Director ("Order changed: review <code>", link `/pm/projects/<id>`). The update, panels, rename, audit and notifications are in one transaction. Then `erpOrderModified` = the order's `modified`. Audit `erp.order_synced`, `actorId` null, with the changed fields, panel dates, client rename, added panels and alerts. No change → no write: unchanged `modified` makes no call to the order and no write.
+  - **Wiring:** `getProjectWorkspace` → `syncProjectOrderSafely` (this project); `listProjects` → `syncAllOrdersSafely` (all; at most once per 5 minutes per process per company). Both swallow and log errors. **Addition:** after an ERP failure, both skip syncing for 60 s, so a down ERPNext doesn't add its timeout to every page load. ERP off → no call.
+  - **Tests** (`src/modules/erp/sync.int.test.ts`, 11, ERP mocked): ERP off; no change → no write; PO + dates without alert, audited with null actor; WO follows / clash alerts; customer rename cascades / name clash alerts; added panels (qty up + new row) appended to the PM with steps, `erpOrderItem`, alert and a notification to every Director; reduced qty + removed row + cancelled order only alert and keep every task; the same change twice → no duplicates; a standing condition isn't re-alerted; ERP down → page loads; page sync + list sync throttled to 5 minutes (fake clock). Checked they bite: removing the WO clash check, the throttle, the add rule or the alert dedupe each turns tests red.
+  - **Test counts:** typecheck clean; `npm test` 14 files / 168 passed; `npm run test:int` 19 files / 110 passed; build clean; acs_erp 25 OK.
 
 ## Review (Claude)

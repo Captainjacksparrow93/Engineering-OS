@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '@/core/db/prisma';
+import { prisma, type Tx } from '@/core/db/prisma';
 import { assertCan } from '@/core/rbac/guard';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { DomainError, ForbiddenError } from '@/core/rbac/errors';
@@ -68,6 +68,125 @@ export interface CreateAutomationProjectInput {
   scopes?: ScopeSelection[];
   tasks?: TaskAssignmentDraft[];
   panelDeliveryDates?: Record<string, string>;
+}
+
+type PanelTemplate = {
+  code: string;
+  name: string;
+  items: Array<{
+    stepNumber: number;
+    title: string;
+    description: string | null;
+    defaultDurationHours: number;
+    dependsOnStep: number | null;
+    isSimulationSignoff: boolean;
+  }>;
+};
+
+/**
+ * One panel: its PHASE task plus the template's steps, planned to end by the delivery date,
+ * with Finish-to-Start dependencies inside the panel. Used by New project and by the ERP
+ * order sync when an order gains panels. Returns how many step tasks it created.
+ */
+export async function createPanelTasks(
+  tx: Tx,
+  args: {
+    projectId: string;
+    projectCode: string;
+    template: PanelTemplate;
+    unit: number;
+    phaseNumber: number;
+    firstTaskNumber: number;
+    start: Date;
+    deliveryDate: Date;
+    createdById: string;
+    drafts?: TaskAssignmentDraft[];
+    /** Assignee for steps without a draft assignee (ERP-added panels go to the PM). */
+    defaultAssigneeId?: string;
+    erpOrderItem?: string | null;
+  },
+): Promise<number> {
+  const { template: tpl, start, deliveryDate } = args;
+  const stepHoursList = tpl.items.map((item) => item.defaultDurationHours);
+  const phaseTask = await tx.task.create({
+    data: {
+      projectId: args.projectId,
+      code: `${args.projectCode}-PH${args.phaseNumber}`,
+      title: `${tpl.code} Panel ${args.unit}`,
+      type: 'PHASE',
+      status: 'TODO',
+      priority: 'MEDIUM',
+      estimatedHours: stepHoursList.reduce((sum, h) => sum + h, 0),
+      createdById: args.createdById,
+      plannedStart: start,
+      plannedEnd: deliveryDate,
+      erpOrderItem: args.erpOrderItem ?? null,
+    },
+  });
+
+  // 1x template duration (multiplier removed)
+  const lanePlan = planLaneByHours(stepHoursList, start, workingDaysBetween(start, deliveryDate));
+
+  // Map stepNumber -> created task id for dependency wiring strictly within this panel
+  const stepTaskIdMap = new Map<number, string>();
+  let taskNumber = args.firstTaskNumber;
+  for (let idx = 0; idx < tpl.items.length; idx++) {
+    const item = tpl.items[idx]!;
+    const draft = args.drafts?.find((d) => d.stepNumber === item.stepNumber);
+
+    const taskStart = draft?.plannedStart ? new Date(draft.plannedStart) : lanePlan[idx]!.plannedStart;
+    const taskEnd = draft?.plannedEnd ? new Date(draft.plannedEnd) : lanePlan[idx]!.plannedEnd;
+    const estimatedHours = draft?.estimatedHours ?? stepHoursList[idx]!;
+    const hasBlocker = Boolean(item.dependsOnStep);
+
+    const task = await tx.task.create({
+      data: {
+        projectId: args.projectId,
+        parentId: phaseTask.id,
+        code: `${args.projectCode}-T${String(taskNumber++).padStart(3, '0')}`,
+        title: item.title,
+        description: item.description ?? `Standard step ${item.stepNumber} of ${tpl.name}`,
+        type: 'PROJECT',
+        status: hasBlocker ? 'BLOCKED' : 'TODO',
+        priority: item.isSimulationSignoff ? 'HIGH' : 'MEDIUM',
+        estimatedHours,
+        plannedStart: taskStart,
+        plannedEnd: taskEnd,
+        createdById: args.createdById,
+      },
+    });
+    stepTaskIdMap.set(item.stepNumber, task.id);
+
+    const assigneeId = draft?.assigneeId ?? args.defaultAssigneeId;
+    if (assigneeId) {
+      await tx.taskAssignment.create({
+        data: {
+          taskId: task.id,
+          userId: assigneeId,
+          role: 'OWNER',
+          allocatedHours: estimatedHours,
+          assignedById: args.createdById,
+        },
+      });
+    }
+  }
+
+  // Wire Finish-to-Start dependencies strictly within this panel
+  for (const item of tpl.items) {
+    const successorId = stepTaskIdMap.get(item.stepNumber);
+    const predStep = item.dependsOnStep;
+    if (successorId && predStep && stepTaskIdMap.has(predStep)) {
+      await tx.taskDependency.create({
+        data: {
+          predecessorId: stepTaskIdMap.get(predStep)!,
+          successorId,
+          type: 'FINISH_TO_START',
+          lagDays: 0,
+        },
+      });
+    }
+  }
+  return tpl.items.length;
 }
 
 /** In-memory BFS to find all descendants of a manager given a map of direct reports */
@@ -444,105 +563,21 @@ export async function createAutomationProject(principal: Principal, input: Creat
       if (!tpl) continue;
 
       for (let unit = 1; unit <= scope.quantity; unit++) {
-        const phaseTitle = `${tpl.code} Panel ${unit}`;
-        const phaseCode = `${project.code}-PH${phaseCounter++}`;
-        const panelHours = tpl.items.reduce((sum, item) => sum + item.defaultDurationHours, 0);
-
         const panelKey = `${scope.templateCode}_${unit}`;
         const rawPanelDate = panelDeliveryDates?.[panelKey];
-        const panelDeliveryDate = rawPanelDate ? new Date(rawPanelDate) : targetEnd;
-
-        // Create Phase task (container node for this panel)
-        const phaseTask = await tx.task.create({
-          data: {
-            projectId: project.id,
-            code: phaseCode,
-            title: phaseTitle,
-            type: 'PHASE',
-            status: 'TODO',
-            priority: 'MEDIUM',
-            estimatedHours: panelHours,
-            createdById: principal.userId,
-            plannedStart: start,
-            plannedEnd: panelDeliveryDate,
-            erpOrderItem: order?.panelOrderItems[panelKey] ?? null,
-          },
+        globalTaskCounter += await createPanelTasks(tx, {
+          projectId: project.id,
+          projectCode: project.code,
+          template: tpl,
+          unit,
+          phaseNumber: phaseCounter++,
+          firstTaskNumber: globalTaskCounter,
+          start,
+          deliveryDate: rawPanelDate ? new Date(rawPanelDate) : targetEnd,
+          createdById: principal.userId,
+          drafts: tasks.filter((d) => d.templateCode === scope.templateCode && d.unitIndex === unit),
+          erpOrderItem: order?.panelOrderItems[panelKey] ?? null,
         });
-
-        // 1x template duration (multiplier removed)
-        const stepHoursList = tpl.items.map((item) => item.defaultDurationHours);
-        const lanePlan = planLaneByHours(stepHoursList, start, workingDaysBetween(start, panelDeliveryDate));
-
-        // Map stepNumber -> created task id for dependency wiring strictly within this panel
-        const stepTaskIdMap = new Map<number, string>();
-        for (let idx = 0; idx < tpl.items.length; idx++) {
-          const item = tpl.items[idx];
-          const draft = tasks.find(
-            (d) =>
-              d.templateCode === scope.templateCode &&
-              d.unitIndex === unit &&
-              d.stepNumber === item.stepNumber,
-          );
-
-          const taskStart = draft?.plannedStart ? new Date(draft.plannedStart) : lanePlan[idx]!.plannedStart;
-          const taskEnd = draft?.plannedEnd ? new Date(draft.plannedEnd) : lanePlan[idx]!.plannedEnd;
-          const estimatedHours = draft?.estimatedHours ?? stepHoursList[idx]!;
-
-          const taskCode = `${project.code}-T${String(globalTaskCounter++).padStart(3, '0')}`;
-          const hasBlocker = Boolean(item.dependsOnStep);
-
-          const task = await tx.task.create({
-            data: {
-              projectId: project.id,
-              parentId: phaseTask.id,
-              code: taskCode,
-              title: item.title,
-              description: item.description ?? `Standard step ${item.stepNumber} of ${tpl.name}`,
-              type: 'PROJECT',
-              status: hasBlocker ? 'BLOCKED' : 'TODO',
-              priority: item.isSimulationSignoff ? 'HIGH' : 'MEDIUM',
-              estimatedHours,
-              plannedStart: taskStart,
-              plannedEnd: taskEnd,
-              createdById: principal.userId,
-            },
-          });
-
-          stepTaskIdMap.set(item.stepNumber, task.id);
-
-          // Assignee
-          const assigneeId = draft?.assigneeId;
-          if (assigneeId) {
-            await tx.taskAssignment.create({
-              data: {
-                taskId: task.id,
-                userId: assigneeId,
-                role: 'OWNER',
-                allocatedHours: estimatedHours,
-                assignedById: principal.userId,
-              },
-            });
-          }
-        }
-
-        // Wire Finish-to-Start dependencies strictly within this panel
-        for (const item of tpl.items) {
-          const successorId = stepTaskIdMap.get(item.stepNumber);
-          if (!successorId) continue;
-
-          const predStep = item.dependsOnStep;
-          if (predStep && stepTaskIdMap.has(predStep)) {
-            const predecessorId = stepTaskIdMap.get(predStep)!;
-            await tx.taskDependency.create({
-              data: {
-                predecessorId,
-                successorId,
-                type: 'FINISH_TO_START',
-                lagDays: 0,
-              },
-            });
-          }
-        }
       }
     }
 

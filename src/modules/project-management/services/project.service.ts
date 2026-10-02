@@ -14,6 +14,7 @@ import { computeSchedule, rollUpProgress, type Graph } from '../domain/schedulin
 import { activeLeafTasks, forecastFinish, isLaneLate, projectStepStats } from '../domain/portfolio';
 import { formatName } from '@/core/utils/strings';
 import { startOfDay, todayInIndia } from '@/core/utils/dates';
+import { syncAllOrdersSafely, syncProjectOrderSafely } from '@/modules/erp/sync';
 import { getClientById } from './client.service';
 
 
@@ -512,6 +513,7 @@ export interface ProjectListFilters {
 }
 
 export async function listProjects(principal: Principal, filters: ProjectListFilters = {}) {
+  await syncAllOrdersSafely(principal.companyId);
   const whereClauses: Prisma.ProjectWhereInput[] = [
     projectVisibilityWhere(principal),
   ];
@@ -591,6 +593,7 @@ export async function listProjects(principal: Principal, filters: ProjectListFil
  */
 export async function getProjectWorkspace(principal: Principal, projectId: string) {
   await assertProjectVisible(principal, projectId);
+  await syncProjectOrderSafely(principal.companyId, projectId);
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
