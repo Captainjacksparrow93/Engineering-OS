@@ -188,6 +188,12 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
       2. Set `create = 0` on `tabDocPerm` and `tabCustom DocPerm` for `Project` DocType across all roles.
       3. Set `hidden = 1` on `project` link field on `Sales Order`, `Quotation`, `Sales Invoice`, and `Purchase Order` using `frappe.make_property_setter`.
     - In `erp/acs_erp/acs_erp/events.py` and `hooks.py`: added `before_insert` document hook on `Project` DocType throwing `frappe.throw` to block manual project creation in ERPNext desk.
+  - **F9 (reproducible allowed_referrers via acs_erp_engos_origin):**
+    - Site-config key: `acs_erp_engos_origin`. Local value: `"http://127.0.0.1:3001"`.
+    - In `erp/acs_erp/acs_erp/install.py`: added `_ensure_allowed_referrers()` called in `after_install` (which runs on both install and migrate). Reads `acs_erp_engos_origin` and idempotently appends any missing origins to `allowed_referrers` via `frappe.installer.update_site_config`, preserving all existing entries.
+    - Verified locally on running container: set `acs_erp_engos_origin` to `http://127.0.0.1:3001`, reset `allowed_referrers` to `["http://127.0.0.1:8080"]`, ran `bench --site frontend migrate`, and confirmed `site_config.json` was updated to `["http://127.0.0.1:8080", "http://127.0.0.1:3001"]`.
+    - Added unit test suite in `erp/acs_erp/acs_erp/tests/test_install.py` (5 tests passing).
+    - Rebuilt Docker image `acs-erpnext:v16.37.0-acs1`.
 
 
 ## Review (Claude)
@@ -253,5 +259,5 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
 - **Tests re-run by Claude:** typecheck clean · `npm test` 13 files / 157 · `python -m unittest` OK. `npm run test:int` on a fresh CI-like database **not re-run**: Docker Desktop was stopped on the review host. Re-run at the F3 review.
 
 **Follow-ups (implementer):**
-- [ ] **F9: make the F2 setting reproducible.** Nothing in the repo sets `allowed_referrers` today, so the VPS install would bring back the "Invalid Request" bug. In `acs_erp`'s `after_install`/`after_migrate`, read the Engineering OS origin from a site-config key (e.g. `acs_erp_engos_origin`, such as `http://127.0.0.1:3001` locally) and make sure it is in `allowed_referrers` (idempotent, never removing other entries). Write the exact key and the local value in the notes. Claude will set the production origin in plan 012 part B.
+- [x] **F9: make the F2 setting reproducible.** Nothing in the repo sets `allowed_referrers` today, so the VPS install would bring back the "Invalid Request" bug. In `acs_erp`'s `after_install`/`after_migrate`, read the Engineering OS origin from a site-config key (e.g. `acs_erp_engos_origin`, such as `http://127.0.0.1:3001` locally) and make sure it is in `allowed_referrers` (idempotent, never removing other entries). Write the exact key and the local value in the notes. Claude will set the production origin in plan 012 part B.
 - F3 is still open: the browser check with screenshots (Director and Sales Head, the five ERPNext screens next to our Director dashboard and Clients page, and the network tab showing nothing from Google).

@@ -69,7 +69,52 @@ def after_install():
     # 7. Hide Projects module and disable Project creation (F8)
     _hide_projects_module()
 
+    # 8. Ensure Engineering OS origin is in allowed_referrers (F9)
+    _ensure_allowed_referrers()
+
     frappe.db.commit()
+
+
+def _ensure_allowed_referrers():
+    """Ensures Engineering OS origin from site config (acs_erp_engos_origin) is in allowed_referrers."""
+    try:
+        from frappe.installer import update_site_config
+
+        engos_origin = frappe.conf.get("acs_erp_engos_origin")
+        if not engos_origin:
+            return
+
+        if isinstance(engos_origin, str):
+            origins = [o.strip() for o in engos_origin.split(",") if o.strip()]
+        elif isinstance(engos_origin, (list, tuple)):
+            origins = [str(o).strip() for o in engos_origin if str(o).strip()]
+        else:
+            origins = []
+
+        if not origins:
+            return
+
+        current_referrers = frappe.conf.get("allowed_referrers") or []
+        if isinstance(current_referrers, str):
+            current_referrers = [current_referrers.strip()]
+        elif isinstance(current_referrers, (list, tuple)):
+            current_referrers = list(current_referrers)
+        else:
+            current_referrers = []
+
+        modified = False
+        for origin in origins:
+            if origin not in current_referrers:
+                current_referrers.append(origin)
+                modified = True
+
+        if modified:
+            update_site_config("allowed_referrers", current_referrers)
+            frappe.logger("acs_erp").info(
+                f"Updated allowed_referrers in site_config to include: {origins}"
+            )
+    except Exception as e:
+        frappe.logger("acs_erp").error(f"Failed to update allowed_referrers: {e}")
 
 
 def _hide_projects_module():
