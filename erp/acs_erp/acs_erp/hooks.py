@@ -48,6 +48,7 @@ fixtures = [
                     "Sales Order-custom_wo_number",
                     "Sales Order-custom_project_code",
                     "Sales Order-custom_project_link",
+                    "Sales Order-custom_imported",
                     "Customer-custom_acs_reference",
                 ],
             ]

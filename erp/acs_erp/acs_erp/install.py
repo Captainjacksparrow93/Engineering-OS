@@ -235,6 +235,15 @@ def _ensure_custom_fields():
             "allow_on_submit": 1,
         },
         {
+            "dt": "Sales Order",
+            "fieldname": "custom_imported",
+            "label": "Imported from Engineering OS",
+            "fieldtype": "Check",
+            "insert_after": "custom_project_link",
+            "read_only": 1,
+            "allow_on_submit": 0,
+        },
+        {
             "dt": "Customer",
             "fieldname": "custom_acs_reference",
             "label": "ACS Reference",

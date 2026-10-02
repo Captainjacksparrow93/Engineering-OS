@@ -429,6 +429,8 @@ model Project {
   erpSalesOrder    String?         @unique
   clientPoNumber   String?
   erpOrderModified String?
+  erpOrderAlert    String?
+  erpOrderAlertAt  DateTime?
   name             String
   description      String?
   clientId         String?

@@ -1,6 +1,6 @@
 # 015 — ERP: backfill existing clients and projects, and keep order changes in sync
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity · **Branch:** `erp` · **Depends on:** 014 REVIEWED
 
 ## Goal
@@ -80,7 +80,7 @@ Plan 014 links new projects to orders (`Project.erpSalesOrder`, `Task.erpOrderIt
 - If a tool is missing or fails, say so in Implementation notes.
 
 ## Steps
-- [ ] **1. Mark imported orders, and add the alert columns.**
+- [x] **1. Mark imported orders, and add the alert columns.**
   - `acs_erp` adds `custom_imported` (Check, read-only, "Imported from Engineering OS") to Sales Order. Rebuild the image as the next tag, recreate, migrate, and confirm the field exists.
   - Add the migration `erp_order_alerts` (`Project.erpOrderAlert`, `Project.erpOrderAlertAt`).
 - [ ] **2. Backfill script `prisma/scripts/erp-backfill.ts`.**
@@ -158,5 +158,17 @@ Plan 014 links new projects to orders (`Project.erpSalesOrder`, `Task.erpOrderIt
 - [ ] ERP off or down never breaks a page.
 
 ## Implementation notes (implementer)
+- **Order of work:** started right after 014 reached DONE (not yet REVIEWED), because the user asked for 014 → 015 → 017 in one go. Same container as 014 step 8: code-review-graph, Token Savior and sequential-thinking are not available here, so callers come from text search and the ordering reasoning is written out in these notes. Local ERPNext: `/var/tmp/erpnext-local` (see plan 014 step 8 notes).
+- **Step 1 (imported flag and alert columns):**
+  - `acs_erp`: `custom_imported` (Check, read-only, "Imported from Engineering OS", after `custom_project_link`) on Sales Order, added in `_ensure_custom_fields` (`install.py`), in `fixtures/custom_field.json` and in the `hooks.py` fixture filter, so the three lists agree.
+  - New Python test `erp/acs_erp/acs_erp/tests/test_custom_fields.py` (2): the field is created as a read-only Check on Sales Order, and the fixture and hooks list it (red first: 2 failures; then green).
+  - **Image `acs-erpnext:v16.37.0-acs7`** (same local-only proxy-CA build copy as acs6), `CUSTOM_TAG` switched, `docker compose … up -d --force-recreate`, `bench --site frontend migrate` OK; backend runs `acs-erpnext:v16.37.0-acs7`. The API now returns `custom_imported: 0` on SAL-ORD-2026-00001.
+  - Prisma: `Project.erpOrderAlert String?`, `Project.erpOrderAlertAt DateTime?`; migration `20261002173213_erp_order_alerts`:
+    ```sql
+    ALTER TABLE "pm_projects" ADD COLUMN     "erpOrderAlert" TEXT,
+    ADD COLUMN     "erpOrderAlertAt" TIMESTAMP(3);
+    ```
+    Applied to the dev DB with `npx prisma migrate dev --name erp_order_alerts`; `prisma migrate diff` (migrations vs schema): no difference. (`prisma format` re-aligned 115 unrelated schema lines; reverted, only the two new lines are in the diff.)
+  - **Test counts:** typecheck clean; `npm test` 14 files / 165 passed; `npm run test:int` 17 files / 95 passed; build clean; `python3 -m unittest discover -s erp/acs_erp` 25 tests OK.
 
 ## Review (Claude)
