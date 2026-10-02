@@ -1,6 +1,6 @@
 # 016 — ERP release: ERPNext on the VPS, merge `erp` to `main`, backfill production
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity (steps 1–2) and **Claude** (steps 3–9, each VPS or production change only after the user approves it) · **Branch:** `erp`, then `main` · **Depends on:** 013, 014, 015 REVIEWED
 
 ## Goal
@@ -50,7 +50,7 @@ The rule in `CLAUDE.md` holds: **ERPNext must be on the VPS before `erp` merges 
 - If a tool is missing or fails, say so in notes.
 
 ## Steps
-- [ ] **1. (Antigravity) F12c: readable tile icons.** As written in plan 013, F12c: a dark tile with a white symbol (e.g. `filter: grayscale(1) contrast(8) brightness(0.9)`), and the ACS logo not affected. Rebuild as the next tag, check it in the browser, and note what you saw.
+- [x] **1. (Antigravity) F12c: readable tile icons.** As written in plan 013, F12c: a dark tile with a white symbol (e.g. `filter: grayscale(1) contrast(8) brightness(0.9)`), and the ACS logo not affected. Rebuild as the next tag, check it in the browser, and note what you saw.
 - [ ] **2. (Antigravity) Bring `main` into `erp` and re-run everything.**
   - This is an exception to "never merge `main` into `erp`". **Wait until the user says "merge main into erp" in chat**; until then, this step is blocked.
   - Merge `main` into `erp`, resolve conflicts (plans and docs keep both sides), and run the full suite, including a fresh CI-like DB.
@@ -98,5 +98,10 @@ The rule in `CLAUDE.md` holds: **ERPNext must be on the VPS before `erp` merges 
 - [ ] Docs updated, and plans 012–016 closed.
 
 ## Implementation notes (implementer / Claude)
+- **Order of work:** started after 014, 015 and 017 reached DONE (not yet REVIEWED), as the user asked. Same cloud container as those plans (local ERPNext in `/var/tmp/erpnext-local`; graph / Token Savior / sequential-thinking not available here).
+- **Step 1 (F12c, readable tile icons):** `acs_theme.css` section 7: the filter on the same selectors as F12b (`.icon-container img.app-icon`, `.desktop-icon img.app-icon`, `.header-logo img`, `.sidebar-header img`, `.sidebar-item-icon img`, `.dropdown-menu-item .sidebar-item-icon img`) is now `grayscale(1) contrast(8) brightness(0.9)` instead of `grayscale(100%) brightness(0.2)`. Section comment updated. No other CSS changed.
+  - **Image `acs-erpnext:v16.37.0-acs9`** (local-only proxy-CA build copy as in 014–017), containers recreated, `bench --site frontend migrate` OK; backend and frontend run `acs9`.
+  - **What I saw (Director via our SSO, full Chromium):** *before* (acs8): every desk tile a near-black square with a dark-grey symbol you can hardly see. *After* (acs9): desk home tiles (Organization, Accounting, Assets, Buying, Manufacturing, Quality, Selling, Stock, Subcontracting, ERP Settings) are near-ink squares with **crisp white symbols**, easy to tell apart; the Accounting folder tile shows its four mini-icons in ink on the light tile; the **Framework** tile comes out mid-grey with a white symbol (Frappe's own logo SVG has a lighter source colour than the ERPNext icons; still readable). Selling workspace: the sidebar header icon is a white symbol on an ink square. The **ACS logo** in the top bar is `.navbar-home img`, which none of the selectors match: computed `filter: none`, still in its own colours.
+  - **Test counts:** acs_erp 46 OK; typecheck clean; `npm test` 168 passed; `npm run test:int` 20 files / 113 passed; build clean.
 
 ## Review (Claude)

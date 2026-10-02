@@ -276,9 +276,11 @@ textarea.form-control:focus {
   display: none !important;
 }
 
-/* 7. Desk tiles & workspace icons neutralized (F12, F12b)
+/* 7. Desk tiles & workspace icons neutralized (F12, F12b, F12c)
    Replace bright blue desktop tiles and sidebar workspace icons with neutral / ink.
-   App icons are SVGs with hardcoded blue #0289F7. We filter them to neutral ink (#1a1a19). */
+   App icons are SVGs: a blue (#0289F7) tile with a white symbol. grayscale + high contrast
+   turns the tile near-ink and keeps the symbol white (brightness alone darkened both).
+   The ACS logo in the top bar (.navbar-home img) is not matched and keeps its colours. */
 .desktop-icon .icon-container,
 .sidebar-header .sidebar-item-icon,
 .header-logo-container {
@@ -298,7 +300,7 @@ textarea.form-control:focus {
 .sidebar-header img,
 .sidebar-item-icon img,
 .dropdown-menu-item .sidebar-item-icon img {
-  filter: grayscale(100%) brightness(0.2) !important;
+  filter: grayscale(1) contrast(8) brightness(0.9) !important;
 }
 
 /* 8. Chart colors (F12, F12b)
