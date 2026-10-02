@@ -510,7 +510,7 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
 - **Icons not ok:** `filter: grayscale(100%) brightness(0.2)` darkens the **white symbol too**, so every desk tile and the sidebar workspace icon are a near-black square with a barely visible dark-grey symbol. Nobody can tell Selling from Stock. The notes checked only the computed `filter` value, not what it looks like.
 
 **New follow-up:**
-- [ ] **F12c: readable tile icons.**
+- [ ] **F12c: readable tile icons.** **Deferred (user, 2026-10-02): skip for now; do it before the ERP deploy.** Move on to F14.
   - Change the filter so the tile goes dark and the symbol stays white. Claude tried `filter: grayscale(1) contrast(8) brightness(0.9)` on `.desktop-icon img.app-icon` in the browser: a near-ink tile with a crisp white symbol. Use that or something equivalent, on the same selectors as F12b.
   - Check that the ACS logo in the top bar is **not** caught by the `.sidebar-header img` / `.header-logo img` selectors (it must keep its own colours).
   - Look at the desk home and the Selling sidebar in the browser, and in the notes say what you saw, not only computed CSS values.
