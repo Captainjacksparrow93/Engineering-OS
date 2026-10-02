@@ -244,6 +244,15 @@ def _ensure_custom_fields():
             "allow_on_submit": 0,
         },
         {
+            "dt": "Item",
+            "fieldname": "custom_maker_part_no",
+            "label": "Maker part no.",
+            "fieldtype": "Data",
+            "insert_after": "item_name",
+            "in_standard_filter": 1,
+            "allow_on_submit": 0,
+        },
+        {
             "dt": "Customer",
             "fieldname": "custom_acs_reference",
             "label": "ACS Reference",
@@ -261,6 +270,17 @@ def _ensure_custom_fields():
                 **cf,
             })
             doc.insert(ignore_permissions=True)
+
+    # Plan 017: find items by the maker's part number in the Item search.
+    search_fields = [f.strip() for f in (frappe.get_meta("Item").search_fields or "").split(",") if f.strip()]
+    if "custom_maker_part_no" not in search_fields:
+        frappe.make_property_setter({
+            "doctype": "Item",
+            "doctype_or_field": "DocType",
+            "property": "search_fields",
+            "value": ",".join(search_fields + ["custom_maker_part_no"]),
+            "property_type": "Data",
+        })
 
 
 def update_api_user():

@@ -44,6 +44,17 @@
   },
   {
     "doctype": "Custom Field",
+    "name": "Item-custom_maker_part_no",
+    "dt": "Item",
+    "fieldname": "custom_maker_part_no",
+    "label": "Maker part no.",
+    "fieldtype": "Data",
+    "insert_after": "item_name",
+    "in_standard_filter": 1,
+    "allow_on_submit": 0
+  },
+  {
+    "doctype": "Custom Field",
     "name": "Customer-custom_acs_reference",
     "dt": "Customer",
     "fieldname": "custom_acs_reference",

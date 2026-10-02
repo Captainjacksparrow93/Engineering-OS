@@ -97,7 +97,7 @@ Evidence (read from the file 2026-10-02):
   - commits once at the end when `apply=True`; any exception rolls the whole run back;
   - **output:** a summary line (`created / updated / unchanged / skipped / errors`, plus new groups and brands) and one line per non-unchanged row with the reason. Print it, and return it as a dict for the tests.
   - Tests cover: dry run writes nothing; apply creates; second apply → 0 created, 0 updated; one changed field → 1 updated; an error row doesn't stop the other rows but is listed.
-- [ ] **4. Custom field `Item-custom_maker_part_no`** in `_ensure_custom_fields`, `fixtures/custom_field.json` and the `hooks.py` fixtures filter. Extend `test_install.py` for it. Rebuild the image as the next `-acsN` tag, recreate the containers, run `bench --site frontend migrate`, and confirm the field shows on the Item form.
+- [x] **4. Custom field `Item-custom_maker_part_no`** in `_ensure_custom_fields`, `fixtures/custom_field.json` and the `hooks.py` fixtures filter. Extend `test_install.py` for it. Rebuild the image as the next `-acsN` tag, recreate the containers, run `bench --site frontend migrate`, and confirm the field shows on the Item form.
 - [ ] **5. Run it on the local ERPNext** with the real file. Copy `docs/erp/demo-items-2026-10-02.xlsx` into the backend container (`docker cp`), then:
   - dry run → paste the summary (expect 38 to create, 3 new groups, 1 brand, 0 errors);
   - `apply=True` → paste the summary;
@@ -130,6 +130,9 @@ Evidence (read from the file 2026-10-02):
   - **Output:** one line per non-unchanged row (`ASPLC…: create` / `would create` / `update <fields>`, plus the error/skip lines), then a summary line (`created / updated / unchanged / skipped / errors; new item groups …; new brands …`). The dict is returned for tests (and printed by `bench execute`).
   - Tests: dry run writes nothing; apply creates groups parent-first, the brand and items, commits once; second apply → 0 created / 0 updated; one changed field → 1 updated (and a non-mapped field left alone); an error row and a panel-item row are listed while the rest import; a failure mid-run rolls back (0 commits, 1 rollback); a missing column stops before any write.
   - **Test counts:** `python3 -m unittest discover -s erp/acs_erp` 43 OK. No JS change in this step.
+- **Step 4 (custom field):** `Item-custom_maker_part_no` (Data, "Maker part no.", after `item_name`, `in_standard_filter` 1) added to `_ensure_custom_fields`, `fixtures/custom_field.json` and the `hooks.py` fixture filter (only that list; no other hook touched). For "search fields", `_ensure_custom_fields` also appends `custom_maker_part_no` to Item's `search_fields` with a Property Setter, only if it isn't there (idempotent; Custom Field has no search-fields flag of its own). `test_install.py` +3 (field props; property setter set once and not again; fixture + hooks list it), red first (2 failures, 1 error) → green.
+  - **Image `acs-erpnext:v16.37.0-acs8`** (same local-only proxy-CA build copy), `CUSTOM_TAG` switched, containers recreated, `bench --site frontend migrate` OK, backend running `acs8`. `frappe.get_meta("Item")`: field "Maker part no." Data, standard filter 1; `search_fields` = `item_name,description,item_group,customer_code,custom_maker_part_no`. In the browser (Director via SSO, full Chromium) the Item form for `PLC` shows "Maker part no.".
+  - **Test counts:** acs_erp 46 OK. No JS change in this step.
 
 ## Review (Claude)
 <verdict, follow-ups>
