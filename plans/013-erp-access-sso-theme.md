@@ -476,3 +476,12 @@ Decisions this builds on (`CLAUDE.md`, "ERP"):
   - Chart area fill: neutral (`#f0f0ea` / ink at low opacity), not pink.
   - Verify in the browser at desktop width (desk, Selling workspace, Sales Order form) and say in the notes what you looked at. Keep screenshots out of git (F14).
 - Note for F13: the login page still includes `/assets/erpnext/images/erpnext-logo.svg` (the loading splash). It's part of F13's logo item.
+
+**Re-review 2026-10-02, commit `e362e5b` (F13). Verdict: F13 accepted. F12b is still open (it was next in order and was skipped).** Claude checked in the browser on `acs4` (backend created 13:00 IST), signed in through SSO as the Sales Head.
+- **Visible text has no "ERPNext" or "Frappe":** desk home (the tile now reads "ERP Settings"), the Sales Order form `SAL-ORD-2026-00052`, its print view, and the logged-out `/login` page. The only matches are asset paths inside `<script>` tags, which nobody sees.
+- **Logos:** the favicon and every login-page image, including the loading splash, are `acs-logo.svg`. `app_data` titles are "ERP" and "Engineering OS · ERP"; `__('ERPNext')` returns "ERP".
+- **Help menu:** only "About" is left (`tabNavbar Item`, `help_dropdown`).
+- **Small, no action needed:**
+  - `_prune_help_menu` hard-deletes the rows; setting `hidden = 1` would be gentler, but either is fine.
+  - The login tab title is just "Login", without the brand.
+- **Next in order:** F12b (blue tile icons, pink chart fill), then F14, then F15, then re-shoot F3.
