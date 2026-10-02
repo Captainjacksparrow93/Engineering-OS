@@ -242,3 +242,17 @@ Today none of this exists. `createAutomationProject` takes client, WO and panels
 - Postgres allows many NULLs under a unique index, so the existing rows are unaffected. Tested on a fresh CI-like DB.
 - **`erpOrderModified` is `TEXT`, not a timestamp.** Fine, and arguably better: keep it as ERPNext's own `modified` string (site time, no timezone) and only ever pass it back in ERPNext filters (`modified > value`). Don't turn it into a JS `Date` (steps 5 and 015).
 - **Next: step 3** (order service).
+
+**Review 2026-10-02, commit `894c152` (step 3). Verdict: accepted, with one real bug to fix first (F2).**
+- **OK:**
+  - `getOrderForProject` refuses draft, cancelled, closed and already-linked orders (both systems), missing or non-digit WO, unknown item codes and zero quantities;
+  - units are numbered across rows, and `erpOrderItem` is `row#unitInRow`;
+  - the ACS reference is read from the customer.
+  - Claude ran `order.service.int.test.ts`: **12 passed**.
+- [ ] **F2: the waiting list misses orders.**
+  - **The bug:** `listWaitingOrders` calls `erpList` with no `limit`, so Frappe returns only its default page (20 rows) of submitted orders, sorted by `modified desc`, and our code filters them afterwards. The local site already has 50+ submitted orders. After plan 015's backfill, production will have one per existing project, all with `custom_project_code` set. A real waiting order older than the newest 20 orders would silently never appear.
+  - **Fix:** let ERPNext do the filtering: `docstatus = 1`, `custom_project_code` not set, and status not in `Closed`, `Completed`, `Cancelled`, `On Hold`. Ask for all rows (`limit_page_length` 0, or a stated high cap with a log line when it's hit).
+  - **Also refuse `On Hold`** in `getOrderForProject`, so the list and the check agree.
+  - **Optional (ponytail):** the per-order `erpGet` for item summaries is one call per waiting order. That's fine while the list is short. If you change it, use one list call with child-table fields, but don't build anything bigger.
+  - **Test:** the mock returns more than 20 orders, with the waiting one oldest, and it's still listed. Assert the filters sent to `erpList`.
+- **Note for step 5:** an order whose dates are too tight (the panel date before today, or shorter than the template's minimum working days) will be refused by `createAutomationProject`'s existing date checks. Make sure the message says to fix the dates **in ERP**.
