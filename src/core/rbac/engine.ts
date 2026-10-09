@@ -1,5 +1,5 @@
 import type { AccessScope, Grant, Principal } from './types';
-import type { PermissionKey } from './permissions';
+import { permissionModule, type PermissionKey } from './permissions';
 
 /**
  * The authorisation decision.
@@ -49,6 +49,13 @@ export function hasPermissionAnywhere(principal: Principal, permission: Permissi
   return principal.grants.some((g) => g.permission === permission);
 }
 
+/** Where a person lands after sign-in: the dashboard, Sales for salespeople, else their own work. */
+export function homePath(principal: Pick<Principal, 'grants'>): string {
+  if (hasPermissionAnywhere(principal as Principal, 'pm.report.read')) return '/dashboard';
+  if (hasPermissionAnywhere(principal as Principal, 'sales.deal.read')) return '/sales';
+  return '/pm/my-work';
+}
+
 /** Permissions that only let someone look. A principal holding nothing else is read-only. */
 const READ_ONLY_PERMISSIONS: ReadonlySet<PermissionKey> = new Set<PermissionKey>([
   'admin.user.read',
@@ -64,7 +71,10 @@ const READ_ONLY_PERMISSIONS: ReadonlySet<PermissionKey> = new Set<PermissionKey>
   'erp.access',
 ]);
 
-/** True when every grant is a pure read, e.g. the Sales Head. Such users cannot post or change anything. */
+/**
+ * True when every grant outside Sales is a pure read, e.g. the Sales Head: they run Sales
+ * but cannot post or change anything in Project Management.
+ */
 export function isReadOnly(principal: Principal): boolean {
-  return principal.grants.every((g) => READ_ONLY_PERMISSIONS.has(g.permission));
+  return principal.grants.every((g) => READ_ONLY_PERMISSIONS.has(g.permission) || permissionModule(g.permission) === 'sales');
 }

@@ -56,6 +56,15 @@ export const PERMISSIONS = {
 
   // -- ERP / Finance -----------------------------------------------------------
   'erp.access': 'Open ERP with single sign-on',
+
+  // -- Sales -------------------------------------------------------------------
+  'sales.deal.read': 'Open Sales; see your own deals, accounts and the price catalogue',
+  'sales.deal.read.all': "See every salesperson's deals and quotes",
+  'sales.deal.manage': 'Create and edit deals, contacts, BOMs and quotes',
+  'sales.account.manage': 'Edit client relationship factors (strategic, payment delay, customer since)',
+  'sales.catalog.manage': 'Maintain items and prices; import price lists and past quotes',
+  'sales.quote.approve': 'Approve quotes below the minimum margin',
+  'sales.settings.manage': 'Set margins, GST, quote terms and price priority',
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;
@@ -121,6 +130,13 @@ export const SYSTEM_ROLES: Record<
       'pm.resource.read',
       'pm.report.read',
       'erp.access',
+      'sales.deal.read',
+      'sales.deal.read.all',
+      'sales.deal.manage',
+      'sales.account.manage',
+      'sales.catalog.manage',
+      'sales.quote.approve',
+      'sales.settings.manage',
     ],
   },
   TECHNICAL_HEAD: {
@@ -250,9 +266,14 @@ export const SYSTEM_ROLES: Record<
     description: 'Read-only access, for auditors and cross-functional observers.',
     permissions: ['pm.project.read', 'pm.task.read', 'pm.report.read'],
   },
+  SALES_EXECUTIVE: {
+    name: 'Sales Executive',
+    description: 'Runs their own deals and quotes in Sales.',
+    permissions: ['sales.deal.read', 'sales.deal.manage'],
+  },
   SALES_HEAD: {
     name: 'Sales Head',
-    description: 'Read-only access across all company projects, tasks, resources and reports.',
+    description: 'Runs Sales; read-only across all company projects, tasks, resources and reports.',
     permissions: [
       'pm.project.read',
       'pm.project.read.all',
@@ -262,6 +283,11 @@ export const SYSTEM_ROLES: Record<
       'pm.commissioning.read',
       'pm.template.read',
       'erp.access',
+      'sales.deal.read',
+      'sales.deal.read.all',
+      'sales.deal.manage',
+      'sales.account.manage',
+      'sales.catalog.manage',
     ],
   },
 };

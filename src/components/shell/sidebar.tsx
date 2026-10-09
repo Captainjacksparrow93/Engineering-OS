@@ -103,6 +103,23 @@ const Icons = {
       <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
     </svg>
   ),
+  Sales: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="20" height="14" x="2" y="7" rx="2" />
+      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+    </svg>
+  ),
+  Deals: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3h18l-7 9v7l-4 2v-9z" />
+    </svg>
+  ),
+  Catalog: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12.6 2.6a2 2 0 0 0-1.4-.6H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z" />
+      <circle cx="7.5" cy="7.5" r="1.5" />
+    </svg>
+  ),
   ERP: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 3v18h18" />
@@ -128,6 +145,16 @@ const MANAGEMENT_NAV: NavItem[] = [
   { label: 'Team load', href: '/pm/resources', requires: 'pm.resource.read', icon: Icons.Resources },
 ];
 
+const SALES_NAV: NavItem[] = [
+  { label: 'Sales overview', href: '/sales', requires: 'sales.deal.read', icon: Icons.Sales },
+  { label: 'Deals', href: '/sales/deals', requires: 'sales.deal.read', icon: Icons.Deals },
+  { label: 'Accounts', href: '/sales/accounts', requires: 'sales.deal.read', icon: Icons.People },
+  { label: 'Price catalogue', href: '/sales/catalog', requires: 'sales.deal.read', icon: Icons.Catalog },
+  { label: 'Quote approvals', href: '/sales/approvals', requires: 'sales.quote.approve', icon: Icons.Audit },
+  { label: 'Past quotes', href: '/sales/history', requires: 'sales.catalog.manage', icon: Icons.Audit },
+  { label: 'Sales settings', href: '/sales/settings', requires: 'sales.settings.manage', icon: Icons.Roles },
+];
+
 const ADMIN_NAV: NavItem[] = [
   { label: 'Checklists', href: '/pm/templates', requires: 'pm.template.read', icon: Icons.MyWork },
   { label: 'People', href: '/admin/users', requires: 'admin.user.read', icon: Icons.People },
@@ -151,6 +178,7 @@ export function Sidebar({
   };
   const workspaceItems = WORKSPACE_NAV.filter(visible);
   const managementItems = MANAGEMENT_NAV.filter(visible);
+  const salesItems = SALES_NAV.filter(visible);
   const adminItems = ADMIN_NAV.filter(visible);
 
   return (
@@ -244,6 +272,19 @@ export function Sidebar({
                 icon={item.icon}
                 collapsed={isCollapsed}
               />
+            ))}
+          </div>
+        )}
+
+        {salesItems.length > 0 && (
+          <div key="sales-section">
+            {!isCollapsed ? (
+              <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Sales</p>
+            ) : (
+              <div className="my-2 border-t border-hairline-soft" />
+            )}
+            {salesItems.map((item) => (
+              <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} collapsed={isCollapsed} />
             ))}
           </div>
         )}
