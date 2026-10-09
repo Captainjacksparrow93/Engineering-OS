@@ -80,11 +80,20 @@ export async function getDeal(principal: Principal, dealId: string) {
       quotes: { orderBy: [{ number: 'desc' }, { revision: 'desc' }], include: { lines: true, createdBy: { select: { fullName: true } } } },
     },
   });
-  const contacts = await prisma.salesContact.findMany({ where: { accountId: deal.accountId }, orderBy: { name: 'asc' } });
+  const [contacts, accountQuotes] = await Promise.all([
+    prisma.salesContact.findMany({ where: { accountId: deal.accountId }, orderBy: { name: 'asc' } }),
+    prisma.salesQuote.findMany({
+      where: { companyId: principal.companyId, dealId: { not: deal.id }, status: { not: 'SUPERSEDED' }, deal: { ...dealVisibilityWhere(principal), accountId: deal.accountId } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { id: true, number: true, revision: true, status: true, deal: { select: { title: true } } },
+    }),
+  ]);
   return {
     ...deal,
     value: num(deal.value),
     contacts,
+    accountQuotes,
     quotes: deal.quotes.map(({ lines, ...q }) => ({
       ...q,
       totals: quoteTotals(lines.map((l) => ({ qty: num(l.qty), unitCost: num(l.unitCost), marginPct: num(l.marginPct) })), { discountPct: num(q.discountPct), freight: num(q.freight), gstPct: num(q.gstPct) }),
