@@ -43,6 +43,13 @@ model Company {
   projects    Project[]
   clients     Client[]
 
+  salesSettings SalesSettings?
+  salesItems    SalesItem[]
+  salesAccounts SalesAccount[]
+  salesDeals    SalesDeal[]
+  salesQuotes   SalesQuote[]
+  salesHistory  SalesHistoryLine[]
+
   @@map("core_companies")
 }
 
@@ -112,25 +119,30 @@ model User {
   notifications   Notification[]
   leaves          Leave[]
 
-  ownedProjects     Project[]         @relation("ProjectManager")
-  sponsoredProjects Project[]         @relation("ProjectSponsor")
-  projectMembers    ProjectMember[]
-  createdTasks      Task[]            @relation("TaskCreatedBy")
-  completedTasks    Task[]            @relation("TaskCompletedBy")
-  taskAssignments   TaskAssignment[]
-  progressLogs      TaskProgressLog[]
-  handoversFrom                TaskHandover[]    @relation("HandoverFrom")
-  handoversTo                  TaskHandover[]    @relation("HandoverTo")
-  handoversRequested           TaskHandover[]    @relation("HandoverRequestedBy")
-  handoversDecided             TaskHandover[]    @relation("HandoverDecidedBy")
-  taskHandoversHeadApproved    TaskHandover[]    @relation("TaskHandoverHeadApprovedBy")
-  projectHandoversFrom         ProjectHandover[] @relation("ProjectHandoverFrom")
-  projectHandoversTo           ProjectHandover[] @relation("ProjectHandoverTo")
-  projectHandoversDecided      ProjectHandover[] @relation("ProjectHandoverDecidedBy")
-  projectHandoversHeadApproved ProjectHandover[] @relation("ProjectHandoverHeadApprovedBy")
-  comments          TaskComment[]
-  commissioningAssignments CommissioningAssignment[]
-  commissioningLogs        CommissioningLog[]
+  ownedProjects                Project[]                 @relation("ProjectManager")
+  sponsoredProjects            Project[]                 @relation("ProjectSponsor")
+  projectMembers               ProjectMember[]
+  createdTasks                 Task[]                    @relation("TaskCreatedBy")
+  completedTasks               Task[]                    @relation("TaskCompletedBy")
+  taskAssignments              TaskAssignment[]
+  progressLogs                 TaskProgressLog[]
+  handoversFrom                TaskHandover[]            @relation("HandoverFrom")
+  handoversTo                  TaskHandover[]            @relation("HandoverTo")
+  handoversRequested           TaskHandover[]            @relation("HandoverRequestedBy")
+  handoversDecided             TaskHandover[]            @relation("HandoverDecidedBy")
+  taskHandoversHeadApproved    TaskHandover[]            @relation("TaskHandoverHeadApprovedBy")
+  projectHandoversFrom         ProjectHandover[]         @relation("ProjectHandoverFrom")
+  projectHandoversTo           ProjectHandover[]         @relation("ProjectHandoverTo")
+  projectHandoversDecided      ProjectHandover[]         @relation("ProjectHandoverDecidedBy")
+  projectHandoversHeadApproved ProjectHandover[]         @relation("ProjectHandoverHeadApprovedBy")
+  comments                     TaskComment[]
+  commissioningAssignments     CommissioningAssignment[]
+  commissioningLogs            CommissioningLog[]
+
+  salesDeals          SalesDeal[]     @relation("SalesDealOwner")
+  salesActivities     SalesActivity[] @relation("SalesActivityUser")
+  salesQuotesCreated  SalesQuote[]    @relation("SalesQuoteCreatedBy")
+  salesQuotesApproved SalesQuote[]    @relation("SalesQuoteApprovedBy")
 
   @@index([companyId])
   @@index([departmentId])
@@ -380,7 +392,7 @@ model Client {
   id          String   @id @default(cuid())
   companyId   String
   name        String
-  refNumber   String   // e.g. ACS-0042 — the client reference number
+  refNumber   String // e.g. ACS-0042 — the client reference number
   erpCustomer String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -457,10 +469,10 @@ model Project {
   manager User    @relation("ProjectManager", fields: [managerId], references: [id])
   sponsor User?   @relation("ProjectSponsor", fields: [sponsorId], references: [id], onDelete: SetNull)
 
-  members    ProjectMember[]
-  tasks      Task[]
-  milestones Milestone[]
-  handovers  ProjectHandover[]
+  members                  ProjectMember[]
+  tasks                    Task[]
+  milestones               Milestone[]
+  handovers                ProjectHandover[]
   commissioningAssignments CommissioningAssignment[]
   commissioningLogs        CommissioningLog[]
 
@@ -546,17 +558,17 @@ enum TaskPriority {
 }
 
 model Task {
-  id          String       @id @default(cuid())
-  projectId   String
+  id           String       @id @default(cuid())
+  projectId    String
   /// WBS parent. PHASE tasks are the branches, PROJECT/ADHOC tasks the leaves.
-  parentId    String?
-  milestoneId String?
-  code        String
-  title       String
-  description String?
-  type        TaskType     @default(PROJECT)
-  status      TaskStatus   @default(TODO)
-  priority    TaskPriority @default(MEDIUM)
+  parentId     String?
+  milestoneId  String?
+  code         String
+  title        String
+  description  String?
+  type         TaskType     @default(PROJECT)
+  status       TaskStatus   @default(TODO)
+  priority     TaskPriority @default(MEDIUM)
   /// Order item row name plus unit number, e.g. `a1b2c3#2` (on panel PHASE tasks).
   erpOrderItem String?
 
@@ -567,12 +579,12 @@ model Task {
   /// from children weighted by estimated hours.
   percentComplete Int   @default(0)
 
-  plannedStart DateTime? @db.Date
-  plannedEnd   DateTime? @db.Date
-  actualStart  DateTime?
-  actualEnd    DateTime?
-  submittedAt  DateTime?
-  completedAt  DateTime?
+  plannedStart  DateTime? @db.Date
+  plannedEnd    DateTime? @db.Date
+  actualStart   DateTime?
+  actualEnd     DateTime?
+  submittedAt   DateTime?
+  completedAt   DateTime?
   completedById String?
 
   /// Skills a candidate assignee should have. Drives the "who can take this" ranking.
@@ -799,21 +811,21 @@ model ChecklistTemplate {
 }
 
 model ChecklistTemplateItem {
-  id                  String   @id @default(cuid())
-  templateId          String
-  stepNumber          Int
-  code                String
-  title               String
-  description         String?
-  recommendedSeniority String  @default("JUNIOR") // ASST_MANAGER, SENIOR, JUNIOR, TRAINEE
+  id                   String   @id @default(cuid())
+  templateId           String
+  stepNumber           Int
+  code                 String
+  title                String
+  description          String?
+  recommendedSeniority String   @default("JUNIOR") // ASST_MANAGER, SENIOR, JUNIOR, TRAINEE
   /// ponytail: legacy whole-day duration, no longer read; kept so old rows are not lost. Use defaultDurationHours.
-  defaultDurationDays Int      @default(1)
-  defaultDurationHours Float   @default(8)
-  isSimulationSignoff Boolean  @default(false)
-  dependsOnStep       Int?
-  sortOrder           Int      @default(1)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  defaultDurationDays  Int      @default(1)
+  defaultDurationHours Float    @default(8)
+  isSimulationSignoff  Boolean  @default(false)
+  dependsOnStep        Int?
+  sortOrder            Int      @default(1)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   template ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
@@ -845,7 +857,7 @@ model CommissioningLog {
   id           String    @id @default(cuid())
   projectId    String
   userId       String
-  loggedFor    DateTime  @db.Date     // the day on site - drives "days on site"
+  loggedFor    DateTime  @db.Date // the day on site - drives "days on site"
   workDone     String
   blocker      String?
   approvedById String?
@@ -857,9 +869,302 @@ model CommissioningLog {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([projectId, userId, loggedFor])   // one log per engineer per project per day
+  @@unique([projectId, userId, loggedFor]) // one log per engineer per project per day
   @@index([projectId, loggedFor])
   @@index([userId, loggedFor])
   @@map("pm_commissioning_logs")
 }
 
+// =====================================================================================
+// SALES :: deals, quotes, catalogue and pricing (plan 018)
+//
+// Sales owns its data. It never holds a foreign key into pm_* tables; a won deal
+// records the ERPNext sales order name and WO number as plain text.
+// =====================================================================================
+
+/// One row per company. Missing row = defaults in `sales/domain/settings.ts`.
+model SalesSettings {
+  id                String   @id @default(cuid())
+  companyId         String   @unique
+  targetMarginPct   Decimal  @default(20) @db.Decimal(5, 2)
+  /// Quotes below this effective margin need a Director's approval.
+  minMarginPct      Decimal  @default(12) @db.Decimal(5, 2)
+  gstPct            Decimal  @default(18) @db.Decimal(5, 2)
+  priceStaleDays    Int      @default(90)
+  /// Price sources in priority order, e.g. ["PURCHASE","PRICE_LIST","BOM_COST"].
+  pricePriority     String[] @default(["PURCHASE", "PRICE_LIST", "BOM_COST"])
+  quoteValidityDays Int      @default(30)
+  followUpDays      Int      @default(7)
+  terms             String   @default("")
+  updatedAt         DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("sales_settings")
+}
+
+model SalesItem {
+  id          String   @id @default(cuid())
+  companyId   String
+  code        String
+  name        String
+  make        String?
+  makerPartNo String?
+  category    String?
+  uom         String   @default("Nos")
+  erpItemCode String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  prices  SalesItemPrice[]
+
+  @@unique([companyId, code])
+  @@index([companyId, name])
+  @@map("sales_items")
+}
+
+enum SalesPriceSource {
+  PURCHASE
+  PRICE_LIST
+  BOM_COST
+}
+
+/// Append-only price history. The "latest price" is resolved at read time.
+model SalesItemPrice {
+  id            String           @id @default(cuid())
+  itemId        String
+  source        SalesPriceSource
+  /// Net cost per unit (for a price list: list price minus discount).
+  rate          Decimal          @db.Decimal(14, 2)
+  listPrice     Decimal?         @db.Decimal(14, 2)
+  discountPct   Decimal?         @db.Decimal(5, 2)
+  supplier      String?
+  reference     String?
+  effectiveDate DateTime         @db.Date
+  createdById   String?
+  createdAt     DateTime         @default(now())
+
+  item SalesItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, effectiveDate])
+  @@map("sales_item_prices")
+}
+
+model SalesAccount {
+  id               String    @id @default(cuid())
+  companyId        String
+  name             String
+  /// ACS-XXXX once the account is a PM/ERP client.
+  clientRef        String?
+  city             String?
+  industry         String?
+  strategic        Boolean   @default(false)
+  /// Average days payments arrive after the due date.
+  paymentDelayDays Int?
+  /// Overrides the first won order date from history for "years with us".
+  customerSince    DateTime? @db.Date
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  company  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contacts SalesContact[]
+  deals    SalesDeal[]
+  history  SalesHistoryLine[]
+
+  @@unique([companyId, name])
+  @@map("sales_accounts")
+}
+
+model SalesContact {
+  id          String   @id @default(cuid())
+  accountId   String
+  name        String
+  email       String?
+  phone       String?
+  designation String?
+  createdAt   DateTime @default(now())
+
+  account SalesAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  deals   SalesDeal[]
+
+  @@index([accountId])
+  @@map("sales_contacts")
+}
+
+enum SalesDealStage {
+  LEAD
+  QUALIFIED
+  QUOTED
+  NEGOTIATION
+  WON
+  LOST
+}
+
+model SalesDeal {
+  id                String         @id @default(cuid())
+  companyId         String
+  code              String
+  title             String
+  accountId         String
+  contactId         String?
+  ownerId           String
+  stage             SalesDealStage @default(LEAD)
+  /// Latest quote's value before GST, or the salesperson's estimate before a quote exists.
+  value             Decimal?       @db.Decimal(14, 2)
+  expectedCloseDate DateTime?      @db.Date
+  source            String?
+  lostReason        String?
+  closedAt          DateTime?
+  erpSalesOrder     String?
+  woNumber          String?
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  company    Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  account    SalesAccount    @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  contact    SalesContact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  owner      User            @relation("SalesDealOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  activities SalesActivity[]
+  quotes     SalesQuote[]
+
+  @@unique([companyId, code])
+  @@index([companyId, ownerId, stage])
+  @@index([accountId])
+  @@map("sales_deals")
+}
+
+enum SalesActivityType {
+  NOTE
+  CALL
+  MEETING
+  EMAIL
+  FOLLOW_UP
+  STAGE
+}
+
+model SalesActivity {
+  id        String            @id @default(cuid())
+  dealId    String
+  userId    String
+  type      SalesActivityType
+  note      String
+  dueAt     DateTime?
+  doneAt    DateTime?
+  createdAt DateTime          @default(now())
+
+  deal SalesDeal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  user User      @relation("SalesActivityUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([dealId, createdAt])
+  @@index([userId, doneAt, dueAt])
+  @@map("sales_activities")
+}
+
+enum SalesQuoteStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  ACCEPTED
+  DECLINED
+  SUPERSEDED
+}
+
+model SalesQuote {
+  id            String           @id @default(cuid())
+  companyId     String
+  dealId        String
+  number        String
+  revision      Int              @default(1)
+  status        SalesQuoteStatus @default(DRAFT)
+  discountPct   Decimal          @default(0) @db.Decimal(5, 2)
+  freight       Decimal          @default(0) @db.Decimal(14, 2)
+  gstPct        Decimal          @db.Decimal(5, 2)
+  validUntil    DateTime         @db.Date
+  terms         String           @default("")
+  showLineItems Boolean          @default(true)
+  approvalNote  String?
+  approvedById  String?
+  approvedAt    DateTime?
+  sentAt        DateTime?
+  createdById   String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  deal       SalesDeal        @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  createdBy  User             @relation("SalesQuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy User?            @relation("SalesQuoteApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  lines      SalesQuoteLine[]
+
+  @@unique([companyId, number, revision])
+  @@index([dealId])
+  @@index([companyId, status])
+  @@map("sales_quotes")
+}
+
+/// A BOM line. Price is derived: cost / (1 - margin).
+model SalesQuoteLine {
+  id          String            @id @default(cuid())
+  quoteId     String
+  /// BOM group, e.g. "PLC Panel 1".
+  panel       String
+  itemId      String?
+  itemCode    String?
+  description String
+  uom         String            @default("Nos")
+  qty         Decimal           @db.Decimal(12, 3)
+  unitCost    Decimal           @db.Decimal(14, 2)
+  costSource  SalesPriceSource?
+  costDate    DateTime?         @db.Date
+  marginPct   Decimal           @db.Decimal(5, 2)
+  sortOrder   Int               @default(0)
+
+  quote SalesQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId, sortOrder])
+  @@map("sales_quote_lines")
+}
+
+enum SalesOutcome {
+  WON
+  LOST
+  OPEN
+}
+
+enum SalesHistorySource {
+  IMPORT
+  DEAL
+}
+
+/// Past quotes and orders, one row per line. Imported from Excel/Tally CSV or written
+/// when a deal closes. The pricing advice reads only this table.
+model SalesHistoryLine {
+  id          String             @id @default(cuid())
+  companyId   String
+  source      SalesHistorySource
+  batchId     String?
+  ref         String
+  date        DateTime           @db.Date
+  accountId   String?
+  accountName String
+  outcome     SalesOutcome
+  itemCode    String?
+  description String?
+  qty         Decimal            @db.Decimal(12, 3)
+  unitCost    Decimal?           @db.Decimal(14, 2)
+  unitPrice   Decimal            @db.Decimal(14, 2)
+  createdAt   DateTime           @default(now())
+
+  company Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  account SalesAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, accountId])
+  @@index([companyId, itemCode])
+  @@index([companyId, ref])
+  @@map("sales_history_lines")
+}

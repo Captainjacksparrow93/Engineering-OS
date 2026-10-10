@@ -19,9 +19,9 @@ describe('SALES_HEAD System Role (#2)', () => {
     // Must NOT have oversight (no notification floods)
     expect(role.permissions).not.toContain('pm.oversight');
 
-    // Must NOT have any mutating or approval permissions
+    // Must NOT have any mutating or approval permissions outside Sales (plan 018: the Sales Head runs Sales)
     const mutatingVerbs = ['create', 'update', 'delete', 'cancel', 'assign', 'manage', 'approve', 'log', 'review'];
-    for (const perm of role.permissions) {
+    for (const perm of role.permissions.filter((p) => !p.startsWith('sales.'))) {
       for (const verb of mutatingVerbs) {
         expect(perm).not.toContain(`.${verb}`);
       }

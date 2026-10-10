@@ -7,7 +7,7 @@ import { verifyPassword } from '@/core/auth/password';
 import { createSession, destroySession } from '@/core/auth/session';
 import { audit } from '@/core/audit/audit';
 import { loadPrincipal } from '@/core/rbac/principal';
-import { hasPermissionAnywhere } from '@/core/rbac/engine';
+import { homePath } from '@/core/rbac/engine';
 
 export interface AuthFormState {
   error?: string;
@@ -39,8 +39,7 @@ export async function signIn(_prev: AuthFormState, formData: FormData): Promise<
   await audit({ actorId: user.id, module: 'core', action: 'auth.signed_in', entityType: 'User', entityId: user.id });
 
   const principal = await loadPrincipal(user.id);
-  const target = principal && hasPermissionAnywhere(principal, 'pm.report.read') ? '/dashboard' : '/pm/my-work';
-  redirect(target);
+  redirect(principal ? homePath(principal) : '/pm/my-work');
 }
 
 export async function signOut(): Promise<void> {

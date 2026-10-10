@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
-import { hasPermissionAnywhere } from '@/core/rbac/engine';
+import { hasPermissionAnywhere, homePath } from '@/core/rbac/engine';
 import { getDashboard } from '@/modules/project-management/services/dashboard.service';
 import { getProjectTimeline } from '@/modules/project-management/services/project.service';
 import { DirectorDashboard } from './director-dashboard';
@@ -22,7 +22,7 @@ export default async function DashboardPage({
 
   // Redirect users without report or oversight access directly to My work
   if (!hasPermissionAnywhere(principal, 'pm.oversight') && !hasPermissionAnywhere(principal, 'pm.report.read')) {
-    redirect('/pm/my-work');
+    redirect(homePath(principal));
   }
 
   const { period } = await searchParams;

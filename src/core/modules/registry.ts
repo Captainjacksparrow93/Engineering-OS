@@ -65,6 +65,17 @@ export const MODULES: ModuleDefinition[] = [
     sortOrder: 30,
   },
   {
+    key: 'sales',
+    name: 'Sales',
+    description: 'Deals, follow-ups, BOMs at the latest price, one-click quotes and pricing advice.',
+    icon: '💼',
+    route: '/sales',
+    status: 'LIVE',
+    scope: [],
+    requires: 'sales.deal.read',
+    sortOrder: 25,
+  },
+  {
     key: 'production',
     name: 'Production Management',
     description: 'Shop-floor routing, panel assembly, wiring and testing stages.',

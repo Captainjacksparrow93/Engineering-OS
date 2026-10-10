@@ -350,7 +350,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0010',
       skills: ['industrial projects', 'client coordination'],
-      roles: [],
+      roles: [{ key: 'SALES_EXECUTIVE', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0012',
@@ -361,7 +361,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0010',
       skills: ['tendering', 'technical proposal'],
-      roles: [],
+      roles: [{ key: 'SALES_EXECUTIVE', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0013',
@@ -372,7 +372,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0010',
       skills: ['panel estimation', 'BOM calculation', 'costing'],
-      roles: [],
+      roles: [{ key: 'SALES_EXECUTIVE', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0014',
@@ -383,7 +383,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0013',
       skills: ['cost estimation', 'feeder calculations'],
-      roles: [],
+      roles: [{ key: 'SALES_EXECUTIVE', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0015',
@@ -394,7 +394,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0010',
       skills: ['site business development', 'OEM sales'],
-      roles: [],
+      roles: [{ key: 'SALES_EXECUTIVE', scopeType: 'GLOBAL' }],
     },
     {
       code: 'ACS-0016',
@@ -405,7 +405,7 @@ async function main() {
       dept: 'SALES',
       manager: 'ACS-0013',
       skills: ['panel costing', 'estimation'],
-      roles: [],
+      roles: [{ key: 'SALES_EXECUTIVE', scopeType: 'GLOBAL' }],
     },
 
     // Trading Sales
