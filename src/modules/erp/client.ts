@@ -32,11 +32,25 @@ function requireErpConfig(): ErpCredentials {
   return { baseUrl, apiKey, apiSecret };
 }
 
+/** First message ERPNext gives for a refused save (`_server_messages`), as plain text. */
+function refusalMessage(body: string): string | null {
+  try {
+    const json = JSON.parse(body) as { _server_messages?: string };
+    const messages = JSON.parse(json._server_messages ?? '[]') as string[];
+    const first = messages[0] ? (JSON.parse(messages[0]) as { message?: string }).message : undefined;
+    const text = first?.replace(/<[^>]*>/g, '').trim();
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
 async function erpRequest<T>(
-  method: 'GET' | 'PUT',
+  method: 'GET' | 'PUT' | 'POST',
   path: string,
   notFoundTarget: string,
   body?: Record<string, unknown>,
+  resultKey: 'data' | 'message' = 'data',
 ): Promise<T> {
   const { baseUrl, apiKey, apiSecret } = requireErpConfig();
   const url = `${baseUrl}${path}`;
@@ -71,6 +85,12 @@ async function erpRequest<T>(
 
   if (!res.ok) {
     const snippet = await res.text().catch(() => '');
+    // 417: ERPNext understood the request and refused it (validation). Say why.
+    const refusal = res.status === 417 ? refusalMessage(snippet) : null;
+    if (refusal) {
+      console.error('[erp] refused', { method, path, message: refusal });
+      throw new DomainError(`ERP refused this: ${refusal}`);
+    }
     console.error('[erp] HTTP failure', {
       method,
       path,
@@ -82,12 +102,14 @@ async function erpRequest<T>(
   }
 
   try {
-    const json = (await res.json()) as { data?: T };
-    if (!json || json.data === undefined) {
+    const json = (await res.json()) as Partial<Record<'data' | 'message', T>>;
+    const result = json?.[resultKey];
+    // A method that returns nothing answers `{}`; a resource call must carry `data`.
+    if (result === undefined && resultKey === 'data') {
       console.error('[erp] unexpected response payload', { method, path });
       throw new DomainError(ERP_UNAVAILABLE_MESSAGE);
     }
-    return json.data;
+    return result as T;
   } catch (err) {
     if (err instanceof DomainError || err instanceof NotFoundError) throw err;
     console.error('[erp] invalid JSON response', {
@@ -140,4 +162,16 @@ export async function erpUpdate<T = Record<string, unknown>>(
 ): Promise<T> {
   const path = `/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`;
   return erpRequest<T>('PUT', path, `${doctype} "${name}"`, fields);
+}
+
+export async function erpInsert<T = Record<string, unknown>>(
+  doctype: string,
+  doc: Record<string, unknown>,
+): Promise<T> {
+  return erpRequest<T>('POST', `/api/resource/${encodeURIComponent(doctype)}`, doctype, doc);
+}
+
+/** Calls a whitelisted ERPNext method (`/api/method/<method>`) and returns its `message`. */
+export async function erpCall<T = unknown>(method: string, args: Record<string, unknown> = {}): Promise<T> {
+  return erpRequest<T>('POST', `/api/method/${method}`, method, args, 'message');
 }

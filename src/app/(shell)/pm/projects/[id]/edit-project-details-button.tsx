@@ -30,6 +30,8 @@ interface EditProjectDetailsButtonProps {
     priority: string;
     startDate: Date | string | null;
     targetEndDate: Date | string | null;
+    /** Set when the project came from an ERPNext sales order: client, WO and dates are then read-only. */
+    erpSalesOrder?: string | null;
   };
   clients: ClientOption[];
   existingCodes: Array<{ code: string; clientId: string | null }>;
@@ -56,6 +58,10 @@ export function EditProjectDetailsButton({
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const fromOrder = Boolean(project.erpSalesOrder);
+  const orderHint = fromOrder ? (
+    <span className="text-[11px] text-muted">This comes from the sales order. Change it in ERP.</span>
+  ) : null;
 
   const [clientId, setClientId] = useState(project.clientId || '');
   const [code, setCode] = useState(project.code || '');
@@ -195,7 +201,9 @@ export function EditProjectDetailsButton({
               <div>
                 <h3 className="card-title text-base font-semibold text-ink">Edit Project Details</h3>
                 <p className="text-caption text-muted mt-0.5">
-                  Update customer, work order, scheduling or panel delivery dates.
+                  {fromOrder
+                    ? `From sales order ${project.erpSalesOrder}: client, work order and delivery dates are changed in ERP.`
+                    : 'Update customer, work order, scheduling or panel delivery dates.'}
                 </p>
               </div>
               <button
@@ -230,7 +238,7 @@ export function EditProjectDetailsButton({
                       if (error) setError(null);
                     }}
                     className="select text-sm w-full font-medium"
-                    disabled={isPending}
+                    disabled={isPending || fromOrder}
                   >
                     <option value="">[ Choose Client ]</option>
                     {clients.map((c) => (
@@ -239,6 +247,7 @@ export function EditProjectDetailsButton({
                       </option>
                     ))}
                   </select>
+                  {orderHint}
                 </div>
 
                 <div>
@@ -283,8 +292,9 @@ export function EditProjectDetailsButton({
                     }}
                     placeholder="Digits only (leave blank for service call)"
                     className="input text-sm w-full font-mono"
-                    disabled={isPending}
+                    disabled={isPending || fromOrder}
                   />
+                  {orderHint}
                 </div>
 
                 <div>
@@ -380,8 +390,9 @@ export function EditProjectDetailsButton({
                       if (error) setError(null);
                     }}
                     className="input text-sm w-full font-mono"
-                    disabled={isPending}
+                    disabled={isPending || fromOrder}
                   />
+                  {orderHint}
                 </div>
               </div>
 
@@ -393,7 +404,9 @@ export function EditProjectDetailsButton({
                       Panel Delivery Dates
                     </h4>
                     <p className="text-[11px] text-muted mt-0.5">
-                      Each panel&apos;s delivery date must fall between the project start and target delivery date.
+                      {fromOrder
+                        ? 'These come from the sales order. Change them in ERP.'
+                        : 'Each panel\u2019s delivery date must fall between the project start and target delivery date.'}
                     </p>
                   </div>
 
@@ -416,7 +429,7 @@ export function EditProjectDetailsButton({
                             if (error) setError(null);
                           }}
                           className="input text-sm w-full font-mono"
-                          disabled={isPending}
+                          disabled={isPending || fromOrder}
                         />
                       </div>
                     ))}

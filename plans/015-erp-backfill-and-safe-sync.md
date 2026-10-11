@@ -1,6 +1,6 @@
 # 015 — ERP: backfill existing clients and projects, and keep order changes in sync
 
-**Status:** TODO   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Antigravity · **Branch:** `erp` · **Depends on:** 014 REVIEWED
 
 ## Goal
@@ -80,10 +80,10 @@ Plan 014 links new projects to orders (`Project.erpSalesOrder`, `Task.erpOrderIt
 - If a tool is missing or fails, say so in Implementation notes.
 
 ## Steps
-- [ ] **1. Mark imported orders, and add the alert columns.**
+- [x] **1. Mark imported orders, and add the alert columns.**
   - `acs_erp` adds `custom_imported` (Check, read-only, "Imported from Engineering OS") to Sales Order. Rebuild the image as the next tag, recreate, migrate, and confirm the field exists.
   - Add the migration `erp_order_alerts` (`Project.erpOrderAlert`, `Project.erpOrderAlertAt`).
-- [ ] **2. Backfill script `prisma/scripts/erp-backfill.ts`.**
+- [x] **2. Backfill script `prisma/scripts/erp-backfill.ts`.**
   1. **Clients:** for each client without `erpCustomer`, find an ERPNext customer whose `custom_acs_reference` equals the client's `refNumber`, or else whose name matches. If none, create one (name = client name, `custom_acs_reference` = `refNumber`). Then set `Client.erpCustomer`.
   2. **Projects:** for each `WORK_ORDER` project without `erpSalesOrder`, except `CANCELLED`:
      - create a sales order with:
@@ -106,7 +106,7 @@ Plan 014 links new projects to orders (`Project.erpSalesOrder`, `Task.erpOrderIt
     - run `--apply` a second time and show 0 created;
     - open three imported orders in ERPNext in the browser.
   - Paste the summaries into notes.
-- [ ] **3. `syncOrderChanges`.** It fetches linked orders modified after the stored `erpOrderModified`, then applies these rules per project:
+- [x] **3. `syncOrderChanges`.** It fetches linked orders modified after the stored `erpOrderModified`, then applies these rules per project:
   - **Client PO** → `clientPoNumber`.
   - **Order delivery date** → `targetEndDate`.
   - **Item row delivery dates** → the matching panels' PHASE `plannedEnd` (matched by `Task.erpOrderItem`). ERP wins even if a task ends later; the existing Late logic shows it.
@@ -125,13 +125,13 @@ Plan 014 links new projects to orders (`Project.erpSalesOrder`, `Task.erpOrderIt
     - ERP down → page data still returned;
     - ERP off → no call;
     - a second sync of the same change → no duplicate panels or alerts.
-- [ ] **4. Alert banner.**
+- [x] **4. Alert banner.**
   - On the project page, when `erpOrderAlert` is set, show an "Order changed: review" banner with the text, the time, and a link to the order in ERPNext.
   - Holders of `pm.project.create` see **Mark reviewed**, which clears the alert (`clearOrderAlert`, audited). Others see the banner without the button.
   - The projects list shows a small "Order changed" badge on those projects.
   - Use `ux-writing` and `impeccable`.
   - Tests: allow (Director clears), deny (PM can't clear), happy path, validation (clearing a project without an alert is a no-op).
-- [ ] **5. Check it end to end on the local stack, in the browser.**
+- [x] **5. Check it end to end on the local stack, in the browser.**
   - Using a project created in plan 014's step 8, edit its order in ERPNext with "Update Items" on the submitted order, as the Sales Head:
     1. change a row's delivery date and the client PO → PM updates on the next page load, with no alert;
     2. add one panel → it appears assigned to the PM, and the Director gets an alert and a notification;
@@ -141,22 +141,114 @@ Plan 014 links new projects to orders (`Project.erpSalesOrder`, `Task.erpOrderIt
   - Write what you saw in notes.
 
 ## Acceptance criteria
-- [ ] Typecheck, unit tests, build and integration tests pass (full suite), including on a fresh CI-like database.
-- [ ] Backfill:
+- [x] Typecheck, unit tests, build and integration tests pass (full suite), including on a fresh CI-like database.
+- [x] Backfill:
   - dry run by default;
   - `--apply` links every client and every non-cancelled work order;
   - a second run creates nothing;
   - skipped items are listed with reasons;
   - imported orders are marked, submitted, and closed when the project is finished.
-- [ ] Sync:
+- [x] Sync:
   - PO, dates, WO and client name follow ERP;
   - added panels are appended and assigned to the PM;
   - removals and cancellations only alert;
   - nothing in PM is ever deleted;
   - every change is audited.
-- [ ] Directors are notified and can mark an alert reviewed; others can't.
-- [ ] ERP off or down never breaks a page.
+- [x] Directors are notified and can mark an alert reviewed; others can't.
+- [x] ERP off or down never breaks a page.
 
 ## Implementation notes (implementer)
+- **Order of work:** started right after 014 reached DONE (not yet REVIEWED), because the user asked for 014 → 015 → 017 in one go. Same container as 014 step 8: code-review-graph, Token Savior and sequential-thinking are not available here, so callers come from text search and the ordering reasoning is written out in these notes. Local ERPNext: `/var/tmp/erpnext-local` (see plan 014 step 8 notes).
+- **Step 1 (imported flag and alert columns):**
+  - `acs_erp`: `custom_imported` (Check, read-only, "Imported from Engineering OS", after `custom_project_link`) on Sales Order, added in `_ensure_custom_fields` (`install.py`), in `fixtures/custom_field.json` and in the `hooks.py` fixture filter, so the three lists agree.
+  - New Python test `erp/acs_erp/acs_erp/tests/test_custom_fields.py` (2): the field is created as a read-only Check on Sales Order, and the fixture and hooks list it (red first: 2 failures; then green).
+  - **Image `acs-erpnext:v16.37.0-acs7`** (same local-only proxy-CA build copy as acs6), `CUSTOM_TAG` switched, `docker compose … up -d --force-recreate`, `bench --site frontend migrate` OK; backend runs `acs-erpnext:v16.37.0-acs7`. The API now returns `custom_imported: 0` on SAL-ORD-2026-00001.
+  - Prisma: `Project.erpOrderAlert String?`, `Project.erpOrderAlertAt DateTime?`; migration `20261002173213_erp_order_alerts`:
+    ```sql
+    ALTER TABLE "pm_projects" ADD COLUMN     "erpOrderAlert" TEXT,
+    ADD COLUMN     "erpOrderAlertAt" TIMESTAMP(3);
+    ```
+    Applied to the dev DB with `npx prisma migrate dev --name erp_order_alerts`; `prisma migrate diff` (migrations vs schema): no difference. (`prisma format` re-aligned 115 unrelated schema lines; reverted, only the two new lines are in the diff.)
+  - **Test counts:** typecheck clean; `npm test` 14 files / 165 passed; `npm run test:int` 17 files / 95 passed; build clean; `python3 -m unittest discover -s erp/acs_erp` 25 tests OK.
+- **Step 2 (backfill script):**
+  - **Shape:** the logic is in `src/modules/erp/backfill.ts` (`runBackfill({ companyId, apply, log })`, plus `planOrderRows`), so the integration test can run it with ERPNext mocked. `prisma/scripts/erp-backfill.ts` is the thin CLI: dry run by default, `--apply` to write, `--company=ACS` (default). It refuses to start without `ERPNEXT_URL` / `ERPNEXT_API_KEY` / `ERPNEXT_API_SECRET` (env only) and uses `APP_URL` for the project links. It is never called from `entrypoint.sh`. Exit code 1 if anything failed.
+  - **Clients:** for each client without `erpCustomer`: customer by `custom_acs_reference` = `refNumber`, else by `customer_name` = client name (skipped, not linked, if that customer carries a **different** ACS reference), else create one (`customer_name`, `customer_type` Company, `custom_acs_reference`). An empty reference on a matched customer is filled. A customer already linked to another client → skipped with reason. Then `Client.erpCustomer`.
+  - **Projects:** `WORK_ORDER`, no `erpSalesOrder`, not `CANCELLED`. Skipped with a reason: no WO, WO not digits only, no client (by `clientId`, else by name like the project page), client without an ERP customer, no panels. Rows: one per panel type with the quantity; one row per panel when panels of that type have different dates (`plannedEnd`, else the target date). Order: the only ERPNext company, customer, `transaction_date` = project created date, `delivery_date` = the later of target and the last row date (ERPNext requires header ≥ rows), `po_no` (if any), `custom_wo_number`, `custom_project_code`, `custom_project_link`, `custom_imported` = 1, rate 0; then submitted (`docstatus` 1). COMPLETED / CLOSED → `update_status` Closed **before** our DB is linked. Then, in one transaction: `erpSalesOrder`, `erpOrderModified`, each panel's `erpOrderItem` (`<row>#<unit>`). It checks that the order's rows still match the panels (item code + qty, by `idx`) before linking; if not, that project fails with a reason (no guessing).
+  - **Resume (ordering):** find/create → submit → close → link in our DB. A crash at any point leaves the order findable on re-run by **`custom_project_link`** (the plan says `custom_project_code`; project codes can be shared since plan 005, the link holds the project id, so it is the safe key). A draft is submitted, a submitted one reused, a closed one left closed, then linked. A crash after linking: the project has `erpSalesOrder` and is skipped.
+  - **ERP client** (`client.ts`): new `erpInsert` (POST `/api/resource/<doctype>`) and `erpCall` (POST `/api/method/<method>`, returns `message`; `{}` → undefined). **Also:** HTTP **417** (ERPNext refused a save, e.g. a validation) now becomes `DomainError("ERP refused this: <ERPNext's message>")` instead of "ERP isn't responding." That was wrong for refusals and would have made the backfill report useless. 5xx / 401 / 403 / network are unchanged. `order.service.ts`: `projectLink(id)` extracted and reused by `writeProjectToOrder`.
+  - **ERPNext check as `engos-api` (Sales User only, no new roles):** create Customer with `custom_acs_reference` ✔; insert Sales Order with read-only `custom_imported` = 1 (kept) ✔; PUT `docstatus: 1` ✔; `erpnext.selling.doctype.sales_order.sales_order.update_status` Closed ✔ (returns `{}`). (Probe records left in the local ERPNext: customer "Probe Customer Ltd" ACS-9999 and closed SAL-ORD-2026-00003.)
+  - **Tests (`src/modules/erp/backfill.int.test.ts`, 4; own company so seed data is never touched; an in-memory fake ERPNext behind the mocked client):** dry run writes nothing and reports; `--apply` links by reference, by name (fills the reference), creates, skips a reference clash, creates/submits imported orders with the right rows (grouped vs per-panel), closes the completed one, links PM (`erpOrderItem`s) and leaves cancelled, service-call and skipped projects alone; a second `--apply` creates nothing; resume after a crash submits and links the existing draft, no duplicate. `client.test.ts` +3 (insert, call incl. empty reply, 417 message). **Written code-first by mistake**, so I checked the tests bite: removing the close, the per-panel split, or the resume lookup each turns exactly one test red.
+  - **Local stack (dev DB with seed + demo, local ERPNext acs7):** the demo projects use an older panel title (`PLC × 1: PLC Programming + Simulation`), not `PLC Panel 1`, so they are skipped "no panels named …" (per the plan: skipped, not guessed). **Planner: production may have projects with that older title; the dry run on the production copy (016) will show how many.** To have real panels to import, I created three pre-ERP work orders with `createAutomationProject` (ERP off, as production did), one marked COMPLETED. I also unlinked one project and client from my earlier mock check (they pointed at an order that only existed in the mock), and deleted leftover test projects from old interrupted runs (the step 5 test now fails loudly instead of swallowing a cleanup error).
+    - Dry run (DEMO lines omitted):
+      ```
+ERP backfill for ACS Engitech Pvt Ltd: dry run (no writes; add --apply to write)
+client ACS-0004 "Nirma Chemicals Ltd": would create a customer
+client ACS-0006 "Reliance Petrochem": would create a customer
+client ACS-0007 "UltraTech Cement": would create a customer
+client ACS-0008 "Amul Dairy": would create a customer
+client ACS-0009 "Tata Power": would create a customer
+client ACS-0010 "Adani Ports": would create a customer
+client ACS-0011 "JSW Steel": would create a customer
+client ACS-0012 "Asian Paints": would create a customer
+client ACS-0013 "Larsen & Toubro": would create a customer
+project ACS-0004-0001 (WO 8101): would create an imported order for "Nirma Chemicals Ltd": 1 × PLC 2027-01-30, 1 × PLC 2027-03-01
+project ACS-0006-0001 (WO 7001): would create an imported order for "Reliance Petrochem": 2 × PLC 2027-01-15, 1 × HMI 2027-02-10
+project ACS-0009-0001 (WO 7002): would create an imported order for "Tata Power": 1 × SCADA 2027-01-20, 1 × SCADA 2027-02-25
+project ACS-0008-0001 (WO 7003): would create an imported order for "Amul Dairy": 1 × PLC 2027-01-05, then close it
+Clients: 9 to create, 0 to link, 0 skipped, 0 failed (dry run)
+Projects: 4 to create, 0 to link, 8 skipped, 0 failed (dry run)
+      ```
+    - `--apply`:
+      ```
+ERP backfill for ACS Engitech Pvt Ltd: APPLY (writes)
+client ACS-0004 "Nirma Chemicals Ltd": created customer "Nirma Chemicals Ltd"
+client ACS-0006 "Reliance Petrochem": created customer "Reliance Petrochem"
+client ACS-0007 "UltraTech Cement": created customer "UltraTech Cement"
+client ACS-0008 "Amul Dairy": created customer "Amul Dairy"
+client ACS-0009 "Tata Power": created customer "Tata Power"
+client ACS-0010 "Adani Ports": created customer "Adani Ports"
+client ACS-0011 "JSW Steel": created customer "JSW Steel"
+client ACS-0012 "Asian Paints": created customer "Asian Paints"
+client ACS-0013 "Larsen & Toubro": created customer "Larsen & Toubro"
+project ACS-0004-0001 (WO 8101): created SAL-ORD-2026-00004: 1 × PLC 2027-01-30, 1 × PLC 2027-03-01
+project ACS-0006-0001 (WO 7001): created SAL-ORD-2026-00005: 2 × PLC 2027-01-15, 1 × HMI 2027-02-10
+project ACS-0009-0001 (WO 7002): created SAL-ORD-2026-00006: 1 × SCADA 2027-01-20, 1 × SCADA 2027-02-25
+project ACS-0008-0001 (WO 7003): created SAL-ORD-2026-00007: 1 × PLC 2027-01-05, closed
+Clients: 9 created, 0 linked, 0 skipped, 0 failed
+Projects: 4 created, 0 linked, 8 skipped, 0 failed
+      ```
+    - Second `--apply`: `Clients: 0 created, 0 linked, 0 skipped, 0 failed` / `Projects: 0 created, 0 linked, 8 skipped, 0 failed`
+    - In ERPNext (desk, Director via SSO): SAL-ORD-2026-00005 (To Deliver, ACS-0006-0001, 2 × PLC + 1 × HMI), SAL-ORD-2026-00006 (To Deliver, ACS-0009-0001, SCADA rows with two dates), SAL-ORD-2026-00007 (**Closed**, ACS-0008-0001): each shows "Imported from Engineering OS" ticked, WO, project code and link.
+  - **Test counts:** typecheck clean; `npm test` 14 files / 168 passed; `npm run test:int` 18 files / 99 passed; build clean; acs_erp 25 OK.
+- **Step 3 (`syncOrderChanges`, `src/modules/erp/sync.ts`):**
+  - **Which orders:** linked projects of the company; one `erpList` of orders with `modified >` the **oldest** stored `erpOrderModified` (for one project: also `name =` its order; for all: `custom_project_link is set`). Then each order is applied only if its `modified` is newer than **that project's** `erpOrderModified`. The plan says "since the newest". With the newest, a change to an order whose project was synced earlier than another's would be skipped forever, so I used the oldest. `modified` stays ERPNext's own string and is only compared as a string or passed back in a filter.
+  - **Rules, in order, for one order:**
+    1. `docstatus` 2 → alert only ("Order cancelled in ERP. Nothing was changed or deleted here."). Nothing else is applied.
+    2. Status Closed while the project is open → alert.
+    3. `po_no` → `clientPoNumber`.
+    4. `delivery_date` → `targetEndDate`.
+    5. `custom_wo_number` → `workOrderNo`; another project already has it, or it isn't digits → alert, WO unchanged.
+    6. Customer: if `order.customer` is the linked customer, or a customer with the same `custom_acs_reference` (a renamed ERPNext doc), its `customer_name` renames our client through **`renameClientCascade`**. That function is extracted from `updateClient` (which now uses it), so the project `clientName` cascade is shared. A different customer, or a name another client already has → alert, client unchanged.
+    7. Rows, matched by `Task.erpOrderItem`: a row's `delivery_date` → its panels' PHASE `plannedEnd` (ERP wins). More units than we have, or a new row → panels appended. Fewer units → alert naming the kept panels. A row gone → alert naming the kept panels. An item that isn't an active template → alert.
+  - **Appended panels:** built by **`createPanelTasks`**, extracted from `createAutomationProject` (which now calls it per panel; all existing tests unchanged and green): PHASE + template steps + in-panel dependencies. Next "<TYPE> Panel N", next `-PH`/`-T` numbers, every step assigned to the PM, `erpOrderItem` = `<row>#<unit>`, the type added to `automationTypes`, and an alert "PLC Panel 3, HMI Panel 1 added from the sales order and assigned to the PM: assign engineers."
+  - **Alerts:** new lines are appended to `erpOrderAlert` (a line that is already there is not repeated, so a standing condition like "order closed" doesn't re-alert on later changes), `erpOrderAlertAt` set, and `notify` each active Director ("Order changed: review <code>", link `/pm/projects/<id>`). The update, panels, rename, audit and notifications are in one transaction. Then `erpOrderModified` = the order's `modified`. Audit `erp.order_synced`, `actorId` null, with the changed fields, panel dates, client rename, added panels and alerts. No change → no write: unchanged `modified` makes no call to the order and no write.
+  - **Wiring:** `getProjectWorkspace` → `syncProjectOrderSafely` (this project); `listProjects` → `syncAllOrdersSafely` (all; at most once per 5 minutes per process per company). Both swallow and log errors. **Addition:** after an ERP failure, both skip syncing for 60 s, so a down ERPNext doesn't add its timeout to every page load. ERP off → no call.
+  - **Tests** (`src/modules/erp/sync.int.test.ts`, 11, ERP mocked): ERP off; no change → no write; PO + dates without alert, audited with null actor; WO follows / clash alerts; customer rename cascades / name clash alerts; added panels (qty up + new row) appended to the PM with steps, `erpOrderItem`, alert and a notification to every Director; reduced qty + removed row + cancelled order only alert and keep every task; the same change twice → no duplicates; a standing condition isn't re-alerted; ERP down → page loads; page sync + list sync throttled to 5 minutes (fake clock). Checked they bite: removing the WO clash check, the throttle, the add rule or the alert dedupe each turns tests red.
+  - **Test counts:** typecheck clean; `npm test` 14 files / 168 passed; `npm run test:int` 19 files / 110 passed; build clean; acs_erp 25 OK.
+- **Step 4 (alert banner):**
+  - `clearOrderAlert(principal, projectId)` (`project.service.ts`): same company, `assertCan(pm.project.create)` in the project's department (as Edit details); no alert → returns without writing; otherwise clears `erpOrderAlert` / `erpOrderAlertAt` and audits `erp.order_alert_cleared` (actor = the user, diff = the alert text) in one transaction. `clearOrderAlertAction` in `actions/pm.ts` (revalidates the project and the list).
+  - `OrderAlertBanner` (`src/app/(shell)/pm/projects/[id]/order-alert-banner.tsx`), shown on `ProjectPage` when `erpOrderAlert` is set: heading **"Order changed: review"**, the time (IST, e.g. "2 Oct 2026, 7:40 pm"), one bullet per alert line, **"Open SAL-ORD-… in ERP"** (`ERPNEXT_PUBLIC_URL/app/sales-order/<name>`), and **Mark reviewed** only for `pm.project.create` holders in that department (`canEditProjectDetails`); others see the banner without the button. Same warning style as the existing On hold banner.
+  - Projects list (`projects-client.tsx`): an **"Order changed"** badge next to the priority (full alert in its tooltip).
+  - **Tests** (`src/modules/erp/order-alert.int.test.ts`, 3): PM denied (alert kept); Director clears it, audited with their id and the text; clearing a project without an alert is a no-op (no second audit). The browser view is checked in step 5.
+  - **Test counts:** typecheck clean; `npm test` 14 files / 168 passed; `npm run test:int` 20 files / 113 passed; build clean; acs_erp 25 OK.
+- **Step 5 (end to end on the local stack, in the browser):** project `ACS-0005-0001` (from plan 014 step 8; SAL-ORD-2026-00001: PLC × 1 and SCADA × 1), app = production build on :3100 against ERPNext `acs7`, Chromium. The Sales Head's changes were made in **their own ERPNext session (via our SSO)** by calling the same server method ERPNext's **Update Items** dialog uses (`erpnext.controllers.accounts_controller.update_child_qty_rate`), plus `frappe.client.set_value` for `po_no` and `frappe.client.cancel`. I did not click through the dialog itself. After each change the Director opened the project page (the sync runs on that load):
+  1. **PLC row date → +125 days, PO → `GACL/PO/2026/118-R1`:** PM showed the new PO; PLC Panel 1 `plannedEnd` 2027-02-04; target unchanged (ERP header still 2027-03-01); **no banner, 0 notifications**.
+  2. **PLC qty 1 → 2:** **PLC Panel 2** appended (13 steps, `erpOrderItem` `77o7r9lgab#2`, date 2027-02-04, every step assigned to the PM Dhrupin Vaghasiya); banner "Order changed: review · PLC Panel 2 added from the sales order and assigned to the PM: assign engineers." with "Open SAL-ORD-2026-00001 in ERP" and **Mark reviewed**; **4 notifications** (one per active Director).
+  3. **PLC qty 2 → 1:** alert only: "PLC quantity reduced from 2 to 1 in ERP. PLC Panel 2 was kept."; all three panels still there.
+  4. **Order cancelled (`docstatus` 2):** alert only: "Order cancelled in ERP. Nothing was changed or deleted here."; project still PLANNING with all 42 tasks.
+  - The PM (Dhrupin) saw the banner **without** Mark reviewed; the projects list showed the **"Order changed"** badge on ACS-0005-0001; the Director clicked **Mark reviewed** and the banner went away. Audit trail for the project: 4 × `erp.order_synced` (actor null) and `erp.order_alert_cleared` (actor = the Director).
+- **Before DONE:** `npm run test:int` on a fresh throwaway DB (empty → `npx prisma migrate deploy` → `npm run db:seed`): 20 files / 113 passed. typecheck clean, `npm test` 168 passed, build clean, acs_erp 25 OK (step 4 run; no code change since).
+- **Self-review (`review-delta` skill not installed here; by hand):** sync never deletes (no `delete` in `sync.ts`; tested); every sync write is audited with a null actor; ERP off → `isErpEnabled()` short-circuits both wrappers; ERP failures are caught in the wrappers. Two refactors touched shared code (`createPanelTasks` out of `createAutomationProject`, `renameClientCascade` out of `updateClient`); both callers' existing tests pass unchanged. Callers checked by text search (graph tools not available here): `getProjectWorkspace` (project page, `api/pm/projects/[id]`, tests), `listProjects` (projects page, `api/pm/projects`, tests), `updateClient` (`actions/pm.ts`, tests).
+- **For the planner:** (a) DEMO-style panel titles (`PLC × 1: …`) are skipped by the backfill; check the production copy's dry run. (b) Plan 014's note on local `.env` and `npm run test:int` applies here too.
 
 ## Review (Claude)

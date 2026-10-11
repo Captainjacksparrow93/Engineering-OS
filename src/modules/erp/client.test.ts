@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetConfigCache } from '@/core/config';
 import { DomainError, NotFoundError } from '@/core/rbac/errors';
-import { erpGet, erpList, erpUpdate, isErpEnabled } from './client';
+import { erpCall, erpGet, erpInsert, erpList, erpUpdate, isErpEnabled } from './client';
 
 describe('ERPNext REST client', () => {
   const fetchMock = vi.fn();
@@ -132,6 +132,46 @@ describe('ERPNext REST client', () => {
     expect(loggedText).not.toContain('test_api_key');
 
     errSpy.mockRestore();
+  });
+
+  it('sends POST to /api/resource/<doctype> in erpInsert and returns data', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: { name: 'Acme Ltd' } }), { status: 200 }),
+    );
+    const created = await erpInsert<{ name: string }>('Customer', { customer_name: 'Acme Ltd' });
+    expect(created.name).toBe('Acme Ltd');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://127.0.0.1:8080/api/resource/Customer');
+    expect(init.method).toBe('POST');
+    expect(init.body).toBe(JSON.stringify({ customer_name: 'Acme Ltd' }));
+  });
+
+  it('sends POST to /api/method/<method> in erpCall and returns message', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ message: 'ok' }), { status: 200 }));
+    const result = await erpCall<string>('erpnext.selling.doctype.sales_order.sales_order.update_status', {
+      status: 'Closed',
+      name: 'SAL-ORD-2026-00001',
+    });
+    expect(result).toBe('ok');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://127.0.0.1:8080/api/method/erpnext.selling.doctype.sales_order.sales_order.update_status');
+    expect(init.method).toBe('POST');
+
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    await expect(erpCall('frappe.ping')).resolves.toBeUndefined();
+  });
+
+  it('turns an ERPNext validation refusal (HTTP 417) into a DomainError with its message', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const serverMessages = JSON.stringify([
+      JSON.stringify({ message: 'Work Order number must contain <b>digits</b> only.' }),
+    ]);
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ exc_type: 'ValidationError', _server_messages: serverMessages }), { status: 417 }),
+    );
+    await expect(erpInsert('Sales Order', {})).rejects.toThrowError(
+      new DomainError('ERP refused this: Work Order number must contain digits only.'),
+    );
   });
 
   it('reports HTTP 404 distinctly as NotFoundError', async () => {

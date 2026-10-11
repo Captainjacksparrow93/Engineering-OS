@@ -14,6 +14,7 @@ import { computeSchedule, rollUpProgress, type Graph } from '../domain/schedulin
 import { activeLeafTasks, forecastFinish, isLaneLate, projectStepStats } from '../domain/portfolio';
 import { formatName } from '@/core/utils/strings';
 import { startOfDay, todayInIndia } from '@/core/utils/dates';
+import { syncAllOrdersSafely, syncProjectOrderSafely } from '@/modules/erp/sync';
 import { getClientById } from './client.service';
 
 
@@ -299,6 +300,18 @@ export async function updateProject(
     }
   }
 
+  // Plan 014: on a project made from an ERPNext sales order, the order owns client, WO and dates.
+  if (before.erpSalesOrder) {
+    const day = (d: Date | null) => (d ? startOfDay(d).toISOString().slice(0, 10) : null);
+    const orderFieldChanged =
+      workOrderNo !== before.workOrderNo ||
+      clientId !== before.clientId ||
+      clientName !== before.clientName ||
+      day(targetEndDate) !== day(before.targetEndDate) ||
+      phaseUpdates.length > 0;
+    if (orderFieldChanged) throw new DomainError('This comes from the sales order. Change it in ERP.');
+  }
+
   const data: Record<string, unknown> = {
     name: input.name !== undefined ? input.name : before.name,
     code,
@@ -493,6 +506,29 @@ export async function resumeProject(
   });
 }
 
+/** Plan 015: "Mark reviewed" on an "Order changed" alert. Directors and heads (`pm.project.create`). */
+export async function clearOrderAlert(principal: Principal, projectId: string) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, companyId: principal.companyId } });
+  if (!project) throw new NotFoundError('Project not found.');
+  assertCan(principal, 'pm.project.create', { departmentId: (project.departmentId || principal.departmentId) ?? undefined });
+  if (!project.erpOrderAlert) return;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.project.update({ where: { id: projectId }, data: { erpOrderAlert: null, erpOrderAlertAt: null } });
+    await audit(
+      {
+        actorId: principal.userId,
+        module: 'erp',
+        action: 'order_alert_cleared',
+        entityType: 'Project',
+        entityId: projectId,
+        diff: { alert: project.erpOrderAlert },
+      },
+      tx,
+    );
+  });
+}
+
 export interface ProjectListFilters {
   status?: string;
   search?: string;
@@ -500,6 +536,7 @@ export interface ProjectListFilters {
 }
 
 export async function listProjects(principal: Principal, filters: ProjectListFilters = {}) {
+  await syncAllOrdersSafely(principal.companyId);
   const whereClauses: Prisma.ProjectWhereInput[] = [
     projectVisibilityWhere(principal),
   ];
@@ -579,6 +616,7 @@ export async function listProjects(principal: Principal, filters: ProjectListFil
  */
 export async function getProjectWorkspace(principal: Principal, projectId: string) {
   await assertProjectVisible(principal, projectId);
+  await syncProjectOrderSafely(principal.companyId, projectId);
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
