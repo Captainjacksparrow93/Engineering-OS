@@ -16,7 +16,7 @@ import {
 } from '@/app/actions/sales';
 import { Alert, Card, PageHeader } from '@/components/ui';
 import { SubmitButton } from '@/components/form';
-import { ActionForm } from '../../_components/action-form';
+import { ActionForm } from '@/components/action-form';
 import { QuoteStatusBadge } from '../../_components/badges';
 import { formatINR, inrShort, isoDay, pct, shortDate } from '../../_components/format';
 import { BomGrid } from './bom-grid';

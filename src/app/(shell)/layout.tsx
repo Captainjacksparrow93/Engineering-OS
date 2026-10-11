@@ -7,6 +7,8 @@ import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
 import { ShellContainer } from '@/components/shell/shell-container';
 import { FreshCountsListener } from '@/components/shell/fresh-counts-listener';
+import { listWaitingForMe } from '@/modules/gate/services/visit.service';
+import { VisitorAlert } from './gate/_components/visitor-alert';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,10 +21,11 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   const principal = await getPrincipal();
   if (!principal) redirect('/login');
 
-  const [notifications, handoversList, pendingApprovals] = await Promise.all([
+  const [notifications, handoversList, pendingApprovals, waitingVisitors] = await Promise.all([
     unreadCount(principal.userId),
     listHandovers(principal).catch(() => ({ incoming: [], incomingProjects: [] })),
     countPendingApprovals(principal),
+    listWaitingForMe(principal),
   ]);
 
   const pendingHandovers = handoversList.incoming.length + handoversList.incomingProjects.length;
@@ -39,7 +42,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       }
       topbar={<Topbar key="shell-topbar" principal={principal} unread={notifications} />}
     >
-
+      <VisitorAlert visits={waitingVisitors} />
       {children}
       <FreshCountsListener />
     </ShellContainer>

@@ -120,6 +120,15 @@ const Icons = {
       <circle cx="7.5" cy="7.5" r="1.5" />
     </svg>
   ),
+  Visitors: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 4h3a2 2 0 0 1 2 2v14" />
+      <path d="M2 20h3" />
+      <path d="M13 20h9" />
+      <path d="M10 12v.01" />
+      <path d="M13 4.56v16.01a.5.5 0 0 1-.63.48L5 19V5.94a2 2 0 0 1 1.5-1.94l5.26-1.31A1 1 0 0 1 13 3.66z" />
+    </svg>
+  ),
   ERP: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 3v18h18" />
@@ -155,6 +164,13 @@ const SALES_NAV: NavItem[] = [
   { label: 'Sales settings', href: '/sales/settings', requires: 'sales.settings.manage', icon: Icons.Roles },
 ];
 
+// "My visitors" has no `requires`: every employee schedules their own visitors.
+const GATE_NAV: NavItem[] = [
+  { label: 'Reception desk', href: '/gate', requires: 'gate.desk', icon: Icons.Visitors },
+  { label: 'Visitor register', href: '/gate/register', requires: 'gate.register.read', icon: Icons.Audit },
+  { label: 'My visitors', href: '/gate/my-visitors', icon: Icons.People },
+];
+
 const ADMIN_NAV: NavItem[] = [
   { label: 'Checklists', href: '/pm/templates', requires: 'pm.template.read', icon: Icons.MyWork },
   { label: 'People', href: '/admin/users', requires: 'admin.user.read', icon: Icons.People },
@@ -179,6 +195,7 @@ export function Sidebar({
   const workspaceItems = WORKSPACE_NAV.filter(visible);
   const managementItems = MANAGEMENT_NAV.filter(visible);
   const salesItems = SALES_NAV.filter(visible);
+  const gateItems = GATE_NAV.filter(visible);
   const adminItems = ADMIN_NAV.filter(visible);
 
   return (
@@ -288,6 +305,17 @@ export function Sidebar({
             ))}
           </div>
         )}
+
+        <div key="gate-section">
+          {!isCollapsed ? (
+            <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">Gate &amp; visitors</p>
+          ) : (
+            <div className="my-2 border-t border-hairline-soft" />
+          )}
+          {gateItems.map((item) => (
+            <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} collapsed={isCollapsed} />
+          ))}
+        </div>
 
         {adminItems.length ? (
           <div key="admin-section">

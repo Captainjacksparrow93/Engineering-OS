@@ -21,7 +21,7 @@ export function NavLink({
   const pathname = usePathname();
   const active =
     pathname === href ||
-    (href !== '/dashboard' && href !== '/sales' && pathname.startsWith(`${href}/`)) ||
+    (href !== '/dashboard' && href !== '/sales' && href !== '/gate' && pathname.startsWith(`${href}/`)) ||
     (href === '/pm/projects' && pathname.startsWith('/pm/tasks/'));
 
   return (

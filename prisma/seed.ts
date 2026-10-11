@@ -291,7 +291,7 @@ async function main() {
       dept: 'ADMIN',
       manager: 'ACS-0005',
       skills: ['front desk', 'guest coordination'],
-      roles: [],
+      roles: [{ key: 'RECEPTIONIST', scopeType: 'GLOBAL' }],
     },
 
     // Purchase

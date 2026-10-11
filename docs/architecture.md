@@ -51,7 +51,7 @@ calculations.
 | `hrms_*` | HRMS                     | planned |
 | `erp_*`  | ERP / Finance            | planned |
 | `prod_*` | Production               | planned |
-| `gate_*` | Gate Entry               | planned |
+| `gate_*` | Gate & Visitors          | live (people only, plan 019) |
 
 Rules that make a new module a safe addition rather than a rewrite:
 

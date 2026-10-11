@@ -5,7 +5,7 @@ import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { getSalesDashboard } from '@/modules/sales/services/dashboard.service';
 import { completeActivityAction } from '@/app/actions/sales';
 import { Card, EmptyState, PageHeader, Stat } from '@/components/ui';
-import { ActionForm } from './_components/action-form';
+import { ActionForm } from '@/components/action-form';
 import { DealStageBadge } from './_components/badges';
 import { inrShort, pct, shortDate } from './_components/format';
 

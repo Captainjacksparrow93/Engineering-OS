@@ -5,7 +5,7 @@ import { listHistoryImports } from '@/modules/sales/services/history.service';
 import { deleteHistoryImportAction, importHistoryAction } from '@/app/actions/sales';
 import { Card, PageHeader } from '@/components/ui';
 import { SubmitButton } from '@/components/form';
-import { ActionForm } from '../_components/action-form';
+import { ActionForm } from '@/components/action-form';
 import { shortDate } from '../_components/format';
 
 export const dynamic = 'force-dynamic';

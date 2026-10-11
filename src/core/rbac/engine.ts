@@ -49,10 +49,11 @@ export function hasPermissionAnywhere(principal: Principal, permission: Permissi
   return principal.grants.some((g) => g.permission === permission);
 }
 
-/** Where a person lands after sign-in: the dashboard, Sales for salespeople, else their own work. */
+/** Where a person lands after sign-in: the dashboard, Sales for salespeople, the front desk for reception, else their own work. */
 export function homePath(principal: Pick<Principal, 'grants'>): string {
   if (hasPermissionAnywhere(principal as Principal, 'pm.report.read')) return '/dashboard';
   if (hasPermissionAnywhere(principal as Principal, 'sales.deal.read')) return '/sales';
+  if (hasPermissionAnywhere(principal as Principal, 'gate.desk')) return '/gate';
   return '/pm/my-work';
 }
 
@@ -71,10 +72,13 @@ const READ_ONLY_PERMISSIONS: ReadonlySet<PermissionKey> = new Set<PermissionKey>
   'erp.access',
 ]);
 
+/** Modules whose grants do not count against read-only in Project Management. */
+const NON_PM_MODULES: ReadonlySet<string> = new Set(['sales', 'gate']);
+
 /**
- * True when every grant outside Sales is a pure read, e.g. the Sales Head: they run Sales
- * but cannot post or change anything in Project Management.
+ * True when every grant outside Sales and Gate is a pure read, e.g. the Sales Head: they run
+ * Sales but cannot post or change anything in Project Management. Likewise the Receptionist.
  */
 export function isReadOnly(principal: Principal): boolean {
-  return principal.grants.every((g) => READ_ONLY_PERMISSIONS.has(g.permission) || permissionModule(g.permission) === 'sales');
+  return principal.grants.every((g) => READ_ONLY_PERMISSIONS.has(g.permission) || NON_PM_MODULES.has(permissionModule(g.permission)));
 }

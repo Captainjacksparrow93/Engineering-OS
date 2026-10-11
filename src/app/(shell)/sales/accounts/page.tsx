@@ -7,7 +7,7 @@ import { TIER_LABELS } from '@/modules/sales/domain/intelligence';
 import { createAccountAction } from '@/app/actions/sales';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { SubmitButton } from '@/components/form';
-import { ActionForm } from '../_components/action-form';
+import { ActionForm } from '@/components/action-form';
 import { inrShort, shortDate } from '../_components/format';
 
 export const dynamic = 'force-dynamic';

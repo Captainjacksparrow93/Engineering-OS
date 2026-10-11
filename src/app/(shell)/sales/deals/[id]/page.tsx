@@ -16,7 +16,7 @@ import {
 } from '@/app/actions/sales';
 import { Card, PageHeader } from '@/components/ui';
 import { SubmitButton } from '@/components/form';
-import { ActionForm } from '../../_components/action-form';
+import { ActionForm } from '@/components/action-form';
 import { DealStageBadge, QuoteStatusBadge, STAGE_NAMES } from '../../_components/badges';
 import { inrShort, isoDay, pct, shortDate } from '../../_components/format';
 

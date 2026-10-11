@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import type { ActionState } from '@/core/utils/actions';
 
 /**
- * A form bound to a Sales server action, with its result shown underneath. Multi-line
+ * A form bound to a server action, with its result shown underneath. Multi-line
  * errors (import row lists) keep their line breaks.
  */
 export function ActionForm({
