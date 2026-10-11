@@ -1,4 +1,4 @@
-import { prisma } from '@/core/db/prisma';
+import { prisma, type Tx } from '@/core/db/prisma';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { DomainError, ForbiddenError, NotFoundError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
@@ -150,20 +150,11 @@ export async function updateClient(
   }
 
   return prisma.$transaction(async (tx) => {
+    if (name !== before.name) await renameClientCascade(tx, principal.companyId, id, name);
     const updated = await tx.client.update({
       where: { id },
-      data: {
-        name,
-        refNumber,
-      },
+      data: { refNumber },
     });
-
-    if (name !== before.name) {
-      await tx.project.updateMany({
-        where: { clientId: id, companyId: principal.companyId },
-        data: { clientName: name },
-      });
-    }
 
     await audit(
       {
@@ -179,6 +170,12 @@ export async function updateClient(
 
     return updated;
   });
+}
+
+/** Renames a client and every project that carries its name. Shared by Edit client and the ERP order sync. */
+export async function renameClientCascade(tx: Tx, companyId: string, clientId: string, name: string) {
+  await tx.client.update({ where: { id: clientId }, data: { name } });
+  await tx.project.updateMany({ where: { clientId, companyId }, data: { clientName: name } });
 }
 
 export interface ClientWithStats {

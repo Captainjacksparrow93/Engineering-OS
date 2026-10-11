@@ -63,11 +63,16 @@ interface ErpCustomerDoc {
   custom_acs_reference?: string;
 }
 
+/** Our project page, as written onto the ERPNext order (`custom_project_link`). */
+export function projectLink(projectId: string): string {
+  return `${config().APP_URL.replace(/\/+$/, '')}/pm/projects/${projectId}`;
+}
+
 /** Writes our project code and a link to the project onto the ERPNext sales order. Throws on failure. */
 export async function writeProjectToOrder(orderName: string, project: { id: string; code: string }) {
   await erpUpdate('Sales Order', orderName, {
     custom_project_code: project.code,
-    custom_project_link: `${config().APP_URL.replace(/\/+$/, '')}/pm/projects/${project.id}`,
+    custom_project_link: projectLink(project.id),
   });
 }
 

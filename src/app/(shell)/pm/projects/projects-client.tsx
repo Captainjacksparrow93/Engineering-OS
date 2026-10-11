@@ -17,6 +17,7 @@ interface ProjectListItem {
   priority: string;
   targetEndDate: Date | string | null;
   panelCount: number;
+  erpOrderAlert?: string | null;
   manager: { id: string; fullName: string; avatarColor?: string | null };
   stats: {
     taskCount: number;
@@ -153,6 +154,11 @@ export function ProjectsClient({
 
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
                   <PriorityBadge priority={project.priority} />
+                  {project.erpOrderAlert ? (
+                    <span className="badge bg-warning/[0.12] text-ink text-xs" title={project.erpOrderAlert}>
+                      Order changed
+                    </span>
+                  ) : null}
                   {project.stats.blockedCount > 0 ? (
                     <span className="badge bg-error/[0.08] text-error text-xs">
                       {project.stats.blockedCount} blocked

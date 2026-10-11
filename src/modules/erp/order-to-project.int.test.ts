@@ -94,7 +94,7 @@ describe('Plan 014 step 5: create the project from the sales order', () => {
       await prisma.task.deleteMany({ where: { projectId } });
       await prisma.projectMember.deleteMany({ where: { projectId } });
       await prisma.roleAssignment.deleteMany({ where: { scopeType: 'PROJECT', scopeId: projectId } });
-      await prisma.project.delete({ where: { id: projectId } }).catch(() => {});
+      await prisma.project.delete({ where: { id: projectId } });
     }
     await prisma.client.deleteMany({
       where: { OR: [{ id: unlinkedClient.id }, { erpCustomer: { in: customerNames } }] },
