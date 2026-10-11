@@ -70,6 +70,12 @@ export const PERMISSIONS = {
   // Any employee may schedule visits to themselves and answer arrival alerts: no key needed.
   'gate.desk': 'Run the front desk: schedule visits for anyone, log walk-ins, check visitors in and out',
   'gate.register.read': 'See the full visitor register and history',
+
+  // -- HRMS ----------------------------------------------------------------------
+  // Your own profile, documents and the company policies need no key.
+  'hr.employee.read': 'See employee records in scope (a department-scoped grant sees that department)',
+  'hr.employee.manage': 'Edit employee HR records, upload employee documents and company policies',
+  'hr.sensitive.read': 'See bank account and ID numbers (PAN, Aadhaar, UAN, ESIC)',
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;
@@ -143,6 +149,9 @@ export const SYSTEM_ROLES: Record<
       'sales.quote.approve',
       'sales.settings.manage',
       'gate.register.read',
+      'hr.employee.read',
+      'hr.employee.manage',
+      'hr.sensitive.read',
     ],
   },
   TECHNICAL_HEAD: {
@@ -170,6 +179,7 @@ export const SYSTEM_ROLES: Record<
       'pm.handover.decide',
       'pm.resource.read',
       'pm.report.read',
+      'hr.employee.read',
     ],
   },
   SERVICE_HEAD: {
@@ -197,6 +207,7 @@ export const SYSTEM_ROLES: Record<
       'pm.handover.decide',
       'pm.resource.read',
       'pm.report.read',
+      'hr.employee.read',
     ],
   },
   DEPARTMENT_HEAD: {
@@ -204,6 +215,7 @@ export const SYSTEM_ROLES: Record<
     description: 'Runs a non-technical department: its people and accounts.',
     permissions: [
       'admin.user.read',
+      'hr.employee.read',
     ],
   },
   PROJECT_MANAGER: {
@@ -281,6 +293,11 @@ export const SYSTEM_ROLES: Record<
     name: 'Receptionist',
     description: 'Runs the front desk: visitor check-in and check-out, walk-ins and the visitor register.',
     permissions: ['gate.desk', 'gate.register.read'],
+  },
+  HR_MANAGER: {
+    name: 'HR Manager',
+    description: 'Runs HR: every employee record, documents and policies; adds and deactivates accounts.',
+    permissions: ['admin.user.read', 'admin.user.manage', 'hr.employee.read', 'hr.employee.manage', 'hr.sensitive.read'],
   },
   SALES_HEAD: {
     name: 'Sales Head',

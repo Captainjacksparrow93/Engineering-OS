@@ -278,7 +278,7 @@ async function main() {
       dept: 'HR',
       manager: 'ACS-0002',
       skills: ['talent management', 'recruitment', 'leave management'],
-      roles: [{ key: 'DEPARTMENT_HEAD', scopeType: 'DEPARTMENT', scope: 'HR' }],
+      roles: [{ key: 'DEPARTMENT_HEAD', scopeType: 'DEPARTMENT', scope: 'HR' }, { key: 'HR_MANAGER', scopeType: 'GLOBAL' }],
     },
 
     // Receptionist
