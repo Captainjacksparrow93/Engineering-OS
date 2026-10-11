@@ -170,6 +170,21 @@ async function main() {
     update: {},
   });
 
+  // Starter leave types (plan 020). Create-only: HR's own changes are never overwritten. The
+  // migration adds the same four to a database whose company already existed.
+  for (const t of [
+    { code: 'CL', name: 'Casual leave', annualDays: 8, paid: true },
+    { code: 'SL', name: 'Sick leave', annualDays: 7, paid: true },
+    { code: 'EL', name: 'Earned leave', annualDays: 15, paid: true },
+    { code: 'LWP', name: 'Leave without pay', annualDays: null, paid: false },
+  ]) {
+    await prisma.hrLeaveType.upsert({
+      where: { companyId_code: { companyId: company.id, code: t.code } },
+      create: { companyId: company.id, ...t },
+      update: {},
+    });
+  }
+
   const departmentTree: Array<{ code: string; name: string; parent?: string }> = [
     { code: 'DIR', name: 'Board of Directors' },
     { code: 'HR', name: 'Human Resources' },

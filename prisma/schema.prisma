@@ -52,7 +52,11 @@ model Company {
 
   gateVisits GateVisit[]
 
-  hrDocuments HrDocument[]
+  hrDocuments  HrDocument[]
+  hrLeaveTypes HrLeaveType[]
+  hrHolidays   HrHoliday[]
+  hrSettings   HrSettings?
+  hrImports    HrAttendanceImport[]
 
   @@map("core_companies")
 }
@@ -152,8 +156,16 @@ model User {
   gateVisitsCreated GateVisit[] @relation("GateVisitCreatedBy")
 
   hrProfile          HrEmployeeProfile?
-  hrDocuments        HrDocument[]       @relation("HrDocumentEmployee")
-  hrDocumentsUploads HrDocument[]       @relation("HrDocumentUploadedBy")
+  hrDocuments        HrDocument[]         @relation("HrDocumentEmployee")
+  hrDocumentsUploads HrDocument[]         @relation("HrDocumentUploadedBy")
+  hrLeaveRequests    HrLeaveRequest[]     @relation("HrLeaveApplicant")
+  hrLeaveManagerActs HrLeaveRequest[]     @relation("HrLeaveManagerBy")
+  hrLeaveHeadActs    HrLeaveRequest[]     @relation("HrLeaveHeadBy")
+  hrLeaveAllocations HrLeaveAllocation[]
+  hrAttendance       HrAttendance[]
+  hrRegularisations  HrRegularisation[]   @relation("HrRegularisationEmployee")
+  hrRegDecisions     HrRegularisation[]   @relation("HrRegularisationDecidedBy")
+  hrImportsRun       HrAttendanceImport[]
 
   @@index([companyId])
   @@index([departmentId])
@@ -1290,6 +1302,8 @@ model HrEmployeeProfile {
   confirmationDate DateTime?         @db.Date
   workLocation     String?
   noticePeriodDays Int?
+  /// The employee's number on the biometric machine, if it differs from the employee code.
+  biometricId      String?
 
   // Personal (the employee edits)
   dateOfBirth      DateTime?        @db.Date
@@ -1319,6 +1333,7 @@ model HrEmployeeProfile {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([biometricId])
   @@map("hr_employee_profiles")
 }
 
@@ -1347,4 +1362,190 @@ model HrDocument {
 
   @@index([companyId, userId, category, title])
   @@map("hr_documents")
+}
+
+// ------------------------------------------------------------- HRMS phase 2: time
+
+/// Company HR settings: one working shift for everyone (attendance maths).
+model HrSettings {
+  id                String   @id @default(cuid())
+  companyId         String   @unique
+  /// Shift start, minutes after midnight IST (570 = 09:30).
+  shiftStartMinutes Int      @default(570)
+  graceMinutes      Int      @default(15)
+  /// Minutes that make a full day / a half day.
+  fullDayMinutes    Int      @default(480)
+  halfDayMinutes    Int      @default(240)
+  updatedAt         DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("hr_settings")
+}
+
+model HrLeaveType {
+  id           String   @id @default(cuid())
+  companyId    String
+  code         String
+  name         String
+  /// Days granted per calendar year; null = no limit (leave without pay).
+  annualDays   Decimal? @db.Decimal(5, 1)
+  paid         Boolean  @default(true)
+  allowHalfDay Boolean  @default(true)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requests    HrLeaveRequest[]
+  allocations HrLeaveAllocation[]
+
+  @@unique([companyId, code])
+  @@map("hr_leave_types")
+}
+
+/// Overrides a leave type's yearly days for one employee (joined mid-year, carried forward, etc.).
+model HrLeaveAllocation {
+  id          String   @id @default(cuid())
+  userId      String
+  leaveTypeId String
+  year        Int
+  days        Decimal  @db.Decimal(5, 1)
+  note        String?
+  updatedAt   DateTime @updatedAt
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveType HrLeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leaveTypeId, year])
+  @@map("hr_leave_allocations")
+}
+
+enum HrLeaveStatus {
+  PENDING_MANAGER
+  PENDING_HEAD
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model HrLeaveRequest {
+  id          String        @id @default(cuid())
+  companyId   String
+  userId      String
+  leaveTypeId String
+  startDate   DateTime      @db.Date
+  endDate     DateTime      @db.Date
+  halfDay     Boolean       @default(false)
+  /// Working days (Mon–Sat, holidays excluded); 0.5 for a half day.
+  days        Decimal       @db.Decimal(5, 1)
+  reason      String
+  status      HrLeaveStatus
+  managerById String?
+  managerAt   DateTime?
+  managerNote String?
+  headById    String?
+  headAt      DateTime?
+  headNote    String?
+  cancelledAt DateTime?
+  /// The `core_leaves` row written on approval, which Project Management reads.
+  coreLeaveId String?       @unique
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user      User        @relation("HrLeaveApplicant", fields: [userId], references: [id], onDelete: Cascade)
+  leaveType HrLeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  managerBy User?       @relation("HrLeaveManagerBy", fields: [managerById], references: [id], onDelete: SetNull)
+  headBy    User?       @relation("HrLeaveHeadBy", fields: [headById], references: [id], onDelete: SetNull)
+
+  @@index([companyId, status])
+  @@index([userId, startDate])
+  @@map("hr_leave_requests")
+}
+
+model HrHoliday {
+  id        String   @id @default(cuid())
+  companyId String
+  date      DateTime @db.Date
+  name      String
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, date])
+  @@map("hr_holidays")
+}
+
+enum HrAttendanceSource {
+  IMPORT
+  REGULARISED
+}
+
+/// One row per employee per day: first punch in and last punch out.
+model HrAttendance {
+  id        String             @id @default(cuid())
+  userId    String
+  date      DateTime           @db.Date
+  firstIn   DateTime?
+  lastOut   DateTime?
+  source    HrAttendanceSource @default(IMPORT)
+  importId  String?
+  updatedAt DateTime           @updatedAt
+
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  importedBy HrAttendanceImport? @relation(fields: [importId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, date])
+  @@index([date])
+  @@map("hr_attendance")
+}
+
+model HrAttendanceImport {
+  id           String    @id @default(cuid())
+  companyId    String
+  fileName     String
+  rows         Int
+  days         Int
+  skipped      Int
+  /// Up to 50 skipped-row messages, for HR to fix the file.
+  problems     String[]  @default([])
+  fromDate     DateTime? @db.Date
+  toDate       DateTime? @db.Date
+  importedById String
+  createdAt    DateTime  @default(now())
+
+  company    Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  importedBy User           @relation(fields: [importedById], references: [id], onDelete: Restrict)
+  attendance HrAttendance[]
+
+  @@index([companyId, createdAt])
+  @@map("hr_attendance_imports")
+}
+
+enum HrRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// An employee asks to correct a day's punches (forgot to punch, machine down, site visit).
+model HrRegularisation {
+  id          String          @id @default(cuid())
+  userId      String
+  date        DateTime        @db.Date
+  firstIn     DateTime
+  lastOut     DateTime
+  reason      String
+  status      HrRequestStatus @default(PENDING)
+  decidedById String?
+  decidedAt   DateTime?
+  note        String?
+  createdAt   DateTime        @default(now())
+
+  user      User  @relation("HrRegularisationEmployee", fields: [userId], references: [id], onDelete: Cascade)
+  decidedBy User? @relation("HrRegularisationDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, date])
+  @@index([status])
+  @@map("hr_regularisations")
 }

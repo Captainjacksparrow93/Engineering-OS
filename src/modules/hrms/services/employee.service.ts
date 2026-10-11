@@ -36,7 +36,7 @@ export const managesHr = (principal: Principal) => hasPermissionAnywhere(princip
 export const seesSensitive = (principal: Principal) => hasPermissionAnywhere(principal, 'hr.sensitive.read');
 
 /** The people this principal may read, as a `User` filter; null when only themselves. */
-function directoryScope(principal: Principal): Prisma.UserWhereInput | null {
+export function directoryScope(principal: Principal): Prisma.UserWhereInput | null {
   if (hasGlobal(principal, 'hr.employee.read')) return { companyId: principal.companyId };
   if (seesDirectory(principal) && principal.coveredDepartmentIds.length > 0) {
     return { companyId: principal.companyId, departmentId: { in: principal.coveredDepartmentIds } };

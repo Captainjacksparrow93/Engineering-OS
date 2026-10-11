@@ -13,6 +13,8 @@ interface NavItem {
   label: string;
   href: string;
   requires?: PermissionKey;
+  /** Extra rule for items not tied to one key (e.g. anyone with people reporting to them). */
+  show?: (principal: Principal) => boolean;
   icon: React.ReactNode;
 }
 
@@ -171,11 +173,23 @@ const GATE_NAV: NavItem[] = [
   { label: 'My visitors', href: '/gate/my-visitors', icon: Icons.People },
 ];
 
-// "My profile" and "Company policies" have no `requires`: every employee has an HR record.
+// Self-service items have no `requires`: every employee has an HR record, leave and attendance.
+// HR approvals show for anyone who can be asked: reporting managers, department heads, HR.
 const HR_NAV: NavItem[] = [
   { label: 'My profile', href: '/hrms/me', icon: Icons.MyWork },
+  { label: 'My leave', href: '/hrms/leave', icon: Icons.Audit },
+  { label: 'My attendance', href: '/hrms/attendance', icon: Icons.Audit },
+  {
+    label: 'HR approvals',
+    href: '/hrms/approvals',
+    show: (p) => p.reportIds.length > 0 || hasPermissionAnywhere(p, 'hr.leave.approve') || hasPermissionAnywhere(p, 'hr.attendance.manage'),
+    icon: Icons.Handovers,
+  },
   { label: 'HR overview', href: '/hrms', requires: 'hr.employee.read', icon: Icons.Dashboard },
   { label: 'Employees', href: '/hrms/employees', requires: 'hr.employee.read', icon: Icons.People },
+  { label: 'Team leave', href: '/hrms/leave/team', requires: 'hr.employee.read', icon: Icons.Resources },
+  { label: 'Team attendance', href: '/hrms/attendance/team', requires: 'hr.employee.read', icon: Icons.Resources },
+  { label: 'HR settings', href: '/hrms/settings', requires: 'hr.attendance.manage', icon: Icons.Roles },
   { label: 'Company policies', href: '/hrms/policies', icon: Icons.Catalog },
 ];
 
@@ -198,7 +212,7 @@ export function Sidebar({
   const { isCollapsed, toggleCollapsed } = useShell();
 
   const visible = (item: NavItem) => {
-    return !item.requires || hasPermissionAnywhere(principal, item.requires);
+    return (!item.requires || hasPermissionAnywhere(principal, item.requires)) && (!item.show || item.show(principal));
   };
   const workspaceItems = WORKSPACE_NAV.filter(visible);
   const managementItems = MANAGEMENT_NAV.filter(visible);

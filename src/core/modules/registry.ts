@@ -37,7 +37,7 @@ export const MODULES: ModuleDefinition[] = [
   {
     key: 'hrms',
     name: 'HRMS',
-    description: 'Employee records, documents, policies and self-service; leave, attendance and payslips next.',
+    description: 'Employee records, documents, policies, leave with approvals, holidays and biometric attendance; payslips next.',
     icon: '👥',
     route: '/hrms',
     status: 'LIVE',

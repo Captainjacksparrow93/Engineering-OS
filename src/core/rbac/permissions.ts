@@ -76,6 +76,9 @@ export const PERMISSIONS = {
   'hr.employee.read': 'See employee records in scope (a department-scoped grant sees that department)',
   'hr.employee.manage': 'Edit employee HR records, upload employee documents and company policies',
   'hr.sensitive.read': 'See bank account and ID numbers (PAN, Aadhaar, UAN, ESIC)',
+  // Applying for leave and the reporting manager's approval need no key.
+  'hr.leave.approve': 'Give the department-head approval on leave and attendance corrections (a department-scoped grant covers that department)',
+  'hr.attendance.manage': 'Import biometric attendance; manage leave types, balances, holidays and shift timings',
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;
@@ -152,6 +155,8 @@ export const SYSTEM_ROLES: Record<
       'hr.employee.read',
       'hr.employee.manage',
       'hr.sensitive.read',
+      'hr.leave.approve',
+      'hr.attendance.manage',
     ],
   },
   TECHNICAL_HEAD: {
@@ -180,6 +185,7 @@ export const SYSTEM_ROLES: Record<
       'pm.resource.read',
       'pm.report.read',
       'hr.employee.read',
+      'hr.leave.approve',
     ],
   },
   SERVICE_HEAD: {
@@ -208,6 +214,7 @@ export const SYSTEM_ROLES: Record<
       'pm.resource.read',
       'pm.report.read',
       'hr.employee.read',
+      'hr.leave.approve',
     ],
   },
   DEPARTMENT_HEAD: {
@@ -216,6 +223,7 @@ export const SYSTEM_ROLES: Record<
     permissions: [
       'admin.user.read',
       'hr.employee.read',
+      'hr.leave.approve',
     ],
   },
   PROJECT_MANAGER: {
@@ -297,7 +305,7 @@ export const SYSTEM_ROLES: Record<
   HR_MANAGER: {
     name: 'HR Manager',
     description: 'Runs HR: every employee record, documents and policies; adds and deactivates accounts.',
-    permissions: ['admin.user.read', 'admin.user.manage', 'hr.employee.read', 'hr.employee.manage', 'hr.sensitive.read'],
+    permissions: ['admin.user.read', 'admin.user.manage', 'hr.employee.read', 'hr.employee.manage', 'hr.sensitive.read', 'hr.leave.approve', 'hr.attendance.manage'],
   },
   SALES_HEAD: {
     name: 'Sales Head',
