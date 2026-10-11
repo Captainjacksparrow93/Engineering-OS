@@ -98,6 +98,7 @@ export function EmployeeRecord({ record }: { record: Record }) {
             <Field label="Confirmed on">{date(p?.confirmationDate)}</Field>
             <Field label="Work location">{p?.workLocation}</Field>
             <Field label="Notice period">{p?.noticePeriodDays != null ? `${p.noticePeriodDays} days` : null}</Field>
+            <Field label="Biometric number">{p?.biometricId}</Field>
           </Fields>
           {record.canManage ? (
             <Edit label="Edit job details">
@@ -110,6 +111,7 @@ export function EmployeeRecord({ record }: { record: Record }) {
                   <Input id="job-conf" label="Confirmed on" name="confirmationDate" type="date" defaultValue={dayString(p?.confirmationDate)} />
                   <Input id="job-loc" label="Work location" name="workLocation" defaultValue={p?.workLocation} maxLength={120} placeholder="e.g. Vadodara works" />
                   <Input id="job-notice" label="Notice period (days)" name="noticePeriodDays" type="number" defaultValue={p?.noticePeriodDays} />
+                  <Input id="job-bio" label="Biometric number" name="biometricId" defaultValue={p?.biometricId} maxLength={30} placeholder="Only if it differs from the employee code" />
                 </div>
                 <SubmitButton variant="primary" pendingLabel="Saving…">Save job details</SubmitButton>
               </ActionForm>

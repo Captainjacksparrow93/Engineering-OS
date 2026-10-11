@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 
+/** Section roots whose sub-pages have their own nav entries, so they light up only on an exact match. */
+const EXACT_ONLY = new Set(['/dashboard', '/sales', '/gate', '/hrms', '/hrms/leave', '/hrms/attendance']);
+
 /** Active state is carried by ink weight and a soft canvas fill - never by orange. */
 export function NavLink({
   href,
@@ -21,7 +24,7 @@ export function NavLink({
   const pathname = usePathname();
   const active =
     pathname === href ||
-    (href !== '/dashboard' && href !== '/sales' && href !== '/gate' && href !== '/hrms' && pathname.startsWith(`${href}/`)) ||
+    (!EXACT_ONLY.has(href) && pathname.startsWith(`${href}/`)) ||
     (href === '/pm/projects' && pathname.startsWith('/pm/tasks/'));
 
   return (

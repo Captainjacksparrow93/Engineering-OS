@@ -61,9 +61,12 @@ describe('Plan 020 phase 1: HRMS core', () => {
   // ---------------------------------------------------------------- roles
 
   it('gives HR Manager every hr key and People access, Directors hr keys, heads read only', () => {
-    expect(hr.grants.map((g) => g.permission).sort()).toEqual(['admin.user.manage', 'admin.user.read', 'hr.employee.manage', 'hr.employee.read', 'hr.sensitive.read']);
+    expect(hr.grants.map((g) => g.permission).sort()).toEqual(['admin.user.manage', 'admin.user.read', 'hr.attendance.manage', 'hr.employee.manage', 'hr.employee.read', 'hr.leave.approve', 'hr.sensitive.read']);
     expect(director.grants.map((g) => g.permission)).toEqual(expect.arrayContaining(['hr.employee.read', 'hr.employee.manage', 'hr.sensitive.read']));
-    expect(head.grants.filter((g) => g.permission.startsWith('hr.'))).toEqual([{ permission: 'hr.employee.read', scopeType: 'DEPARTMENT', scopeId: deptX.id }]);
+    expect(head.grants.filter((g) => g.permission.startsWith('hr.'))).toEqual([
+      { permission: 'hr.employee.read', scopeType: 'DEPARTMENT', scopeId: deptX.id },
+      { permission: 'hr.leave.approve', scopeType: 'DEPARTMENT', scopeId: deptX.id },
+    ]);
     // hr.* keys do not make anyone a writer in Project Management.
     expect(isReadOnly(head)).toBe(true);
     expect(isReadOnly(hr)).toBe(false); // admin.user.manage is a write key
