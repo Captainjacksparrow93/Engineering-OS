@@ -51,7 +51,7 @@ The rule in `CLAUDE.md` holds: **ERPNext must be on the VPS before `erp` merges 
 
 ## Steps
 - [x] **1. (Antigravity) F12c: readable tile icons.** As written in plan 013, F12c: a dark tile with a white symbol (e.g. `filter: grayscale(1) contrast(8) brightness(0.9)`), and the ACS logo not affected. Rebuild as the next tag, check it in the browser, and note what you saw.
-- [ ] **2. (Antigravity) Bring `main` into `erp` and re-run everything.**
+- [x] **2. (Antigravity) Bring `main` into `erp` and re-run everything.** Done the other way round by Claude on 2026-10-11 with the user's approval: `erp` merged into `ERPNEW` (= `main` + Sales, Gate, HRMS) as `da2523f`. Only conflict `plans/INDEX.md` (kept both sides). Fresh CI-like DB: typecheck clean, unit 229/229, integration 166/166 (24 files), build OK. From here the release branch is `ERPNEW`, not `erp`; step 7 merges `ERPNEW` into `main`, together with plan 021.
   - This is an exception to "never merge `main` into `erp`". **Wait until the user says "merge main into erp" in chat**; until then, this step is blocked.
   - Merge `main` into `erp`, resolve conflicts (plans and docs keep both sides), and run the full suite, including a fresh CI-like DB.
   - Note any conflict and how it was resolved.
