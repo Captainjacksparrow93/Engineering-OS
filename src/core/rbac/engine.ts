@@ -73,10 +73,10 @@ const READ_ONLY_PERMISSIONS: ReadonlySet<PermissionKey> = new Set<PermissionKey>
 ]);
 
 /** Modules whose grants do not count against read-only in Project Management. */
-const NON_PM_MODULES: ReadonlySet<string> = new Set(['sales', 'gate']);
+const NON_PM_MODULES: ReadonlySet<string> = new Set(['sales', 'gate', 'hr']);
 
 /**
- * True when every grant outside Sales and Gate is a pure read, e.g. the Sales Head: they run
+ * True when every grant outside Sales, Gate and HR is a pure read, e.g. the Sales Head: they run
  * Sales but cannot post or change anything in Project Management. Likewise the Receptionist.
  */
 export function isReadOnly(principal: Principal): boolean {

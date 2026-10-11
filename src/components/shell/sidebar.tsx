@@ -171,6 +171,14 @@ const GATE_NAV: NavItem[] = [
   { label: 'My visitors', href: '/gate/my-visitors', icon: Icons.People },
 ];
 
+// "My profile" and "Company policies" have no `requires`: every employee has an HR record.
+const HR_NAV: NavItem[] = [
+  { label: 'My profile', href: '/hrms/me', icon: Icons.MyWork },
+  { label: 'HR overview', href: '/hrms', requires: 'hr.employee.read', icon: Icons.Dashboard },
+  { label: 'Employees', href: '/hrms/employees', requires: 'hr.employee.read', icon: Icons.People },
+  { label: 'Company policies', href: '/hrms/policies', icon: Icons.Catalog },
+];
+
 const ADMIN_NAV: NavItem[] = [
   { label: 'Checklists', href: '/pm/templates', requires: 'pm.template.read', icon: Icons.MyWork },
   { label: 'People', href: '/admin/users', requires: 'admin.user.read', icon: Icons.People },
@@ -196,6 +204,7 @@ export function Sidebar({
   const managementItems = MANAGEMENT_NAV.filter(visible);
   const salesItems = SALES_NAV.filter(visible);
   const gateItems = GATE_NAV.filter(visible);
+  const hrItems = HR_NAV.filter(visible);
   const adminItems = ADMIN_NAV.filter(visible);
 
   return (
@@ -313,6 +322,17 @@ export function Sidebar({
             <div className="my-2 border-t border-hairline-soft" />
           )}
           {gateItems.map((item) => (
+            <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} collapsed={isCollapsed} />
+          ))}
+        </div>
+
+        <div key="hr-section">
+          {!isCollapsed ? (
+            <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">HR</p>
+          ) : (
+            <div className="my-2 border-t border-hairline-soft" />
+          )}
+          {hrItems.map((item) => (
             <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} collapsed={isCollapsed} />
           ))}
         </div>

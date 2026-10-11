@@ -52,6 +52,8 @@ model Company {
 
   gateVisits GateVisit[]
 
+  hrDocuments HrDocument[]
+
   @@map("core_companies")
 }
 
@@ -148,6 +150,10 @@ model User {
 
   gateVisitsHosted  GateVisit[] @relation("GateVisitHost")
   gateVisitsCreated GateVisit[] @relation("GateVisitCreatedBy")
+
+  hrProfile          HrEmployeeProfile?
+  hrDocuments        HrDocument[]       @relation("HrDocumentEmployee")
+  hrDocumentsUploads HrDocument[]       @relation("HrDocumentUploadedBy")
 
   @@index([companyId])
   @@index([departmentId])
@@ -1232,4 +1238,113 @@ model GateVisit {
   @@index([companyId, status])
   @@index([hostId, status])
   @@map("gate_visits")
+}
+
+// =====================================================================================
+// HRMS (plan 020). `core_users` stays the identity; HR data hangs off it by userId.
+// =====================================================================================
+
+enum HrEmploymentType {
+  PERMANENT
+  PROBATION
+  CONTRACT
+  INTERN
+  CONSULTANT
+}
+
+enum HrGender {
+  FEMALE
+  MALE
+  OTHER
+}
+
+enum HrMaritalStatus {
+  SINGLE
+  MARRIED
+  OTHER
+}
+
+enum HrDocumentCategory {
+  OFFER_LETTER
+  APPOINTMENT_LETTER
+  ID_PROOF
+  ADDRESS_PROOF
+  EDUCATION
+  EXPERIENCE
+  BANK
+  CONTRACT
+  LETTER
+  POLICY
+  OTHER
+}
+
+/// One per employee. Every field is optional so a record can be filled in over time.
+model HrEmployeeProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // Job (HR edits)
+  dateOfJoining    DateTime?         @db.Date
+  employmentType   HrEmploymentType?
+  probationEndDate DateTime?         @db.Date
+  confirmationDate DateTime?         @db.Date
+  workLocation     String?
+  noticePeriodDays Int?
+
+  // Personal (the employee edits)
+  dateOfBirth      DateTime?        @db.Date
+  gender           HrGender?
+  maritalStatus    HrMaritalStatus?
+  bloodGroup       String?
+  personalEmail    String?
+  currentAddress   String?
+  permanentAddress String?
+
+  // Emergency contact (the employee edits)
+  emergencyName     String?
+  emergencyRelation String?
+  emergencyPhone    String?
+
+  // Statutory and bank (HR edits; masked unless `hr.sensitive.read`)
+  pan           String?
+  aadhaar       String?
+  uan           String?
+  esicNumber    String?
+  bankName      String?
+  bankAccountNo String?
+  bankIfsc      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("hr_employee_profiles")
+}
+
+/// A stored file. `userId` null means a company policy everyone can read. Uploading the same
+/// category + title again adds a version; the newest has `supersededAt` null.
+model HrDocument {
+  id                String             @id @default(cuid())
+  companyId         String
+  userId            String?
+  category          HrDocumentCategory
+  title             String
+  fileName          String
+  mimeType          String
+  sizeBytes         Int
+  content           Bytes
+  version           Int                @default(1)
+  supersededAt      DateTime?
+  /// False hides an employee document from the employee (HR-only notes, for example).
+  visibleToEmployee Boolean            @default(true)
+  uploadedById      String
+  createdAt         DateTime           @default(now())
+
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user       User?   @relation("HrDocumentEmployee", fields: [userId], references: [id], onDelete: Cascade)
+  uploadedBy User    @relation("HrDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, userId, category, title])
+  @@map("hr_documents")
 }

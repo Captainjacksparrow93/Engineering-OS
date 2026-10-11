@@ -37,17 +37,12 @@ export const MODULES: ModuleDefinition[] = [
   {
     key: 'hrms',
     name: 'HRMS',
-    description: 'Employee master, attendance, leave, payroll inputs and appraisals.',
+    description: 'Employee records, documents, policies and self-service; leave, attendance and payslips next.',
     icon: '👥',
     route: '/hrms',
-    status: 'COMING_SOON',
-    plannedFor: 'Phase 2',
-    scope: [
-      'Employee master becomes the owner of the shared identity record',
-      'Attendance and shift rosters feed daily capacity into Project Management',
-      'Leave approvals automatically remove people from the availability board',
-      'Skill matrix drives task-assignment recommendations',
-    ],
+    status: 'LIVE',
+    scope: [],
+    // No `requires`: every employee opens their own profile here.
     sortOrder: 20,
   },
   {
