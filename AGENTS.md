@@ -51,7 +51,7 @@ Real employees of ACS Engitech use it every day at the VPS (`72.62.248.38`, `/ro
 - `ux-writing` for UI text and `impeccable` for UI/visual changes (see Coding Standards).
 
 ## Two-Agent Workflow (you = implementer)
-- Claude (Claude Desktop) writes plans in `plans/NNN-*.md`. You (Antigravity or another implementer AI) implement them. Parked modules: HRMS and Gate. Do not start them. **ERP is active** (plans 012 onward), under the rules in "ERP work" below.
+- Claude (Claude Desktop) writes plans in `plans/NNN-*.md`. You (Antigravity or another implementer AI) implement them. Parked module: HRMS. Do not start it. Gate & Visitors (people only) is plan 019. **ERP is active** (plans 012 onward), under the rules in "ERP work" below.
 - Never touch `plans/done/` (verified plans). Do not write or restructure plans. You may only tick checkboxes, change **Status**, and fill "Implementation notes".
 - Pick plans in order from `plans/INDEX.md`. Update the Status there as well as in the plan file.
 - Set Status to IN PROGRESS when starting, DONE when finished. Follow the plan; if it's wrong, stop and note why in "Implementation notes" instead of improvising.

@@ -50,6 +50,8 @@ model Company {
   salesQuotes   SalesQuote[]
   salesHistory  SalesHistoryLine[]
 
+  gateVisits GateVisit[]
+
   @@map("core_companies")
 }
 
@@ -143,6 +145,9 @@ model User {
   salesActivities     SalesActivity[] @relation("SalesActivityUser")
   salesQuotesCreated  SalesQuote[]    @relation("SalesQuoteCreatedBy")
   salesQuotesApproved SalesQuote[]    @relation("SalesQuoteApprovedBy")
+
+  gateVisitsHosted  GateVisit[] @relation("GateVisitHost")
+  gateVisitsCreated GateVisit[] @relation("GateVisitCreatedBy")
 
   @@index([companyId])
   @@index([departmentId])
@@ -1167,4 +1172,64 @@ model SalesHistoryLine {
   @@index([companyId, itemCode])
   @@index([companyId, ref])
   @@map("sales_history_lines")
+}
+
+// =============================================================================
+// Gate & Visitors (plan 019). People only; material gate entry is out of scope.
+// =============================================================================
+
+enum GateVisitStatus {
+  EXPECTED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+/// Who put the visit on the list.
+enum GateVisitSource {
+  /// Scheduled by the front desk.
+  DESK
+  /// Scheduled by the employee being visited.
+  HOST
+  /// Arrived without notice; logged and checked in by the front desk.
+  WALK_IN
+}
+
+enum GateHostReply {
+  COMING
+  WAIT
+  UNAVAILABLE
+}
+
+model GateVisit {
+  id             String          @id @default(cuid())
+  companyId      String
+  visitorName    String
+  visitorPhone   String
+  visitorCompany String?
+  purpose        String
+  /// The employee being visited.
+  hostId         String
+  /// When the visitor is expected; a walk-in's arrival time.
+  expectedAt     DateTime
+  status         GateVisitStatus @default(EXPECTED)
+  source         GateVisitSource
+  createdById    String
+  checkedInAt    DateTime?
+  checkedOutAt   DateTime?
+  cancelledAt    DateTime?
+  hostReply      GateHostReply?
+  hostReplyNote  String?
+  hostRepliedAt  DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  host      User    @relation("GateVisitHost", fields: [hostId], references: [id], onDelete: Restrict)
+  createdBy User    @relation("GateVisitCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, expectedAt])
+  @@index([companyId, status])
+  @@index([hostId, status])
+  @@map("gate_visits")
 }

@@ -8,7 +8,7 @@ import { PRICE_SOURCE_LABELS, PRICE_SOURCES } from '@/modules/sales/domain/prici
 import { createItemAction, importPricesAction } from '@/app/actions/sales';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { SubmitButton } from '@/components/form';
-import { ActionForm } from '../_components/action-form';
+import { ActionForm } from '@/components/action-form';
 import { formatINR, isoDay, shortDate } from '../_components/format';
 
 export const dynamic = 'force-dynamic';

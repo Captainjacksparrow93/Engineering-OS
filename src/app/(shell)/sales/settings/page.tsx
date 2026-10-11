@@ -6,7 +6,7 @@ import { PRICE_SOURCE_LABELS, PRICE_SOURCES } from '@/modules/sales/domain/prici
 import { updateSettingsAction } from '@/app/actions/sales';
 import { Card, PageHeader } from '@/components/ui';
 import { SubmitButton } from '@/components/form';
-import { ActionForm } from '../_components/action-form';
+import { ActionForm } from '@/components/action-form';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Sales settings' };

@@ -65,6 +65,11 @@ export const PERMISSIONS = {
   'sales.catalog.manage': 'Maintain items and prices; import price lists and past quotes',
   'sales.quote.approve': 'Approve quotes below the minimum margin',
   'sales.settings.manage': 'Set margins, GST, quote terms and price priority',
+
+  // -- Gate & Visitors ---------------------------------------------------------
+  // Any employee may schedule visits to themselves and answer arrival alerts: no key needed.
+  'gate.desk': 'Run the front desk: schedule visits for anyone, log walk-ins, check visitors in and out',
+  'gate.register.read': 'See the full visitor register and history',
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;
@@ -137,6 +142,7 @@ export const SYSTEM_ROLES: Record<
       'sales.catalog.manage',
       'sales.quote.approve',
       'sales.settings.manage',
+      'gate.register.read',
     ],
   },
   TECHNICAL_HEAD: {
@@ -270,6 +276,11 @@ export const SYSTEM_ROLES: Record<
     name: 'Sales Executive',
     description: 'Runs their own deals and quotes in Sales.',
     permissions: ['sales.deal.read', 'sales.deal.manage'],
+  },
+  RECEPTIONIST: {
+    name: 'Receptionist',
+    description: 'Runs the front desk: visitor check-in and check-out, walk-ins and the visitor register.',
+    permissions: ['gate.desk', 'gate.register.read'],
   },
   SALES_HEAD: {
     name: 'Sales Head',

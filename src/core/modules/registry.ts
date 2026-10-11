@@ -93,18 +93,13 @@ export const MODULES: ModuleDefinition[] = [
   },
   {
     key: 'gate',
-    name: 'Gate Entry System',
-    description: 'Visitor, vehicle and material gate passes with inward/outward register.',
+    name: 'Gate & Visitors',
+    description: 'Front-desk visitor check-in and check-out, visits scheduled by staff, and arrival alerts.',
     icon: '🚧',
     route: '/gate',
-    status: 'COMING_SOON',
-    plannedFor: 'Phase 2',
-    scope: [
-      'Inward material gate entry raises the ERP goods-receipt note',
-      'Outward dispatch gate pass linked to the production panel record',
-      'Visitor and contractor check-in tied to the HRMS employee they are meeting',
-      'Security dashboard with live on-premise headcount',
-    ],
+    status: 'LIVE',
+    scope: [],
+    // No `requires`: every employee schedules their own visitors here.
     sortOrder: 50,
   },
   {

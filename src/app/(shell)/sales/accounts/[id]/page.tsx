@@ -7,7 +7,7 @@ import { TIER_LABELS } from '@/modules/sales/domain/intelligence';
 import { addContactAction, removeContactAction, updateAccountAction, updateRelationshipAction } from '@/app/actions/sales';
 import { Card, PageHeader, Stat } from '@/components/ui';
 import { SubmitButton } from '@/components/form';
-import { ActionForm } from '../../_components/action-form';
+import { ActionForm } from '@/components/action-form';
 import { DealStageBadge } from '../../_components/badges';
 import { inrShort, isoDay, pct, shortDate } from '../../_components/format';
 import { median } from '@/modules/sales/domain/intelligence';
