@@ -1577,15 +1577,19 @@ enum ErpRootType {
 
 /// One row per company. Created with the chart of accounts on first ERP use.
 model ErpSettings {
-  id                 String    @id @default(cuid())
-  companyId          String    @unique
+  id                      String    @id @default(cuid())
+  companyId               String    @unique
   /// Company's state for GST: same state as the party → CGST + SGST, else IGST.
-  companyState       String?
-  defaultGstRate     Decimal   @default(18) @db.Decimal(5, 2)
-  allowNegativeStock Boolean   @default(false)
+  companyState            String?
+  defaultGstRate          Decimal   @default(18) @db.Decimal(5, 2)
+  allowNegativeStock      Boolean   @default(false)
   /// Nothing may be posted on or before this date (period closing).
-  booksClosedUpTo    DateTime? @db.Date
-  updatedAt          DateTime  @updatedAt
+  booksClosedUpTo         DateTime? @db.Date
+  /// On: a work-order project must start from a submitted sales order (plan 014 rule).
+  projectsFromSalesOrders Boolean   @default(false)
+  /// Printed at the foot of sales orders and invoices.
+  salesTerms              String    @default("")
+  updatedAt               DateTime  @updatedAt
 
   @@map("erp_settings")
 }
@@ -2193,4 +2197,185 @@ model ErpPurchaseInvoiceLine {
   @@index([receiptLineId])
   @@index([orderLineId])
   @@map("erp_purchase_invoice_lines")
+}
+
+// ---------------------------------------------------------------- ERP selling (plan 022 phase 3)
+
+model ErpSalesOrder {
+  id            String       @id @default(cuid())
+  companyId     String
+  number        String
+  customerId    String
+  status        ErpDocStatus @default(DRAFT)
+  isClosed      Boolean      @default(false)
+  isOnHold      Boolean      @default(false)
+  orderDate     DateTime     @db.Date
+  /// Target delivery date; each line may carry its own.
+  deliveryDate  DateTime?    @db.Date
+  /// Client's purchase order number.
+  poNo          String?
+  /// Work order number (digits), carried into the PM project.
+  woNumber      String?
+  /// The PM project made from this order (plan 014: New project picks the order).
+  projectId     String?
+  /// Sales deal that was won into this order.
+  dealId        String?
+  quotationRef  String?
+  terms         String?
+  remarks       String?
+  netTotal      Decimal      @default(0) @db.Decimal(18, 2)
+  cgst          Decimal      @default(0) @db.Decimal(18, 2)
+  sgst          Decimal      @default(0) @db.Decimal(18, 2)
+  igst          Decimal      @default(0) @db.Decimal(18, 2)
+  grandTotal    Decimal      @default(0) @db.Decimal(18, 2)
+  createdById   String
+  submittedById String?
+  submittedAt   DateTime?
+  cancelledById String?
+  cancelledAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  lines ErpSalesOrderLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([companyId, customerId])
+  @@index([companyId, woNumber])
+  @@index([projectId])
+  @@index([dealId])
+  @@map("erp_sales_orders")
+}
+
+model ErpSalesOrderLine {
+  id           String    @id @default(cuid())
+  orderId      String
+  itemId       String
+  description  String?
+  qty          Decimal   @db.Decimal(18, 3)
+  rate         Decimal   @db.Decimal(14, 2)
+  amount       Decimal   @db.Decimal(18, 2)
+  gstRate      Decimal   @db.Decimal(5, 2)
+  deliveryDate DateTime? @db.Date
+  warehouseId  String
+  deliveredQty Decimal   @default(0) @db.Decimal(18, 3)
+  billedQty    Decimal   @default(0) @db.Decimal(18, 3)
+  sortOrder    Int       @default(0)
+
+  order ErpSalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, sortOrder])
+  @@index([itemId])
+  @@map("erp_sales_order_lines")
+}
+
+model ErpDeliveryNote {
+  id            String       @id @default(cuid())
+  companyId     String
+  number        String
+  customerId    String
+  status        ErpDocStatus @default(DRAFT)
+  postingDate   DateTime     @db.Date
+  projectId     String?
+  transporter   String?
+  vehicleNo     String?
+  lrNo          String?
+  remarks       String?
+  netTotal      Decimal      @default(0) @db.Decimal(18, 2)
+  createdById   String
+  submittedById String?
+  submittedAt   DateTime?
+  cancelledById String?
+  cancelledAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  lines ErpDeliveryNoteLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([companyId, customerId])
+  @@map("erp_delivery_notes")
+}
+
+model ErpDeliveryNoteLine {
+  id                  String  @id @default(cuid())
+  deliveryNoteId      String
+  itemId              String
+  orderLineId         String?
+  qty                 Decimal @db.Decimal(18, 3)
+  rate                Decimal @db.Decimal(14, 2)
+  amount              Decimal @db.Decimal(18, 2)
+  gstRate             Decimal @db.Decimal(5, 2)
+  warehouseId         String
+  /// Valuation of the stock that left (set on submit): the cost of goods sold.
+  costAmount          Decimal @default(0) @db.Decimal(18, 2)
+  billedQty           Decimal @default(0) @db.Decimal(18, 3)
+  qualityInspectionId String?
+  sortOrder           Int     @default(0)
+
+  deliveryNote ErpDeliveryNote @relation(fields: [deliveryNoteId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryNoteId, sortOrder])
+  @@index([orderLineId])
+  @@map("erp_delivery_note_lines")
+}
+
+model ErpSalesInvoice {
+  id                String       @id @default(cuid())
+  companyId         String
+  number            String
+  customerId        String
+  status            ErpDocStatus @default(DRAFT)
+  postingDate       DateTime     @db.Date
+  dueDate           DateTime?    @db.Date
+  poNo              String?
+  projectId         String?
+  remarks           String?
+  /// Credit note (return): settles `returnAgainstId`.
+  isReturn          Boolean      @default(false)
+  returnAgainstId   String?
+  netTotal          Decimal      @default(0) @db.Decimal(18, 2)
+  cgst              Decimal      @default(0) @db.Decimal(18, 2)
+  sgst              Decimal      @default(0) @db.Decimal(18, 2)
+  igst              Decimal      @default(0) @db.Decimal(18, 2)
+  grandTotal        Decimal      @default(0) @db.Decimal(18, 2)
+  outstandingAmount Decimal      @default(0) @db.Decimal(18, 2)
+  createdById       String
+  submittedById     String?
+  submittedAt       DateTime?
+  cancelledById     String?
+  cancelledAt       DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  lines ErpSalesInvoiceLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([companyId, customerId])
+  @@index([companyId, projectId])
+  @@map("erp_sales_invoices")
+}
+
+model ErpSalesInvoiceLine {
+  id              String  @id @default(cuid())
+  invoiceId       String
+  itemId          String?
+  description     String
+  qty             Decimal @db.Decimal(18, 3)
+  rate            Decimal @db.Decimal(14, 2)
+  amount          Decimal @db.Decimal(18, 2)
+  gstRate         Decimal @db.Decimal(5, 2)
+  orderLineId     String?
+  deliveryLineId  String?
+  incomeAccountId String?
+  sortOrder       Int     @default(0)
+
+  invoice ErpSalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, sortOrder])
+  @@index([orderLineId])
+  @@index([deliveryLineId])
+  @@map("erp_sales_invoice_lines")
 }

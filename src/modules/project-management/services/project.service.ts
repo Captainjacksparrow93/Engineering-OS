@@ -300,7 +300,7 @@ export async function updateProject(
     }
   }
 
-  // Plan 014: on a project made from an ERPNext sales order, the order owns client, WO and dates.
+  // Plan 014: on a project made from an ERP sales order, the order owns client, WO and dates.
   if (before.erpSalesOrder) {
     const day = (d: Date | null) => (d ? startOfDay(d).toISOString().slice(0, 10) : null);
     const orderFieldChanged =

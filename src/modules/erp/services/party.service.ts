@@ -3,6 +3,7 @@ import { prisma, type Tx } from '@/core/db/prisma';
 import { audit } from '@/core/audit/audit';
 import { DomainError, NotFoundError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
+import { renameClientCascade } from '@/modules/project-management/services/client.service';
 import { D } from '../domain/money';
 import { partySchema, type PartyInput, type Raw } from '../validation';
 import { manageArea, readArea, type ErpArea } from './access';
@@ -85,7 +86,9 @@ export async function updateParty(p: Principal, kind: ErpPartyType, partyId: str
     const party = await tx.erpParty.update({ where: { id: partyId }, data });
     if (before.name !== party.name && party.clientId) {
       // A customer that is a PM client keeps the same name in PM (plan 015: client name follows ERP).
-      await tx.client.update({ where: { id: party.clientId }, data: { name: party.name } }).catch(() => undefined);
+      const clash = await tx.client.findFirst({ where: { companyId: p.companyId, name: party.name, id: { not: party.clientId } }, select: { id: true } });
+      if (clash) throw new DomainError(`Another PM client is already called ${party.name}.`);
+      await renameClientCascade(tx, p.companyId, party.clientId, party.name);
     }
     await audit({ actorId: p.userId, module: 'erp', action: `erp.${kind.toLowerCase()}.updated`, entityType: 'ErpParty', entityId: party.id, diff: { name: party.name } }, tx);
     return party;

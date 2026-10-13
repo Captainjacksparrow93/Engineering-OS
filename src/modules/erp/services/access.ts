@@ -26,12 +26,23 @@ const AREA_LABEL: Record<ErpArea, string> = {
 export async function readArea(p: Principal, area: ErpArea): Promise<void> {
   if (!canRead(p, area)) throw new ForbiddenError(`You don't have access to ${AREA_LABEL[area]}.`);
   await ensureErpSetup(p.companyId);
+  if (area === 'selling') await ensureSellingReady(p.companyId);
 }
 
 /** Write guard for an ERP area. */
 export async function manageArea(p: Principal, area: ErpArea): Promise<void> {
   if (!canManage(p, area)) throw new ForbiddenError(`You can't change ${AREA_LABEL[area]} records.`);
   await ensureErpSetup(p.companyId);
+  if (area === 'selling') await ensureSellingReady(p.companyId);
+}
+
+/** Panel items (one per checklist template) exist before anyone sells; refreshed at most once a minute. */
+const sellingReady = new Map<string, number>();
+async function ensureSellingReady(companyId: string) {
+  if (Date.now() - (sellingReady.get(companyId) ?? 0) < 60_000) return;
+  const { ensurePanelItems } = await import('./selling-bridge');
+  await ensurePanelItems(companyId);
+  sellingReady.set(companyId, Date.now());
 }
 
 /** Names for user ids stored on ERP documents (created by, submitted by). */

@@ -11,7 +11,14 @@ export async function makeErpCompany(tag: string) {
   const run = `${Date.now()}`.slice(-7) + Math.floor(Math.random() * 100);
   const company = await prisma.company.create({ data: { name: `ERP Test ${tag} ${run}`, code: `T${tag}${run}`.slice(0, 20) } });
 
-  async function user(role: string | null, name = role ?? 'Staff'): Promise<Principal> {
+  let techDeptId: string | null = null;
+  /** The TECH department PMs and engineers sit in (New project picks PMs from it). */
+  async function techDepartment() {
+    if (!techDeptId) techDeptId = (await prisma.department.create({ data: { companyId: company.id, name: 'Technical', code: 'TECH' } })).id;
+    return techDeptId;
+  }
+
+  async function user(role: string | null, name = role ?? 'Staff', opts: { tech?: boolean } = {}): Promise<Principal> {
     const roleRow = role ? await prisma.role.findUniqueOrThrow({ where: { key: role } }) : null;
     const u = await prisma.user.create({
       data: {
@@ -20,6 +27,7 @@ export async function makeErpCompany(tag: string) {
         email: `erp-${run}-${Math.random().toString(36).slice(2, 8)}@example.test`,
         passwordHash: 'not-a-real-hash',
         fullName: `${name} ${run}`,
+        ...(opts.tech ? { departmentId: await techDepartment() } : {}),
         ...(roleRow ? { roleAssignments: { create: { roleId: roleRow.id, scopeType: 'GLOBAL' } } } : {}),
       },
     });
@@ -58,10 +66,28 @@ export async function makeErpCompany(tag: string) {
     await prisma.salesItem.deleteMany({ where: { companyId } });
     await prisma.auditLog.deleteMany({ where: { actorId: { in: ids } } });
     await prisma.notification.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.project.deleteMany({ where: { companyId } });
+    const projects = await prisma.project.findMany({ where: { companyId }, select: { id: true } });
+    for (const { id } of projects) {
+      await prisma.taskDependency.deleteMany({ where: { predecessor: { projectId: id } } });
+      await prisma.taskAssignment.deleteMany({ where: { task: { projectId: id } } });
+      await prisma.task.deleteMany({ where: { projectId: id, parentId: { not: null } } });
+      await prisma.task.deleteMany({ where: { projectId: id } });
+      await prisma.projectMember.deleteMany({ where: { projectId: id } });
+      await prisma.roleAssignment.deleteMany({ where: { scopeType: 'PROJECT', scopeId: id } });
+      await prisma.notification.deleteMany({ where: { link: { contains: id } } });
+      await prisma.project.delete({ where: { id } });
+    }
+    await prisma.client.deleteMany({ where: { companyId } });
+    await prisma.salesHistoryLine.deleteMany({ where: { companyId } });
+    await prisma.salesQuote.deleteMany({ where: { companyId } });
+    await prisma.salesDeal.deleteMany({ where: { companyId } });
+    await prisma.salesAccount.deleteMany({ where: { companyId } });
+    await prisma.salesSettings.deleteMany({ where: { companyId } });
+    await prisma.roleAssignment.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.department.updateMany({ where: { companyId }, data: { headId: null } });
     await prisma.company.delete({ where: { id: companyId } });
     resetSetupCache();
   }
 
-  return { company, companyId: company.id, run, user, cleanup };
+  return { company, companyId: company.id, run, user, techDepartment, cleanup };
 }

@@ -36,6 +36,14 @@ export default async function ErpSettingsPage() {
             <label className="flex items-center gap-xs self-end pb-xs text-body-sm">
               <input type="checkbox" name="allowNegativeStock" defaultChecked={settings.allowNegativeStock} /> Allow stock to go below zero
             </label>
+            <label className="flex items-start gap-xs text-body-sm sm:col-span-3">
+              <input type="checkbox" name="projectsFromSalesOrders" defaultChecked={settings.projectsFromSalesOrders} className="mt-xxs" />
+              <span>Every work-order project starts from a submitted sales order. <span className="text-muted">Off: New project still lists waiting orders but also lets a work order start without one. Service calls never need an order.</span></span>
+            </label>
+            <div className="sm:col-span-3">
+              <label className="label" htmlFor="salesTerms">Terms on sales orders and invoices</label>
+              <textarea id="salesTerms" name="salesTerms" defaultValue={settings.salesTerms} rows={4} className="input w-full" />
+            </div>
           </fieldset>
           {manage ? <SubmitButton pendingLabel="Saving…">Save settings</SubmitButton> : <p className="text-caption text-muted">Only Directors can change these.</p>}
         </ActionForm>

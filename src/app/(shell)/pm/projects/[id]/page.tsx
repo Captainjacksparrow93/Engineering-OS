@@ -1,4 +1,3 @@
-import { config } from '@/core/config';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
@@ -115,8 +114,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       };
     });
 
-  const erpPublicUrl = config().ERPNEXT_PUBLIC_URL?.replace(/\/+$/, '');
-  const erpOrderUrlBase = erpPublicUrl ? `${erpPublicUrl}/app/sales-order/` : null;
+  // Plan 022: the order is our own ERP sales order.
+  const erpOrderUrlBase = '/erp/selling/orders/number/';
 
   let clientHref: string | null = null;
   if (project.clientId) {

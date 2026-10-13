@@ -6,8 +6,7 @@ import { getPMTeamData } from '@/modules/project-management/services/automation-
 import { listChecklistTemplates } from '@/modules/project-management/services/template.service';
 import { listClients, nextClientRef } from '@/modules/project-management/services/client.service';
 import { listExistingProjectCodes } from '@/modules/project-management/services/project.service';
-import { config } from '@/core/config';
-import { isErpEnabled } from '@/modules/erp/client';
+import { projectsNeedSalesOrder } from '@/modules/erp/order.service';
 import { AutomationProjectWizard } from './automation-project-wizard';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +27,7 @@ export default async function NewProjectPage() {
     listExistingProjectCodes(principal.companyId),
   ]);
 
-  const erpPublicUrl = config().ERPNEXT_PUBLIC_URL?.replace(/\/+$/, '');
+  const orderRequired = await projectsNeedSalesOrder(principal.companyId);
 
   return (
     <>
@@ -45,8 +44,9 @@ export default async function NewProjectPage() {
         initialClients={clients}
         defaultClientRef={defaultClientRef}
         existingProjectCodes={existingCodes}
-        erpEnabled={isErpEnabled()}
-        erpOrderUrlBase={erpPublicUrl ? `${erpPublicUrl}/app/sales-order/` : null}
+        erpEnabled
+        orderRequired={orderRequired}
+        erpOrderUrlBase="/erp/selling/orders/number/"
       />
     </>
   );

@@ -1,6 +1,7 @@
 import { Prisma, type SalesDealStage } from '@prisma/client';
 import { prisma, type Tx } from '@/core/db/prisma';
 import { audit } from '@/core/audit/audit';
+import { createOrderFromDeal } from '@/modules/erp/services/selling-bridge';
 import { DomainError, NotFoundError, ValidationError } from '@/core/rbac/errors';
 import { assertCan } from '@/core/rbac/guard';
 import type { Principal } from '@/core/rbac/types';
@@ -235,13 +236,15 @@ export async function closeDeal(principal: Principal, dealId: string, input: unk
     const totals = final
       ? quoteTotals(final.lines.map((l) => ({ qty: num(l.qty), unitCost: num(l.unitCost), marginPct: num(l.marginPct) })), { discountPct: num(final.discountPct), freight: num(final.freight), gstPct: num(final.gstPct) })
       : null;
+    // Plan 022: a won deal becomes a draft ERP sales order from its accepted quote.
+    const order = data.outcome === 'WON' && final ? await createOrderFromDeal(tx, principal, deal, final, data.woNumber, today) : null;
     const updated = await tx.salesDeal.update({
       where: { id: deal.id },
       data: {
         stage: data.outcome,
         closedAt: new Date(),
         lostReason: data.outcome === 'LOST' ? data.lostReason : null,
-        erpSalesOrder: data.erpSalesOrder,
+        erpSalesOrder: order?.number ?? data.erpSalesOrder,
         woNumber: data.woNumber,
         value: totals?.net ?? deal.value,
       },

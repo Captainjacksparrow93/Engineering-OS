@@ -71,6 +71,9 @@ describe('Plan 018: Sales module', () => {
   });
 
   afterAll(async () => {
+    const orders = await prisma.erpSalesOrder.findMany({ where: { companyId, dealId: { in: (await prisma.salesDeal.findMany({ where: { companyId, title: { contains: run } }, select: { id: true } })).map((d) => d.id) } }, select: { id: true, customerId: true } });
+    await prisma.erpSalesOrder.deleteMany({ where: { id: { in: orders.map((o) => o.id) } } });
+    await prisma.erpParty.deleteMany({ where: { companyId, kind: 'CUSTOMER', name: { contains: run } } });
     await prisma.salesDeal.deleteMany({ where: { companyId, title: { contains: run } } });
     await prisma.salesHistoryLine.deleteMany({ where: { companyId, OR: [{ ref: { contains: run } }, { accountName: { contains: run } }] } });
     await prisma.salesAccount.deleteMany({ where: { companyId, name: { contains: run } } });
@@ -264,9 +267,14 @@ describe('Plan 018: Sales module', () => {
 
   it('closes a won deal: quote accepted, final prices into history', async () => {
     await expect(closeDeal(execA, dealA.id, { outcome: 'LOST' })).rejects.toBeInstanceOf(ZodError);
-    await closeDeal(execA, dealA.id, { outcome: 'WON', erpSalesOrder: `SO-${run}`, woNumber: `WO-${run}` });
+    await closeDeal(execA, dealA.id, { outcome: 'WON', woNumber: `WO-${run}` });
     const deal = await getDeal(execA, dealA.id);
-    expect(deal).toMatchObject({ stage: 'WON', erpSalesOrder: `SO-${run}` });
+    // Plan 022: winning makes a draft ERP sales order from the accepted quote and records its number.
+    const order = await prisma.erpSalesOrder.findFirstOrThrow({ where: { companyId, dealId: dealA.id } });
+    expect(deal).toMatchObject({ stage: 'WON', erpSalesOrder: order.number });
+    expect(order.status).toBe('DRAFT');
+    // "WO-…" is not digits only, so the draft leaves the WO for the Sales Head to set.
+    expect(order.woNumber).toBeNull();
     expect(deal.quotes.find((q) => q.id === quoteId)!.status).toBe('ACCEPTED');
     const history = await prisma.salesHistoryLine.findMany({ where: { companyId, source: 'DEAL', accountId: dealA.accountId } });
     expect(history).toHaveLength(3);

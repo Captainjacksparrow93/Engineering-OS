@@ -5,13 +5,16 @@ import { formatDate } from '@/core/utils/dates';
 import { getSalesOrderAction, listWaitingOrdersAction } from '@/app/actions/erp-orders';
 import type { ProjectOrderInput, WaitingOrder } from '@/modules/erp/order.service';
 
-/** New project, step 0 (ERP on): pick a confirmed sales order that has no project yet. */
+/** New project, step 0: pick a submitted sales order that has no project yet. */
 export function SalesOrderStep({
   onPick,
   onServiceCall,
+  onSkip,
 }: {
   onPick: (order: ProjectOrderInput) => void;
   onServiceCall: () => void;
+  /** Present when the company lets work orders start without a sales order. */
+  onSkip?: () => void;
 }) {
   const [orders, setOrders] = useState<WaitingOrder[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -55,12 +58,19 @@ export function SalesOrderStep({
         <div>
           <h2 className="text-title-sm font-semibold text-ink">Pick a sales order</h2>
           <p className="text-caption text-muted">
-            Work orders start from a confirmed sales order in ERP. Client, WO, panels and dates come from the order.
+            Work orders start from a submitted sales order in ERP. Client, WO, panels and dates come from the order.
           </p>
         </div>
-        <button type="button" onClick={onServiceCall} className="btn btn-secondary btn-sm text-xs">
-          Create a service call instead
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {onSkip ? (
+            <button type="button" onClick={onSkip} className="btn btn-secondary btn-sm text-xs">
+              Start without a sales order
+            </button>
+          ) : null}
+          <button type="button" onClick={onServiceCall} className="btn btn-secondary btn-sm text-xs">
+            Create a service call instead
+          </button>
+        </div>
       </div>
 
       {loadError ? (
@@ -76,8 +86,8 @@ export function SalesOrderStep({
         <div className="rounded-lg border border-dashed border-hairline p-6 text-center space-y-2">
           <p className="text-body-sm text-ink">No confirmed sales orders are waiting for a project.</p>
           <p className="text-caption text-muted">Create and submit the order in ERP first.</p>
-          <a href="/erp/open" target="_blank" rel="noopener" className="btn btn-secondary btn-sm text-xs inline-flex">
-            Open ERP
+          <a href="/erp/selling/orders" target="_blank" rel="noopener" className="btn btn-secondary btn-sm text-xs inline-flex">
+            Open sales orders
           </a>
         </div>
       ) : (

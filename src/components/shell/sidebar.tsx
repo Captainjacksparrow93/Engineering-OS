@@ -160,6 +160,7 @@ const erpArea = (area: string) => (p: Principal) => hasPermissionAnywhere(p, `er
 const ERP_NAV: NavItem[] = [
   { label: 'ERP home', href: '/erp', requires: 'erp.access', icon: Icons.ERP },
   { label: 'Stock', href: '/erp/stock', show: erpArea('stock'), icon: Icons.Catalog },
+  { label: 'Selling', href: '/erp/selling', show: erpArea('selling'), icon: Icons.Sales },
   { label: 'Buying', href: '/erp/buying', show: erpArea('buying'), icon: Icons.Deals },
 ];
 

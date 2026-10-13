@@ -138,6 +138,8 @@ export const settingsSchema = z.object({
   companyState: optionalText(60),
   defaultGstRate: nonNegativeDecimal('the default GST rate'),
   allowNegativeStock: checkbox,
+  projectsFromSalesOrders: checkbox,
+  salesTerms: optionalText(4000).transform((s) => s ?? ''),
 });
 export type SettingsInput = z.input<typeof settingsSchema>;
 
@@ -251,3 +253,69 @@ export const expenseLineSchema = z.object({
   gstRate: nonNegativeDecimal('the GST rate'),
 });
 export type ExpenseLineInput = z.input<typeof expenseLineSchema>;
+
+// -------------------------------------------------------------------- selling
+
+const woNumber = optionalText(20).refine((s) => !s || /^\d+$/.test(s), 'A WO number is digits only.');
+
+export const salesOrderSchema = z.object({
+  customerId: id('a customer'),
+  orderDate: isoDate('the order date'),
+  deliveryDate: optionalDate,
+  poNo: optionalText(80),
+  woNumber,
+  terms: optionalText(4000),
+  remarks: optionalText(500),
+});
+export type SalesOrderInput = z.input<typeof salesOrderSchema>;
+
+/** Fields that may change after submit (ERPNext "allow on submit"); PM follows them. */
+export const submittedOrderSchema = z.object({
+  deliveryDate: optionalDate,
+  poNo: optionalText(80),
+  woNumber,
+});
+export type SubmittedOrderInput = z.input<typeof submittedOrderSchema>;
+
+export const salesLineSchema = z.object({
+  itemCode: requiredText('an item code', 60).transform((s) => s.toUpperCase()),
+  qty: positiveDecimal('the quantity'),
+  rate: optionalDecimal('the rate'),
+  deliveryDate: optionalDate,
+  warehouseId: optionalId,
+  description: optionalText(500),
+});
+export type SalesLineInput = z.input<typeof salesLineSchema>;
+
+export const salesLineEditSchema = z.object({
+  qty: positiveDecimal('the quantity'),
+  rate: optionalDecimal('the rate'),
+  deliveryDate: optionalDate,
+});
+export type SalesLineEditInput = z.input<typeof salesLineEditSchema>;
+
+export const deliveryNoteSchema = z.object({
+  postingDate: isoDate('the delivery date'),
+  transporter: optionalText(120),
+  vehicleNo: optionalText(30),
+  lrNo: optionalText(40),
+  remarks: optionalText(500),
+});
+export type DeliveryNoteInput = z.input<typeof deliveryNoteSchema>;
+
+export const salesInvoiceSchema = z.object({
+  postingDate: isoDate('the invoice date'),
+  dueDate: optionalDate,
+  poNo: optionalText(80),
+  remarks: optionalText(500),
+});
+export type SalesInvoiceInput = z.input<typeof salesInvoiceSchema>;
+
+export const incomeLineSchema = z.object({
+  description: requiredText('what is being billed', 300),
+  accountId: id('an income account'),
+  qty: positiveDecimal('the quantity'),
+  rate: nonNegativeDecimal('the rate'),
+  gstRate: nonNegativeDecimal('the GST rate'),
+});
+export type IncomeLineInput = z.input<typeof incomeLineSchema>;
