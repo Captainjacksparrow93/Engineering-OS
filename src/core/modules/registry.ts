@@ -47,15 +47,12 @@ export const MODULES: ModuleDefinition[] = [
   },
   {
     key: 'erp',
-    name: 'ERP / Finance',
-    description: 'Sales orders, purchase, inventory, BOM costing and invoicing.',
+    name: 'ERP',
+    description: 'Stock, buying, selling, manufacturing, quality, maintenance and accounts.',
     icon: '📊',
     route: '/erp',
     status: 'LIVE',
-    scope: [
-      'Orders, customers and all ERPNext modules in ERPNext',
-      'Projects originate from confirmed sales orders (plan 014)',
-    ],
+    scope: [],
     requires: 'erp.access',
     sortOrder: 30,
   },

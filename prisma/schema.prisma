@@ -1551,3 +1551,336 @@ model HrRegularisation {
   @@index([status])
   @@map("hr_regularisations")
 }
+
+// =============================================================================
+// ERP (plan 022). Native ERP, ERPNext as the functional benchmark.
+//
+// Every table carries companyId. People and PM projects are referenced by plain id
+// (resolved at read time) so the ERP never adds back-relations to core or PM models.
+// Stock and GL tables are written only by `src/modules/erp/services/posting.ts`.
+// =============================================================================
+
+/// ERPNext docstatus: 0 draft, 1 submitted, 2 cancelled.
+enum ErpDocStatus {
+  DRAFT
+  SUBMITTED
+  CANCELLED
+}
+
+enum ErpRootType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+/// One row per company. Created with the chart of accounts on first ERP use.
+model ErpSettings {
+  id                 String    @id @default(cuid())
+  companyId          String    @unique
+  /// Company's state for GST: same state as the party → CGST + SGST, else IGST.
+  companyState       String?
+  defaultGstRate     Decimal   @default(18) @db.Decimal(5, 2)
+  allowNegativeStock Boolean   @default(false)
+  /// Nothing may be posted on or before this date (period closing).
+  booksClosedUpTo    DateTime? @db.Date
+  updatedAt          DateTime  @updatedAt
+
+  @@map("erp_settings")
+}
+
+/// Naming series counters, e.g. MAT-STE-2026- → 00042.
+model ErpSeries {
+  companyId String
+  prefix    String
+  current   Int    @default(0)
+
+  @@id([companyId, prefix])
+  @@map("erp_series")
+}
+
+model ErpAccount {
+  id          String      @id @default(cuid())
+  companyId   String
+  code        String
+  name        String
+  rootType    ErpRootType
+  parentId    String?
+  isGroup     Boolean     @default(false)
+  /// Fixed role the posting engine looks up, e.g. STOCK_IN_HAND, DEBTORS, OUTPUT_CGST.
+  systemKey   String?
+  /// BANK and CASH accounts are payment accounts.
+  accountType String?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+
+  parent   ErpAccount?  @relation("ErpAccountTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children ErpAccount[] @relation("ErpAccountTree")
+  entries  ErpGlEntry[]
+
+  @@unique([companyId, code])
+  @@unique([companyId, systemKey])
+  @@index([companyId, parentId])
+  @@map("erp_accounts")
+}
+
+enum ErpPartyType {
+  CUSTOMER
+  SUPPLIER
+}
+
+/// The general ledger. Every voucher's rows balance; cancelling adds reversing rows and
+/// flags both sides `isCancelled` (reports skip them), as ERPNext does.
+model ErpGlEntry {
+  id          String        @id @default(cuid())
+  companyId   String
+  postingDate DateTime      @db.Date
+  accountId   String
+  debit       Decimal       @default(0) @db.Decimal(18, 2)
+  credit      Decimal       @default(0) @db.Decimal(18, 2)
+  partyType   ErpPartyType?
+  partyId     String?
+  projectId   String?
+  voucherType String
+  voucherId   String
+  voucherNo   String
+  /// The invoice this row settles (payments, credit notes); the voucher itself otherwise.
+  againstType String?
+  againstId   String?
+  remarks     String?
+  isCancelled Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+
+  account ErpAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, postingDate])
+  @@index([accountId, postingDate])
+  @@index([voucherType, voucherId])
+  @@index([companyId, partyType, partyId])
+  @@index([againstType, againstId])
+  @@index([companyId, projectId])
+  @@map("erp_gl_entries")
+}
+
+model ErpWarehouse {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  /// STORES, WIP, FINISHED_GOODS, REJECTED for the defaults the app relies on.
+  systemKey String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  bins ErpBin[]
+
+  @@unique([companyId, name])
+  @@unique([companyId, systemKey])
+  @@map("erp_warehouses")
+}
+
+model ErpItem {
+  id                 String   @id @default(cuid())
+  companyId          String
+  code               String
+  name               String
+  description        String?
+  itemGroup          String   @default("General")
+  uom                String   @default("Nos")
+  make               String?
+  makerPartNo        String?
+  hsnCode            String?
+  gstRate            Decimal  @default(18) @db.Decimal(5, 2)
+  isStockItem        Boolean  @default(true)
+  isPurchaseItem     Boolean  @default(true)
+  isSalesItem        Boolean  @default(true)
+  /// Selling rate used to prefill sales documents.
+  standardRate       Decimal? @db.Decimal(14, 2)
+  lastPurchaseRate   Decimal? @db.Decimal(14, 2)
+  reorderLevel       Decimal? @db.Decimal(14, 3)
+  reorderQty         Decimal? @db.Decimal(14, 3)
+  leadTimeDays       Int?
+  defaultWarehouseId String?
+  /// For non-stock items: where purchases and sales post.
+  expenseAccountId   String?
+  incomeAccountId    String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  bins ErpBin[]
+
+  @@unique([companyId, code])
+  @@index([companyId, name])
+  @@index([companyId, itemGroup])
+  @@map("erp_items")
+}
+
+/// Current position of one item in one warehouse. Kept in step by the posting engine.
+model ErpBin {
+  id            String   @id @default(cuid())
+  companyId     String
+  itemId        String
+  warehouseId   String
+  actualQty     Decimal  @default(0) @db.Decimal(18, 3)
+  valuationRate Decimal  @default(0) @db.Decimal(18, 4)
+  stockValue    Decimal  @default(0) @db.Decimal(18, 2)
+  /// Promised to submitted sales orders, not yet delivered.
+  reservedQty   Decimal  @default(0) @db.Decimal(18, 3)
+  /// On submitted purchase orders, not yet received.
+  orderedQty    Decimal  @default(0) @db.Decimal(18, 3)
+  /// On submitted material requests, not yet ordered.
+  requestedQty  Decimal  @default(0) @db.Decimal(18, 3)
+  /// To be produced by open work orders.
+  plannedQty    Decimal  @default(0) @db.Decimal(18, 3)
+  updatedAt     DateTime @updatedAt
+
+  item      ErpItem      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouse ErpWarehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  @@unique([itemId, warehouseId])
+  @@index([companyId, warehouseId])
+  @@map("erp_bins")
+}
+
+/// Every stock movement, in posting order. Moving-average valuation.
+model ErpStockLedger {
+  id            String   @id @default(cuid())
+  companyId     String
+  itemId        String
+  warehouseId   String
+  postingDate   DateTime @db.Date
+  qtyChange     Decimal  @db.Decimal(18, 3)
+  /// Rate of this movement: the incoming rate, or the valuation rate it left at.
+  rate          Decimal  @db.Decimal(18, 4)
+  valueChange   Decimal  @db.Decimal(18, 2)
+  qtyAfter      Decimal  @db.Decimal(18, 3)
+  valuationRate Decimal  @db.Decimal(18, 4)
+  stockValue    Decimal  @db.Decimal(18, 2)
+  voucherType   String
+  voucherId     String
+  voucherNo     String
+  voucherLineId String?
+  projectId     String?
+  isCancelled   Boolean  @default(false)
+  seq           Int      @default(autoincrement())
+  createdAt     DateTime @default(now())
+
+  @@index([itemId, warehouseId, seq])
+  @@index([companyId, postingDate])
+  @@index([voucherType, voucherId])
+  @@index([companyId, projectId])
+  @@map("erp_stock_ledger")
+}
+
+enum ErpStockPurpose {
+  MATERIAL_RECEIPT
+  MATERIAL_ISSUE
+  MATERIAL_TRANSFER
+  TRANSFER_FOR_MANUFACTURE
+  MANUFACTURE
+}
+
+model ErpStockEntry {
+  id                String          @id @default(cuid())
+  companyId         String
+  number            String
+  purpose           ErpStockPurpose
+  status            ErpDocStatus    @default(DRAFT)
+  postingDate       DateTime        @db.Date
+  fromWarehouseId   String?
+  toWarehouseId     String?
+  projectId         String?
+  workOrderId       String?
+  materialRequestId String?
+  remarks           String?
+  totalValue        Decimal         @default(0) @db.Decimal(18, 2)
+  /// MANUFACTURE: operating cost added to the finished goods' value.
+  additionalCost    Decimal         @default(0) @db.Decimal(18, 2)
+  createdById       String
+  submittedById     String?
+  submittedAt       DateTime?
+  cancelledById     String?
+  cancelledAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  lines ErpStockEntryLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status, postingDate])
+  @@index([workOrderId])
+  @@index([materialRequestId])
+  @@map("erp_stock_entries")
+}
+
+model ErpStockEntryLine {
+  id                    String  @id @default(cuid())
+  entryId               String
+  itemId                String
+  qty                   Decimal @db.Decimal(18, 3)
+  fromWarehouseId       String?
+  toWarehouseId         String?
+  /// Incoming rate for receipts; the valuation rate it left at for issues (set on submit).
+  rate                  Decimal @default(0) @db.Decimal(18, 4)
+  amount                Decimal @default(0) @db.Decimal(18, 2)
+  /// MANUFACTURE: the finished good produced (its rate is the consumed cost).
+  isFinishedGood        Boolean @default(false)
+  materialRequestLineId String?
+  sortOrder             Int     @default(0)
+
+  entry ErpStockEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([entryId, sortOrder])
+  @@index([itemId])
+  @@map("erp_stock_entry_lines")
+}
+
+enum ErpReconPurpose {
+  OPENING
+  ADJUSTMENT
+}
+
+/// Sets the counted quantity and rate of items; the difference posts to Opening Balance
+/// Equity (opening stock) or Stock Adjustment.
+model ErpStockReconciliation {
+  id              String          @id @default(cuid())
+  companyId       String
+  number          String
+  purpose         ErpReconPurpose @default(ADJUSTMENT)
+  status          ErpDocStatus    @default(DRAFT)
+  postingDate     DateTime        @db.Date
+  remarks         String?
+  differenceValue Decimal         @default(0) @db.Decimal(18, 2)
+  createdById     String
+  submittedById   String?
+  submittedAt     DateTime?
+  cancelledById   String?
+  cancelledAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  lines ErpStockReconciliationLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@map("erp_stock_reconciliations")
+}
+
+model ErpStockReconciliationLine {
+  id               String   @id @default(cuid())
+  reconciliationId String
+  itemId           String
+  warehouseId      String
+  qty              Decimal  @db.Decimal(18, 3)
+  valuationRate    Decimal  @db.Decimal(18, 4)
+  /// Position before, recorded on submit.
+  currentQty       Decimal? @db.Decimal(18, 3)
+  currentRate      Decimal? @db.Decimal(18, 4)
+  sortOrder        Int      @default(0)
+
+  reconciliation ErpStockReconciliation @relation(fields: [reconciliationId], references: [id], onDelete: Cascade)
+
+  @@index([reconciliationId, sortOrder])
+  @@map("erp_stock_reconciliation_lines")
+}

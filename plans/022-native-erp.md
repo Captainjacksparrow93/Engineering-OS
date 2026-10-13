@@ -37,7 +37,7 @@ User answers (2026-10-13):
 ## Phases (one commit series and draft PR update each; each is reviewable)
 | # | Phase | ERPNext benchmark covered |
 |---|---|---|
-| 1 | **Foundation + Stock** | Company ERP settings, naming series, chart of accounts, fiscal year, GL engine; Warehouse, Item (groups, UOM, GST, reorder), Stock Entry (Material Receipt / Issue / Transfer), Stock Reconciliation (opening stock), Stock Ledger, Stock Balance, reorder report. Retire ERPNext code. ERP home. |
+| 1 | **Foundation + Stock** | Company ERP settings, naming series, chart of accounts, fiscal year, GL engine; Warehouse, Item (groups, UOM, GST, reorder), Stock Entry (Material Receipt / Issue / Transfer), Stock Reconciliation (opening stock), Stock Ledger, Stock Balance, reorder report. Retire the ERPNext SSO, image and secret (the order/sync client PM still calls is replaced in phase 3). ERP home. |
 | 2 | **Buying** | Supplier, Material Request (purchase/transfer/issue, project-tagged), Supplier Quotation + comparison, Purchase Order, Purchase Receipt (accepted/rejected qty), Purchase Invoice, purchase status roll-ups, Sales last-purchase-price feed. |
 | 3 | **Selling + PM** | Customer, Sales Order (WO, client PO, panels, delivery dates, from won deal), Delivery Note, Sales Invoice; PM New project from native SO; safe sync; ERPNext order code paths removed. |
 | 4 | **Manufacturing** | Workstation, Operation, BOM (multi-level, operations, cost roll-up), Work Order (from SO line, transfer to WIP, manufacture with valuation), Job Card (time logs), Production Plan (from open SOs: shortages → Material Requests, Work Orders). Production tile live. |
@@ -80,6 +80,17 @@ Out of scope (now): Tally/Zoho, GST e-invoicing / e-way bills (no GSTIN), multi-
 - [ ] The Production, QMS and Maintenance tiles are live.
 
 ## Implementation notes (implementer)
-_Per phase, below._
+
+### Phase 1: foundation + stock (DONE 2026-10-13)
+- **Removed:** `erp/` (Frappe image + `acs_erp`), `src/modules/erp/sso.ts` + test, `src/app/erp/open` (SSO route), `erp-access.int.test.ts`, the ERPNext user-disable call in `setUserStatus`, `ERP_SSO_SECRET` (config, CI, compose, `.env.example`). CI now also runs on pushes to `ERPNEXT` (was `erp`). `client.ts` / `order.service.ts` / `sync.ts` / `backfill.ts` stay until phase 3 swaps PM's order source; they are inert without `ERPNEXT_URL`.
+- **Migrations:** `20261013183554_erp_foundation_stock` (settings, series, accounts, GL, warehouses, items, bins, stock ledger, stock entries, reconciliations; new tables only) and `20261013183600_erp_permissions` (15 `erp.*` keys, roles Purchase Manager, Store Keeper, Accounts Manager, Production Manager, Quality Manager, Maintenance Manager; Director and Super Admin get every ERP key; Sales Head gets `erp.access`, selling read/manage, stock read).
+- **Engine:** `services/posting.ts` (bin row locks in sorted order, moving average, negative stock refused unless allowed in settings, balanced GL with ≤ ₹1 round-off, closed-books guard, cancel = reversing rows flagged cancelled). Maths in `domain/money.ts` uses Prisma `Decimal` throughout (not integer paise as first planned; exact either way).
+- **Setup:** `ensureErpSetup` seeds the Indian chart (66 accounts, system keys), Stores/WIP/Finished Goods/Rejected, and settings on first ERP use per company.
+- **Items:** creating or editing an ERP item creates or updates the Sales catalogue item with the same code (`erpItemCode`), so there is one item master.
+- `isReadOnly` (PM read-only) now ignores `erp.*` grants, like Sales/Gate/HR; `sales-head.test.ts` allows `erp.selling.*` (Sales Head creates sales orders, decision 2026-10-01).
+- **UI:** `/erp` home (area cards), `/erp/stock` overview, items (list, add, edit, switch off, stock by warehouse, movements), stock entries (draft → lines → submit/cancel/delete, ledger shown), stock counts (opening/adjustment), warehouses, reports (balance with projected qty, ledger, reorder), `/erp/settings` (company state, default GST, negative stock, chart of accounts). Sidebar ERP section.
+- **Tests:** `domain/valuation.test.ts` (7), `stock.int.test.ts` (9: setup, allow/deny, items + Sales sync, receipt + GL balance, issue/negative stock/transfer, cancel guard, opening stock vs GL, reorder, default warehouse). Fixture `test-fixture.ts` makes a throwaway company.
+- **Full suite** on a fresh DB (`migrate deploy` + `db:seed`): typecheck clean · unit 226/226 · integration 170/170 · build OK. Browser check (Chromium, Director): add item → receipt draft → add line → submit → GL shown → overview value ₹3,600.
+- Tools: code-review-graph, Token Savior and sequential-thinking are not available in this cloud session; blast radius by `grep`.
 
 ## Review (Claude)

@@ -1,69 +1,60 @@
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
-import { redirect } from 'next/navigation';
-import { PageHeader, Alert } from '@/components/ui';
-import { config } from '@/core/config';
-import Link from 'next/link';
+import { ERP_AREAS } from '@/modules/erp/areas';
+import { canRead } from '@/modules/erp/services/access';
+import { canManageSettings } from '@/modules/erp/services/settings.service';
+import { ensureErpSetup } from '@/modules/erp/services/setup';
+import { prisma } from '@/core/db/prisma';
+import { PageHeader, Stat } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
+export const metadata = { title: 'ERP' };
 
-export const metadata = {
-  title: 'ERP',
-};
-
-export default async function ERPPage() {
-  const principal = await requirePrincipal();
-  if (!hasPermissionAnywhere(principal, 'erp.access')) {
-    redirect('/dashboard');
-  }
-
-  const appConfig = config();
-  const isConfigured = Boolean(appConfig.ERPNEXT_PUBLIC_URL && appConfig.ERP_SSO_SECRET);
+/** ERP home: one card per area the person can open, and the drafts waiting on them. */
+export default async function ErpHomePage() {
+  const p = await requirePrincipal();
+  if (!hasPermissionAnywhere(p, 'erp.access')) notFound();
+  await ensureErpSetup(p.companyId);
+  const areas = ERP_AREAS.filter((a) => canRead(p, a.area));
+  const stock = canRead(p, 'stock');
+  const [drafts, itemCount] = stock
+    ? await Promise.all([
+        prisma.erpStockEntry.count({ where: { companyId: p.companyId, status: 'DRAFT' } }),
+        prisma.erpItem.count({ where: { companyId: p.companyId, isActive: true } }),
+      ])
+    : [0, 0];
 
   return (
     <div className="space-y-lg">
       <PageHeader
         title="ERP"
-        subtitle="Opens ERPNext in a new tab; you will be signed in automatically."
+        subtitle="Stock, buying, selling, manufacturing, quality, maintenance and accounts in one place, wired into Projects and Sales."
+        actions={canManageSettings(p) ? <Link href="/erp/settings" className="btn btn-secondary">ERP settings</Link> : null}
       />
 
-      <div className="card max-w-xl">
-        <div className="card-body space-y-md">
-          <p className="text-body-sm text-muted">
-            Access sales orders, purchase, inventory, costing and accounts directly in ERPNext.
-          </p>
-
-          {!isConfigured ? (
-            <Alert tone="warning">
-              ERP connection is not configured yet. Set ERPNEXT_PUBLIC_URL and ERP_SSO_SECRET in the environment.
-            </Alert>
-          ) : (
-            <div>
-              <Link
-                href="/erp/open"
-                target="_blank"
-                rel="noopener"
-                className="btn-primary inline-flex items-center gap-xs"
-              >
-                Open ERP
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                  <polyline points="15 3 21 3 21 9" />
-                  <line x1="10" y1="14" x2="21" y2="3" />
-                </svg>
-              </Link>
-            </div>
-          )}
+      {stock ? (
+        <div className="grid gap-base sm:grid-cols-3">
+          <Stat label="Active items" value={itemCount} />
+          <Stat label="Draft stock entries" value={drafts} hint={drafts ? 'Waiting to be submitted' : undefined} />
         </div>
+      ) : null}
+
+      <div className="grid gap-base sm:grid-cols-2 lg:grid-cols-3">
+        {areas.map((a) =>
+          a.live ? (
+            <Link key={a.area} href={a.href} className="card block p-lg transition-colors hover:border-ink">
+              <h2 className="text-title-sm text-ink">{a.name}</h2>
+              <p className="mt-xs text-body-sm text-muted">{a.description}</p>
+            </Link>
+          ) : (
+            <div key={a.area} className="card p-lg opacity-70">
+              <h2 className="text-title-sm text-ink">{a.name} <span className="badge badge-outline ml-xs align-middle">Coming next</span></h2>
+              <p className="mt-xs text-body-sm text-muted">{a.description}</p>
+            </div>
+          ),
+        )}
       </div>
     </div>
   );

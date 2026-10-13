@@ -55,7 +55,22 @@ export const PERMISSIONS = {
   'pm.report.read': 'Open portfolio dashboards and reports',
 
   // -- ERP / Finance -----------------------------------------------------------
-  'erp.access': 'Open ERP with single sign-on',
+  'erp.access': 'Open ERP',
+  'erp.stock.read': 'See items, warehouses, stock levels, stock entries and stock reports',
+  'erp.stock.manage': 'Maintain items and warehouses; create and submit stock entries and reconciliations',
+  'erp.buying.read': 'See suppliers, material requests, purchase orders, receipts and purchase invoices',
+  'erp.buying.manage': 'Create and submit material requests, supplier quotations, purchase orders, receipts and purchase invoices',
+  'erp.selling.read': 'See customers, sales orders, delivery notes and sales invoices',
+  'erp.selling.manage': 'Create and submit sales orders, delivery notes and sales invoices',
+  'erp.manufacturing.read': 'See BOMs, work orders, job cards and production plans',
+  'erp.manufacturing.manage': 'Maintain BOMs and workstations; run work orders, job cards and production plans',
+  'erp.quality.read': 'See quality inspections, non-conformances and controlled documents',
+  'erp.quality.manage': 'Record inspections, raise and close non-conformances, release document revisions',
+  'erp.assets.read': 'See the asset register, depreciation and maintenance schedules',
+  'erp.assets.manage': 'Maintain assets, post depreciation, plan and log maintenance and breakdowns',
+  'erp.accounts.read': 'See the books: ledgers, invoices, payments and financial reports',
+  'erp.accounts.manage': 'Post journal entries and payments, reconcile banks, close periods',
+  'erp.settings.manage': 'Change ERP settings and the chart of accounts',
 
   // -- Sales -------------------------------------------------------------------
   'sales.deal.read': 'Open Sales; see your own deals, accounts and the price catalogue',
@@ -84,6 +99,9 @@ export const PERMISSIONS = {
 export type PermissionKey = keyof typeof PERMISSIONS;
 
 export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as PermissionKey[];
+
+/** Every ERP key: Directors and the platform administrator hold all of them. */
+export const ERP_PERMISSIONS = ALL_PERMISSIONS.filter((k) => k.startsWith('erp.'));
 
 export function permissionModule(key: PermissionKey): string {
   return key.split('.')[0]!;
@@ -143,7 +161,7 @@ export const SYSTEM_ROLES: Record<
       'pm.handover.decide',
       'pm.resource.read',
       'pm.report.read',
-      'erp.access',
+      ...ERP_PERMISSIONS,
       'sales.deal.read',
       'sales.deal.read.all',
       'sales.deal.manage',
@@ -319,11 +337,44 @@ export const SYSTEM_ROLES: Record<
       'pm.commissioning.read',
       'pm.template.read',
       'erp.access',
+      'erp.selling.read',
+      'erp.selling.manage',
+      'erp.stock.read',
       'sales.deal.read',
       'sales.deal.read.all',
       'sales.deal.manage',
       'sales.account.manage',
       'sales.catalog.manage',
     ],
+  },
+  PURCHASE_MANAGER: {
+    name: 'Purchase Manager',
+    description: 'Runs buying: suppliers, material requests, quotations, purchase orders and receipts.',
+    permissions: ['erp.access', 'erp.buying.read', 'erp.buying.manage', 'erp.stock.read', 'erp.quality.read'],
+  },
+  STORE_KEEPER: {
+    name: 'Store Keeper',
+    description: 'Runs the stores: items, receipts, issues, transfers and stock counts.',
+    permissions: ['erp.access', 'erp.stock.read', 'erp.stock.manage', 'erp.buying.read', 'erp.quality.read'],
+  },
+  ACCOUNTS_MANAGER: {
+    name: 'Accounts Manager',
+    description: 'Runs the books: invoices, payments, journals, bank reconciliation and financial reports.',
+    permissions: ['erp.access', 'erp.accounts.read', 'erp.accounts.manage', 'erp.buying.read', 'erp.selling.read', 'erp.stock.read', 'erp.assets.read'],
+  },
+  PRODUCTION_MANAGER: {
+    name: 'Production Manager',
+    description: 'Runs production: BOMs, work orders, job cards and production plans.',
+    permissions: ['erp.access', 'erp.manufacturing.read', 'erp.manufacturing.manage', 'erp.stock.read', 'erp.buying.read', 'erp.quality.read'],
+  },
+  QUALITY_MANAGER: {
+    name: 'Quality Manager',
+    description: 'Runs quality: inspections, non-conformances and controlled documents.',
+    permissions: ['erp.access', 'erp.quality.read', 'erp.quality.manage', 'erp.stock.read', 'erp.manufacturing.read', 'erp.buying.read'],
+  },
+  MAINTENANCE_MANAGER: {
+    name: 'Maintenance Manager',
+    description: 'Runs plant maintenance: the asset register, preventive schedules and breakdowns.',
+    permissions: ['erp.access', 'erp.assets.read', 'erp.assets.manage', 'erp.stock.read'],
   },
 };

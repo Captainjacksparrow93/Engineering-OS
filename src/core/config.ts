@@ -17,7 +17,6 @@ const schema = z.object({
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
   ERPNEXT_PUBLIC_URL: optionalNonEmpty(z.string().url()),
   ERPNEXT_URL: optionalNonEmpty(z.string().url()),
-  ERP_SSO_SECRET: optionalNonEmpty(z.string().min(32)),
   ERPNEXT_API_KEY: optionalNonEmpty(z.string().min(1)),
   ERPNEXT_API_SECRET: optionalNonEmpty(z.string().min(1)),
 });
