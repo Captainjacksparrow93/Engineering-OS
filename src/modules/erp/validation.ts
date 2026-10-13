@@ -319,3 +319,85 @@ export const incomeLineSchema = z.object({
   gstRate: nonNegativeDecimal('the GST rate'),
 });
 export type IncomeLineInput = z.input<typeof incomeLineSchema>;
+
+// -------------------------------------------------------------------- manufacturing
+
+export const workstationSchema = z.object({
+  name: requiredText('the workstation name', 80),
+  hourRate: nonNegativeDecimal('the hourly rate'),
+  capacity: z
+    .union([z.string(), z.number()])
+    .optional()
+    .nullable()
+    .transform((v) => Math.max(1, Math.round(Number(v ?? 1)) || 1)),
+  description: optionalText(500),
+});
+export type WorkstationInput = z.input<typeof workstationSchema>;
+
+export const bomSchema = z.object({
+  itemCode: requiredText('the item to make', 60).transform((s) => s.toUpperCase()),
+  qty: positiveDecimal('the quantity made'),
+  projectId: optionalId,
+  remarks: optionalText(500),
+});
+export type BomInput = z.input<typeof bomSchema>;
+
+export const bomItemSchema = z.object({
+  itemCode: requiredText('an item code', 60).transform((s) => s.toUpperCase()),
+  qty: positiveDecimal('the quantity'),
+});
+export type BomItemInput = z.input<typeof bomItemSchema>;
+
+export const bomOperationSchema = z.object({
+  operation: requiredText('the operation', 80),
+  workstationId: id('a workstation'),
+  timeMinutes: positiveDecimal('the time in minutes'),
+});
+export type BomOperationInput = z.input<typeof bomOperationSchema>;
+
+export const workOrderSchema = z.object({
+  itemCode: requiredText('the item to make', 60).transform((s) => s.toUpperCase()),
+  qty: positiveDecimal('the quantity'),
+  bomId: optionalId,
+  plannedStart: optionalDate,
+  expectedEnd: optionalDate,
+  projectId: optionalId,
+  remarks: optionalText(500),
+});
+export type WorkOrderInput = z.input<typeof workOrderSchema>;
+
+export const qtySchema = z.object({ qty: positiveDecimal('the quantity') });
+
+const dateTime = (label: string) =>
+  z.string({ required_error: `Pick ${label}.` }).transform((s, ctx) => {
+    const d = new Date(/[zZ]|[+-]\d\d:\d\d$/.test(s) ? s : `${s}:00+05:30`);
+    if (Number.isNaN(d.getTime())) {
+      ctx.addIssue({ code: 'custom', message: `Pick ${label}.` });
+      return z.NEVER;
+    }
+    return d;
+  });
+
+export const jobCardLogSchema = z
+  .object({
+    fromTime: dateTime('the start time'),
+    toTime: dateTime('the end time'),
+    completedQty: optionalDecimal('the completed quantity'),
+    note: optionalText(300),
+  })
+  .refine((v) => v.toTime > v.fromTime, { message: 'The end time must be after the start time.', path: ['toTime'] });
+export type JobCardLogInput = z.input<typeof jobCardLogSchema>;
+
+export const productionPlanSchema = z.object({
+  postingDate: isoDate('the plan date'),
+  warehouseId: optionalId,
+  remarks: optionalText(500),
+});
+export type ProductionPlanInput = z.input<typeof productionPlanSchema>;
+
+export const planItemSchema = z.object({
+  itemCode: requiredText('an item code', 60).transform((s) => s.toUpperCase()),
+  qty: positiveDecimal('the quantity'),
+  plannedStart: optionalDate,
+});
+export type PlanItemInput = z.input<typeof planItemSchema>;

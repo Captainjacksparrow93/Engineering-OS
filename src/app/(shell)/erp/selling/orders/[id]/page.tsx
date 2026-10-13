@@ -20,6 +20,7 @@ import {
   updateSalesOrderLineAction,
   updateSubmittedSalesOrderAction,
 } from '@/app/actions/erp-selling';
+import { workOrdersFromSalesOrderAction } from '@/app/actions/erp-manufacturing';
 import { D } from '@/modules/erp/domain/money';
 import { ActionForm } from '@/components/action-form';
 import { SubmitButton } from '@/components/form';
@@ -70,6 +71,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
             ) : null}
             {open && !so.isOnHold && (manage || canManage(p, 'stock')) && state.delivered < 100 ? <DocButton action={deliveryFromOrderAction} fields={{ id }} label="Deliver" variant="primary" /> : null}
             {so.status === 'SUBMITTED' && (manage || canManage(p, 'accounts')) && state.billed < 100 ? <DocButton action={invoiceFromSalesOrderAction} fields={{ id }} label="Make invoice" /> : null}
+            {open && canManage(p, 'manufacturing') && state.delivered < 100 ? <DocButton action={workOrdersFromSalesOrderAction} fields={{ id }} label="Make work orders" /> : null}
             {open && manage ? <DocButton action={holdSalesOrderAction} fields={{ id, hold: String(!so.isOnHold) }} label={so.isOnHold ? 'Release hold' : 'Hold'} /> : null}
             {so.status === 'SUBMITTED' && manage ? <DocButton action={closeSalesOrderAction} fields={{ id, close: String(!so.isClosed) }} label={so.isClosed ? 'Re-open' : 'Close'} /> : null}
             {so.status === 'SUBMITTED' && manage ? <DocButton action={cancelSalesOrderAction} fields={{ id }} label="Cancel" variant="danger" confirm="Cancel this order? A linked project is alerted, not deleted." /> : null}

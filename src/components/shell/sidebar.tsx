@@ -162,6 +162,7 @@ const ERP_NAV: NavItem[] = [
   { label: 'Stock', href: '/erp/stock', show: erpArea('stock'), icon: Icons.Catalog },
   { label: 'Selling', href: '/erp/selling', show: erpArea('selling'), icon: Icons.Sales },
   { label: 'Buying', href: '/erp/buying', show: erpArea('buying'), icon: Icons.Deals },
+  { label: 'Manufacturing', href: '/erp/manufacturing', show: erpArea('manufacturing'), icon: Icons.Commissioning },
 ];
 
 const SALES_NAV: NavItem[] = [

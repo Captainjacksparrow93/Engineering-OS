@@ -70,17 +70,12 @@ export const MODULES: ModuleDefinition[] = [
   {
     key: 'production',
     name: 'Production Management',
-    description: 'Shop-floor routing, panel assembly, wiring and testing stages.',
+    description: 'BOMs, work orders, shop-floor job cards and production planning from sales orders.',
     icon: '🏭',
-    route: '/production',
-    status: 'COMING_SOON',
-    plannedFor: 'Phase 3',
-    scope: [
-      'Engineering release from Project Management opens the production job card',
-      'Stage-wise panel tracking: fabrication, busbar, wiring, testing, dispatch',
-      'Machine and workstation capacity planning',
-      'Quality checkpoints and non-conformance reports',
-    ],
+    route: '/erp/manufacturing',
+    status: 'LIVE',
+    scope: [],
+    requires: 'erp.manufacturing.read',
     sortOrder: 40,
   },
   {
