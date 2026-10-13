@@ -106,3 +106,15 @@ export function DocTrail({ created, submitted, cancelled }: { created: { by?: st
     </p>
   );
 }
+
+/** Runs a loader and turns "not found" into the 404 page. */
+export async function orNotFound<T>(load: Promise<T>): Promise<T> {
+  const { notFound } = await import('next/navigation');
+  const { NotFoundError } = await import('@/core/rbac/errors');
+  try {
+    return await load;
+  } catch (e) {
+    if (e instanceof NotFoundError) notFound();
+    throw e;
+  }
+}

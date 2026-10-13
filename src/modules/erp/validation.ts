@@ -140,3 +140,114 @@ export const settingsSchema = z.object({
   allowNegativeStock: checkbox,
 });
 export type SettingsInput = z.input<typeof settingsSchema>;
+
+// -------------------------------------------------------------------- parties
+
+export const partySchema = z.object({
+  name: requiredText('the name', 160),
+  gstin: optionalText(15).transform((s) => (s ? s.toUpperCase() : null)).refine((s) => !s || /^\d{2}[A-Z0-9]{13}$/.test(s), 'A GSTIN has 15 characters, starting with the 2-digit state code.'),
+  pan: optionalText(10).transform((s) => (s ? s.toUpperCase() : null)).refine((s) => !s || /^[A-Z]{5}\d{4}[A-Z]$/.test(s), 'A PAN looks like ABCDE1234F.'),
+  state: optionalText(60),
+  address: optionalText(500),
+  city: optionalText(80),
+  pincode: optionalText(10),
+  contactPerson: optionalText(120),
+  email: optionalText(160).refine((s) => !s || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s), 'Enter a valid email address.'),
+  phone: optionalText(30),
+  paymentTermsDays: z
+    .union([z.string(), z.number()])
+    .optional()
+    .nullable()
+    .transform((v) => (v === null || v === undefined || String(v).trim() === '' ? 30 : Math.max(0, Math.round(Number(v)) || 0))),
+  creditLimit: optionalDecimal('the credit limit'),
+  notes: optionalText(1000),
+});
+export type PartyInput = z.input<typeof partySchema>;
+
+// -------------------------------------------------------------------- buying
+
+export const materialRequestSchema = z.object({
+  purpose: z.enum(['PURCHASE', 'TRANSFER', 'ISSUE'], { message: 'Pick what the material is for.' }),
+  requestDate: isoDate('the request date'),
+  requiredBy: optionalDate,
+  warehouseId: optionalId,
+  projectId: optionalId,
+  remarks: optionalText(500),
+});
+export type MaterialRequestInput = z.input<typeof materialRequestSchema>;
+
+export const materialRequestLineSchema = z.object({
+  itemCode: requiredText('an item code', 60).transform((s) => s.toUpperCase()),
+  qty: positiveDecimal('the quantity'),
+  warehouseId: optionalId,
+  requiredBy: optionalDate,
+});
+export type MaterialRequestLineInput = z.input<typeof materialRequestLineSchema>;
+
+export const supplierQuotationSchema = z.object({
+  supplierId: id('a supplier'),
+  quoteDate: isoDate('the quotation date'),
+  validTill: optionalDate,
+  materialRequestId: optionalId,
+  supplierRef: optionalText(80),
+  remarks: optionalText(500),
+});
+export type SupplierQuotationInput = z.input<typeof supplierQuotationSchema>;
+
+export const priceLineSchema = z.object({
+  itemCode: requiredText('an item code', 60).transform((s) => s.toUpperCase()),
+  qty: positiveDecimal('the quantity'),
+  rate: nonNegativeDecimal('the rate'),
+  leadTimeDays: z
+    .union([z.string(), z.number()])
+    .optional()
+    .nullable()
+    .transform((v) => (v === null || v === undefined || String(v).trim() === '' ? null : Math.max(0, Math.round(Number(v)) || 0))),
+  warehouseId: optionalId,
+  scheduleDate: optionalDate,
+  description: optionalText(500),
+});
+export type PriceLineInput = z.input<typeof priceLineSchema>;
+
+export const lineEditSchema = z.object({
+  qty: positiveDecimal('the quantity'),
+  rate: optionalDecimal('the rate'),
+  rejectedQty: optionalDecimal('the rejected quantity'),
+});
+export type LineEditInput = z.input<typeof lineEditSchema>;
+
+export const purchaseOrderSchema = z.object({
+  supplierId: id('a supplier'),
+  orderDate: isoDate('the order date'),
+  scheduleDate: optionalDate,
+  projectId: optionalId,
+  supplierRef: optionalText(80),
+  terms: optionalText(4000),
+  remarks: optionalText(500),
+});
+export type PurchaseOrderInput = z.input<typeof purchaseOrderSchema>;
+
+export const purchaseReceiptSchema = z.object({
+  postingDate: isoDate('the receipt date'),
+  supplierDeliveryNote: optionalText(80),
+  remarks: optionalText(500),
+});
+export type PurchaseReceiptInput = z.input<typeof purchaseReceiptSchema>;
+
+export const purchaseInvoiceSchema = z.object({
+  postingDate: isoDate('the posting date'),
+  billNo: optionalText(60),
+  billDate: optionalDate,
+  dueDate: optionalDate,
+  remarks: optionalText(500),
+});
+export type PurchaseInvoiceInput = z.input<typeof purchaseInvoiceSchema>;
+
+export const expenseLineSchema = z.object({
+  description: requiredText('what the charge is for', 300),
+  accountId: id('an expense account'),
+  qty: positiveDecimal('the quantity'),
+  rate: nonNegativeDecimal('the rate'),
+  gstRate: nonNegativeDecimal('the GST rate'),
+});
+export type ExpenseLineInput = z.input<typeof expenseLineSchema>;

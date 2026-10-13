@@ -1884,3 +1884,313 @@ model ErpStockReconciliationLine {
   @@index([reconciliationId, sortOrder])
   @@map("erp_stock_reconciliation_lines")
 }
+
+// ---------------------------------------------------------------- ERP parties (plan 022)
+
+/// Customers and suppliers (ERPNext Customer / Supplier).
+model ErpParty {
+  id               String       @id @default(cuid())
+  companyId        String
+  kind             ErpPartyType
+  code             String
+  name             String
+  gstin            String?
+  pan              String?
+  /// Place of supply for GST (CGST+SGST within the company's state, IGST outside).
+  state            String?
+  address          String?
+  city             String?
+  pincode          String?
+  contactPerson    String?
+  email            String?
+  phone            String?
+  paymentTermsDays Int          @default(30)
+  creditLimit      Decimal?     @db.Decimal(14, 2)
+  /// Customers: the PM client (ACS-XXXX) once the customer has a project.
+  clientId         String?
+  notes            String?
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([companyId, kind, code])
+  @@unique([companyId, kind, name])
+  @@index([clientId])
+  @@map("erp_parties")
+}
+
+// ---------------------------------------------------------------- ERP buying (plan 022 phase 2)
+
+enum ErpMaterialRequestPurpose {
+  PURCHASE
+  TRANSFER
+  ISSUE
+}
+
+model ErpMaterialRequest {
+  id            String                    @id @default(cuid())
+  companyId     String
+  number        String
+  purpose       ErpMaterialRequestPurpose @default(PURCHASE)
+  status        ErpDocStatus              @default(DRAFT)
+  /// Stopped: the open quantity is no longer wanted (ERPNext "Stop").
+  isStopped     Boolean                   @default(false)
+  requestDate   DateTime                  @db.Date
+  requiredBy    DateTime?                 @db.Date
+  warehouseId   String?
+  projectId     String?
+  workOrderId   String?
+  remarks       String?
+  createdById   String
+  submittedById String?
+  submittedAt   DateTime?
+  cancelledById String?
+  cancelledAt   DateTime?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  lines ErpMaterialRequestLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([companyId, projectId])
+  @@map("erp_material_requests")
+}
+
+model ErpMaterialRequestLine {
+  id          String    @id @default(cuid())
+  requestId   String
+  itemId      String
+  qty         Decimal   @db.Decimal(18, 3)
+  warehouseId String
+  requiredBy  DateTime? @db.Date
+  /// Purchase: quantity on submitted purchase orders. Transfer/issue: quantity moved by stock entries.
+  orderedQty  Decimal   @default(0) @db.Decimal(18, 3)
+  sortOrder   Int       @default(0)
+
+  request ErpMaterialRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, sortOrder])
+  @@index([itemId])
+  @@map("erp_material_request_lines")
+}
+
+model ErpSupplierQuotation {
+  id                String       @id @default(cuid())
+  companyId         String
+  number            String
+  supplierId        String
+  status            ErpDocStatus @default(DRAFT)
+  quoteDate         DateTime     @db.Date
+  validTill         DateTime?    @db.Date
+  materialRequestId String?
+  supplierRef       String?
+  remarks           String?
+  netTotal          Decimal      @default(0) @db.Decimal(18, 2)
+  createdById       String
+  submittedById     String?
+  submittedAt       DateTime?
+  cancelledById     String?
+  cancelledAt       DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  lines ErpSupplierQuotationLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([materialRequestId])
+  @@map("erp_supplier_quotations")
+}
+
+model ErpSupplierQuotationLine {
+  id                    String  @id @default(cuid())
+  quotationId           String
+  itemId                String
+  qty                   Decimal @db.Decimal(18, 3)
+  rate                  Decimal @db.Decimal(14, 2)
+  amount                Decimal @db.Decimal(18, 2)
+  leadTimeDays          Int?
+  materialRequestLineId String?
+  sortOrder             Int     @default(0)
+
+  quotation ErpSupplierQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId, sortOrder])
+  @@index([itemId])
+  @@map("erp_supplier_quotation_lines")
+}
+
+model ErpPurchaseOrder {
+  id                  String       @id @default(cuid())
+  companyId           String
+  number              String
+  supplierId          String
+  status              ErpDocStatus @default(DRAFT)
+  /// Closed: nothing more will be received or billed (ERPNext "Close").
+  isClosed            Boolean      @default(false)
+  orderDate           DateTime     @db.Date
+  scheduleDate        DateTime?    @db.Date
+  projectId           String?
+  supplierQuotationId String?
+  supplierRef         String?
+  terms               String?
+  remarks             String?
+  netTotal            Decimal      @default(0) @db.Decimal(18, 2)
+  cgst                Decimal      @default(0) @db.Decimal(18, 2)
+  sgst                Decimal      @default(0) @db.Decimal(18, 2)
+  igst                Decimal      @default(0) @db.Decimal(18, 2)
+  grandTotal          Decimal      @default(0) @db.Decimal(18, 2)
+  createdById         String
+  submittedById       String?
+  submittedAt         DateTime?
+  cancelledById       String?
+  cancelledAt         DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  lines ErpPurchaseOrderLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([companyId, supplierId])
+  @@index([companyId, projectId])
+  @@map("erp_purchase_orders")
+}
+
+model ErpPurchaseOrderLine {
+  id                      String    @id @default(cuid())
+  orderId                 String
+  itemId                  String
+  description             String?
+  qty                     Decimal   @db.Decimal(18, 3)
+  rate                    Decimal   @db.Decimal(14, 2)
+  amount                  Decimal   @db.Decimal(18, 2)
+  gstRate                 Decimal   @db.Decimal(5, 2)
+  warehouseId             String
+  scheduleDate            DateTime? @db.Date
+  receivedQty             Decimal   @default(0) @db.Decimal(18, 3)
+  billedQty               Decimal   @default(0) @db.Decimal(18, 3)
+  materialRequestLineId   String?
+  supplierQuotationLineId String?
+  sortOrder               Int       @default(0)
+
+  order ErpPurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, sortOrder])
+  @@index([itemId])
+  @@index([materialRequestLineId])
+  @@map("erp_purchase_order_lines")
+}
+
+model ErpPurchaseReceipt {
+  id                   String       @id @default(cuid())
+  companyId            String
+  number               String
+  supplierId           String
+  status               ErpDocStatus @default(DRAFT)
+  postingDate          DateTime     @db.Date
+  supplierDeliveryNote String?
+  projectId            String?
+  remarks              String?
+  netTotal             Decimal      @default(0) @db.Decimal(18, 2)
+  createdById          String
+  submittedById        String?
+  submittedAt          DateTime?
+  cancelledById        String?
+  cancelledAt          DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  lines ErpPurchaseReceiptLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([companyId, supplierId])
+  @@map("erp_purchase_receipts")
+}
+
+model ErpPurchaseReceiptLine {
+  id                  String  @id @default(cuid())
+  receiptId           String
+  itemId              String
+  orderLineId         String?
+  /// Accepted quantity: goes into `warehouseId` and is billed.
+  qty                 Decimal @db.Decimal(18, 3)
+  /// Rejected at the gate: held in the Rejected warehouse at no value until returned.
+  rejectedQty         Decimal @default(0) @db.Decimal(18, 3)
+  rate                Decimal @db.Decimal(14, 2)
+  amount              Decimal @db.Decimal(18, 2)
+  gstRate             Decimal @db.Decimal(5, 2)
+  warehouseId         String
+  billedQty           Decimal @default(0) @db.Decimal(18, 3)
+  qualityInspectionId String?
+  sortOrder           Int     @default(0)
+
+  receipt ErpPurchaseReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@index([receiptId, sortOrder])
+  @@index([orderLineId])
+  @@index([itemId])
+  @@map("erp_purchase_receipt_lines")
+}
+
+model ErpPurchaseInvoice {
+  id                String       @id @default(cuid())
+  companyId         String
+  number            String
+  supplierId        String
+  status            ErpDocStatus @default(DRAFT)
+  postingDate       DateTime     @db.Date
+  billNo            String?
+  billDate          DateTime?    @db.Date
+  dueDate           DateTime?    @db.Date
+  projectId         String?
+  remarks           String?
+  /// Debit note (return): amounts are negative and it settles `returnAgainstId`.
+  isReturn          Boolean      @default(false)
+  returnAgainstId   String?
+  netTotal          Decimal      @default(0) @db.Decimal(18, 2)
+  cgst              Decimal      @default(0) @db.Decimal(18, 2)
+  sgst              Decimal      @default(0) @db.Decimal(18, 2)
+  igst              Decimal      @default(0) @db.Decimal(18, 2)
+  grandTotal        Decimal      @default(0) @db.Decimal(18, 2)
+  outstandingAmount Decimal      @default(0) @db.Decimal(18, 2)
+  createdById       String
+  submittedById     String?
+  submittedAt       DateTime?
+  cancelledById     String?
+  cancelledAt       DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  lines ErpPurchaseInvoiceLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([companyId, supplierId])
+  @@map("erp_purchase_invoices")
+}
+
+model ErpPurchaseInvoiceLine {
+  id               String  @id @default(cuid())
+  invoiceId        String
+  itemId           String?
+  description      String
+  qty              Decimal @db.Decimal(18, 3)
+  rate             Decimal @db.Decimal(14, 2)
+  amount           Decimal @db.Decimal(18, 2)
+  gstRate          Decimal @db.Decimal(5, 2)
+  orderLineId      String?
+  receiptLineId    String?
+  /// Non-stock lines post here; stock lines clear Stock Received But Not Billed.
+  expenseAccountId String?
+  sortOrder        Int     @default(0)
+
+  invoice ErpPurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, sortOrder])
+  @@index([receiptLineId])
+  @@index([orderLineId])
+  @@map("erp_purchase_invoice_lines")
+}

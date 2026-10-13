@@ -9,6 +9,7 @@ import { assertProject, manageArea, readArea } from './access';
 import { assertWarehouse, itemByCode } from './item.service';
 import { cancelPostings, postGl, postStock, type GlRow, type StockMoveInput, type Voucher } from './posting';
 import { nextNumber, SERIES } from './series';
+import { applyMaterialRequestProgress } from './material-request.service';
 
 /**
  * Stock Entry (ERPNext): Material Receipt, Material Issue, Material Transfer, and the two
@@ -209,6 +210,7 @@ export async function submitStockEntryTx(tx: Tx, p: Principal, entryId: string) 
   for (const [lineId, val] of lineValue) await tx.erpStockEntryLine.update({ where: { id: lineId }, data: { rate: val.rate, amount: val.amount } });
   const totalValue = [...lineValue.entries()].filter(([id]) => entry.lines.find((l) => l.id === id && (entry.purpose !== 'MANUFACTURE' || l.isFinishedGood))).reduce((a, [, val]) => a.plus(val.amount), ZERO);
   await tx.erpStockEntry.update({ where: { id: entry.id }, data: { totalValue } });
+  for (const l of entry.lines) if (l.materialRequestLineId) await applyMaterialRequestProgress(tx, l.materialRequestLineId, D(l.qty));
   await postGl(tx, v, gl);
   await audit({ actorId: p.userId, module: 'erp', action: 'erp.stock_entry.submitted', entityType: 'ErpStockEntry', entityId: entry.id, diff: { number: entry.number, totalValue: totalValue.toFixed(2) } }, tx);
   return entry;
@@ -225,6 +227,8 @@ export async function cancelStockEntryTx(tx: Tx, p: Principal, entryId: string) 
   const { count } = await tx.erpStockEntry.updateMany({ where: { id: entryId, status: 'SUBMITTED' }, data: { status: 'CANCELLED', cancelledById: p.userId, cancelledAt: new Date() } });
   if (count === 0) throw new DomainError(`Only a submitted entry can be cancelled; ${entry.number} is ${entry.status.toLowerCase()}.`);
   await cancelPostings(tx, { companyId: p.companyId, type: VOUCHER, id: entry.id, no: entry.number, postingDate: entry.postingDate, projectId: entry.projectId });
+  const lines = await tx.erpStockEntryLine.findMany({ where: { entryId, materialRequestLineId: { not: null } } });
+  for (const l of lines) await applyMaterialRequestProgress(tx, l.materialRequestLineId!, D(l.qty).negated());
   await audit({ actorId: p.userId, module: 'erp', action: 'erp.stock_entry.cancelled', entityType: 'ErpStockEntry', entityId: entry.id, diff: { number: entry.number } }, tx);
   return entry;
 }
