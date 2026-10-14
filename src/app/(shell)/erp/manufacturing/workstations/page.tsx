@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { canManage, canRead } from '@/modules/erp/services/access';
 import { listWorkstations } from '@/modules/erp/services/bom.service';
+import { downWorkstations } from '@/modules/erp/services/maintenance.service';
 import { createWorkstationAction, setWorkstationActiveAction, updateWorkstationAction } from '@/app/actions/erp-manufacturing';
 import { ActionForm } from '@/components/action-form';
 import { SubmitButton } from '@/components/form';
@@ -16,7 +17,7 @@ export const metadata = { title: 'Workstations' };
 export default async function WorkstationsPage() {
   const p = await requirePrincipal();
   if (!canRead(p, 'manufacturing')) notFound();
-  const rows = await listWorkstations(p);
+  const [rows, down] = await Promise.all([listWorkstations(p), downWorkstations(p.companyId)]);
   const manage = canManage(p, 'manufacturing');
   return (
     <div className="space-y-lg">
@@ -39,7 +40,7 @@ export default async function WorkstationsPage() {
                     </ActionForm>
                   </td>
                 ) : (
-                  <><td>{w.name}</td><td>{w.hourRate.toString()}</td><td>{w.capacity}</td><td>{w.description}</td></>
+                  <><td>{w.name}{down.has(w.id) ? <span className="badge badge-error ml-xs">Down</span> : null}</td><td>{w.hourRate.toString()}</td><td>{w.capacity}</td><td>{w.description}</td></>
                 )}
                 <td className="text-right">{manage ? <DocButton action={setWorkstationActiveAction} fields={{ id: w.id, active: String(!w.isActive) }} label={w.isActive ? 'Switch off' : 'Switch on'} /> : null}</td>
               </tr>

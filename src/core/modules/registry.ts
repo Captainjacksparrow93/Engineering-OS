@@ -103,15 +103,12 @@ export const MODULES: ModuleDefinition[] = [
   {
     key: 'maintenance',
     name: 'Maintenance',
-    description: 'Preventive maintenance schedules for plant machinery and tooling.',
+    description: 'Asset register, preventive maintenance schedules, breakdowns with downtime, and depreciation.',
     icon: '🔧',
-    route: '/maintenance',
-    status: 'COMING_SOON',
-    plannedFor: 'Phase 4',
-    scope: [
-      'Preventive maintenance jobs raised as tasks on the shared task engine',
-      'Machine downtime feeds back into production capacity planning',
-    ],
+    route: '/erp/assets',
+    status: 'LIVE',
+    scope: [],
+    requires: 'erp.assets.read',
     sortOrder: 70,
   },
   {

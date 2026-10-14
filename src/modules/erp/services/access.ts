@@ -69,3 +69,8 @@ export async function assertProject(companyId: string, projectId: string | null 
   if (!project) throw new ForbiddenError('That project is not in your company.');
   return project.id;
 }
+
+/** Active employees, for custodian/assignee pickers. */
+export async function staffOptions(companyId: string) {
+  return prisma.user.findMany({ where: { companyId, status: 'ACTIVE' }, select: { id: true, fullName: true }, orderBy: { fullName: 'asc' } });
+}

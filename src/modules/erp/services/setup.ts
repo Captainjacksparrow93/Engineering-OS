@@ -7,11 +7,16 @@ import { ROOTS, STANDARD_CHART, STANDARD_WAREHOUSES, type SystemAccount } from '
  * every ERP entry point and safe if two requests race.
  */
 const ready = new Set<string>();
+const SYSTEM_KEY_COUNT = STANDARD_CHART.filter((r) => r.key).length;
 
 export async function ensureErpSetup(companyId: string): Promise<void> {
   if (ready.has(companyId)) return;
-  const settings = await prisma.erpSettings.findUnique({ where: { companyId }, select: { id: true } });
-  if (!settings) await seedCompany(companyId);
+  const [settings, keyed] = await Promise.all([
+    prisma.erpSettings.findUnique({ where: { companyId }, select: { id: true } }),
+    prisma.erpAccount.count({ where: { companyId, systemKey: { not: null } } }),
+  ]);
+  // A later release can add standard accounts; the upserts add only what is missing.
+  if (!settings || keyed < SYSTEM_KEY_COUNT) await seedCompany(companyId);
   ready.add(companyId);
 }
 

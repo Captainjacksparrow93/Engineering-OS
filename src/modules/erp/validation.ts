@@ -469,3 +469,93 @@ export const qualityDocumentSchema = z.object({
   needsCustomerApproval: checkbox,
 });
 export type QualityDocumentInput = z.input<typeof qualityDocumentSchema>;
+
+// -------------------------------------------------------------------- assets + maintenance
+
+const months = (label: string) =>
+  z.union([z.string(), z.number()]).transform((v, ctx) => {
+    const n = Number(String(v).trim());
+    if (!Number.isInteger(n) || n < 0 || n > 1200) {
+      ctx.addIssue({ code: 'custom', message: `Enter ${label} as whole months.` });
+      return z.NEVER;
+    }
+    return n;
+  });
+
+export const assetCategorySchema = z.object({
+  name: requiredText('the category name', 80),
+  usefulLifeMonths: months('the useful life').refine((n) => n > 0, 'The useful life must be at least one month.'),
+  fixedAssetAccountId: id('the fixed-asset account'),
+});
+export type AssetCategoryInput = z.input<typeof assetCategorySchema>;
+
+export const assetSchema = z
+  .object({
+    name: requiredText('the asset name', 160),
+    categoryId: id('a category'),
+    itemCode: optionalText(60).transform((s) => (s ? s.toUpperCase() : null)),
+    serialNo: optionalText(80),
+    location: optionalText(120),
+    custodianId: optionalId,
+    workstationId: optionalId,
+    supplierId: optionalId,
+    purchaseInvoiceNo: optionalText(40),
+    isExisting: checkbox,
+    purchaseDate: isoDate('the purchase date'),
+    availableForUseDate: optionalDate,
+    grossValue: positiveDecimal('the purchase value'),
+    salvageValue: optionalDecimal('the salvage value'),
+    usefulLifeMonths: z.union([z.string(), z.number()]).optional().nullable().transform((v) => (v === null || v === undefined || String(v).trim() === '' ? null : Number(v))),
+    openingAccumulated: optionalDecimal('the depreciation already booked'),
+    openingMonths: z.union([z.string(), z.number()]).optional().nullable().transform((v) => (v === null || v === undefined || String(v).trim() === '' ? 0 : Number(v))),
+    maintenanceRequired: checkbox,
+    notes: optionalText(2000),
+  })
+  .superRefine((a, ctx) => {
+    if (a.usefulLifeMonths !== null && (!Number.isInteger(a.usefulLifeMonths) || a.usefulLifeMonths <= 0)) ctx.addIssue({ code: 'custom', path: ['usefulLifeMonths'], message: 'Enter the useful life as whole months.' });
+    if (!Number.isInteger(a.openingMonths) || a.openingMonths < 0) ctx.addIssue({ code: 'custom', path: ['openingMonths'], message: 'Enter the months already depreciated as a whole number.' });
+    if (a.salvageValue && a.salvageValue.greaterThanOrEqualTo(a.grossValue)) ctx.addIssue({ code: 'custom', path: ['salvageValue'], message: 'The salvage value must be less than the purchase value.' });
+    if (!a.isExisting && (a.openingAccumulated?.greaterThan(0) || a.openingMonths > 0)) ctx.addIssue({ code: 'custom', path: ['openingAccumulated'], message: 'Only an existing asset can carry depreciation booked before go-live.' });
+    if (a.availableForUseDate && a.availableForUseDate < a.purchaseDate) ctx.addIssue({ code: 'custom', path: ['availableForUseDate'], message: 'The asset can’t be in use before it was bought.' });
+  });
+export type AssetInput = z.input<typeof assetSchema>;
+
+export const assetMoveSchema = z.object({
+  movedAt: isoDate('the date'),
+  location: optionalText(120),
+  custodianId: optionalId,
+  note: optionalText(500),
+});
+export type AssetMoveInput = z.input<typeof assetMoveSchema>;
+
+export const maintenanceScheduleSchema = z.object({
+  assetId: id('an asset'),
+  task: requiredText('the task', 200),
+  frequency: z.enum(['WEEKLY', 'MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY'], { message: 'Pick how often.' }),
+  nextDueDate: isoDate('the first due date'),
+  assignedToId: optionalId,
+  checklist: optionalText(4000),
+});
+export type MaintenanceScheduleInput = z.input<typeof maintenanceScheduleSchema>;
+
+export const maintenanceDoneSchema = z.object({
+  doneOn: isoDate('the date it was done'),
+  actionTaken: optionalText(4000),
+  cost: optionalDecimal('the cost'),
+  downtimeHours: optionalDecimal('the downtime'),
+});
+export type MaintenanceDoneInput = z.input<typeof maintenanceDoneSchema>;
+
+export const breakdownSchema = z.object({
+  assetId: id('an asset'),
+  description: requiredText('what went wrong', 4000),
+  assignedToId: optionalId,
+});
+export type BreakdownInput = z.input<typeof breakdownSchema>;
+
+export const repairDoneSchema = z.object({
+  actionTaken: requiredText('what was done', 4000),
+  cost: optionalDecimal('the cost'),
+  downtimeHours: optionalDecimal('the downtime'),
+});
+export type RepairDoneInput = z.input<typeof repairDoneSchema>;

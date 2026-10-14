@@ -1,5 +1,6 @@
-import { ComingSoon } from '@/components/coming-soon';
+import { redirect } from 'next/navigation';
 
+/** Maintenance lives in ERP Assets (plan 022). Old links land there. */
 export default function Page() {
-  return <ComingSoon moduleKey="maintenance" />;
+  redirect('/erp/assets');
 }

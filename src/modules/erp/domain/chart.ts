@@ -43,7 +43,8 @@ export type SystemAccount =
   | 'DEPRECIATION'
   | 'REPAIRS'
   | 'ROUND_OFF'
-  | 'WRITE_OFF';
+  | 'WRITE_OFF'
+  | 'ASSET_DISPOSAL';
 
 export const ROOTS: Array<{ code: string; name: string; rootType: ErpRootType }> = [
   { code: '1000', name: 'Assets', rootType: 'ASSET' },
@@ -123,6 +124,7 @@ export const STANDARD_CHART: ChartRow[] = [
   { code: '5291', name: 'Professional Fees', parent: '5200' },
   { code: '5292', name: 'Round Off', parent: '5200', key: 'ROUND_OFF' },
   { code: '5293', name: 'Write Off', parent: '5200', key: 'WRITE_OFF' },
+  { code: '5295', name: 'Gain/Loss on Asset Disposal', parent: '5200', key: 'ASSET_DISPOSAL' },
   { code: '5294', name: 'Miscellaneous Expenses', parent: '5200' },
 ];
 

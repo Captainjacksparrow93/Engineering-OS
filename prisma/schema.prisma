@@ -2848,3 +2848,179 @@ model ErpQualityDocumentRevision {
   @@index([documentId, status])
   @@map("erp_quality_document_revisions")
 }
+
+// ---------------------------------------------------------------- ERP assets + maintenance (plan 022 phase 6)
+
+/// Asset category (ERPNext Asset Category): default useful life and the fixed-asset account.
+model ErpAssetCategory {
+  id                  String   @id @default(cuid())
+  companyId           String
+  name                String
+  usefulLifeMonths    Int
+  fixedAssetAccountId String
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  @@unique([companyId, name])
+  @@map("erp_asset_categories")
+}
+
+enum ErpAssetStatus {
+  DRAFT
+  SUBMITTED
+  SCRAPPED
+  CANCELLED
+}
+
+/// A fixed asset: plant, tools, test equipment, vehicles, computers. Submitted assets get a
+/// straight-line monthly depreciation schedule; posting a row books Dr Depreciation, Cr
+/// Accumulated Depreciation. Its purchase is booked on a purchase invoice (to the asset's
+/// fixed-asset account) or, for assets owned before go-live, in the opening balances.
+model ErpAsset {
+  id                  String         @id @default(cuid())
+  companyId           String
+  number              String
+  name                String
+  categoryId          String
+  itemId              String?
+  serialNo            String?
+  location            String?
+  custodianId         String?
+  /// The machine this asset is, so its breakdowns show on the shop floor.
+  workstationId       String?
+  supplierId          String?
+  purchaseInvoiceId   String?
+  isExisting          Boolean        @default(false)
+  purchaseDate        DateTime       @db.Date
+  availableForUseDate DateTime       @db.Date
+  grossValue          Decimal        @db.Decimal(18, 2)
+  salvageValue        Decimal        @default(0) @db.Decimal(18, 2)
+  usefulLifeMonths    Int
+  /// Existing assets: depreciation already booked before go-live, and for how many months.
+  openingAccumulated  Decimal        @default(0) @db.Decimal(18, 2)
+  openingMonths       Int            @default(0)
+  maintenanceRequired Boolean        @default(false)
+  status              ErpAssetStatus @default(DRAFT)
+  disposalDate        DateTime?      @db.Date
+  disposalNote        String?
+  notes               String?
+  createdById         String
+  submittedAt         DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  depreciation ErpDepreciationEntry[]
+  movements    ErpAssetMovement[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([companyId, categoryId])
+  @@map("erp_assets")
+}
+
+/// One row of an asset's depreciation schedule. Posted rows carry the GL voucher.
+model ErpDepreciationEntry {
+  id           String    @id @default(cuid())
+  assetId      String
+  seq          Int
+  scheduleDate DateTime  @db.Date
+  amount       Decimal   @db.Decimal(18, 2)
+  /// Accumulated depreciation after this row (opening included).
+  accumulated  Decimal   @db.Decimal(18, 2)
+  postedAt     DateTime?
+  postedById   String?
+
+  asset ErpAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, seq])
+  @@index([scheduleDate, postedAt])
+  @@map("erp_depreciation_entries")
+}
+
+/// Location or custodian change (ERPNext Asset Movement).
+model ErpAssetMovement {
+  id            String   @id @default(cuid())
+  assetId       String
+  movedAt       DateTime @db.Date
+  fromLocation  String?
+  toLocation    String?
+  fromCustodian String?
+  toCustodian   String?
+  note          String?
+  createdById   String
+  createdAt     DateTime @default(now())
+
+  asset ErpAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@map("erp_asset_movements")
+}
+
+enum ErpMaintenanceFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
+}
+
+/// Preventive maintenance task on an asset, repeating at a frequency.
+model ErpMaintenanceSchedule {
+  id           String                  @id @default(cuid())
+  companyId    String
+  assetId      String
+  task         String
+  frequency    ErpMaintenanceFrequency
+  nextDueDate  DateTime                @db.Date
+  lastDoneDate DateTime?               @db.Date
+  assignedToId String?
+  checklist    String?
+  isActive     Boolean                 @default(true)
+  createdById  String
+  createdAt    DateTime                @default(now())
+
+  @@index([companyId, isActive, nextDueDate])
+  @@index([assetId])
+  @@map("erp_maintenance_schedules")
+}
+
+enum ErpMaintenanceKind {
+  PREVENTIVE
+  BREAKDOWN
+}
+
+enum ErpMaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+/// A maintenance visit: a preventive job done, or a breakdown reported and repaired.
+model ErpMaintenanceLog {
+  id            String               @id @default(cuid())
+  companyId     String
+  number        String
+  assetId       String
+  scheduleId    String?
+  kind          ErpMaintenanceKind
+  status        ErpMaintenanceStatus @default(OPEN)
+  description   String
+  reportedAt    DateTime             @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  /// Hours the asset could not be used. Breakdowns: from report to completion unless entered.
+  downtimeHours Decimal?             @db.Decimal(10, 2)
+  actionTaken   String?
+  cost          Decimal              @default(0) @db.Decimal(18, 2)
+  assignedToId  String?
+  doneById      String?
+  createdById   String
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@unique([companyId, number])
+  @@index([companyId, kind, status])
+  @@index([assetId])
+  @@map("erp_maintenance_logs")
+}
