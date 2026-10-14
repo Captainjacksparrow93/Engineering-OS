@@ -10,6 +10,7 @@ import { manageArea, readArea } from './access';
 import { activeParty } from './party.service';
 import { cancelPostings, postGl, type GlRow, type Voucher } from './posting';
 import { invoiceState } from './purchase-invoice.service';
+import { adjustOutstanding, hasSettlements } from './outstanding';
 import { nextNumber, SERIES } from './series';
 
 /**
@@ -213,6 +214,12 @@ export async function submitSalesInvoice(p: Principal, id: string) {
     if (inv.lines.length === 0) throw new DomainError('Add at least one line before submitting.');
     const items = await tx.erpItem.findMany({ where: { id: { in: inv.lines.map((l) => l.itemId).filter((x): x is string => !!x) } } });
     const byId = new Map(items.map((i) => [i.id, i]));
+    const incomeAccount = (l: (typeof inv.lines)[number]) => {
+      const item = l.itemId ? byId.get(l.itemId) : undefined;
+      const account = l.incomeAccountId ?? item?.incomeAccountId;
+      return account ? { id: account } : item && !item.isStockItem ? ('SERVICE_INCOME' as const) : ('SALES' as const);
+    };
+    if (inv.isReturn) return submitCreditNote(tx, p, inv, incomeAccount);
     const gl: GlRow[] = [];
     for (const l of inv.lines) {
       const item = l.itemId ? byId.get(l.itemId) : undefined;
@@ -226,8 +233,7 @@ export async function submitSalesInvoice(p: Principal, id: string) {
         const left = D(ol.qty).minus(D(ol.billedQty));
         if (D(l.qty).greaterThan(left)) throw new DomainError(`${item?.code ?? l.description}: only ${formatQty(left)} left to bill on the order.`);
       }
-      const account = l.incomeAccountId ?? item?.incomeAccountId;
-      gl.push({ account: account ? { id: account } : item && !item.isStockItem ? 'SERVICE_INCOME' : 'SALES', credit: money(l.amount), remarks: l.description });
+      gl.push({ account: incomeAccount(l), credit: money(l.amount), remarks: l.description });
     }
     gl.push({ account: 'OUTPUT_CGST', credit: inv.cgst }, { account: 'OUTPUT_SGST', credit: inv.sgst }, { account: 'OUTPUT_IGST', credit: inv.igst });
     gl.push({ account: 'DEBTORS', debit: inv.grandTotal, partyType: 'CUSTOMER', partyId: inv.customerId, againstType: VOUCHER, againstId: inv.id, remarks: inv.poNo ? `PO ${inv.poNo}` : null });
@@ -243,11 +249,12 @@ export async function cancelSalesInvoice(p: Principal, id: string) {
   return prisma.$transaction(async (tx) => {
     const inv = await tx.erpSalesInvoice.findFirst({ where: { id, companyId: p.companyId }, include: lineInclude });
     if (!inv) throw new NotFoundError('Sales invoice not found.');
-    if (!D(inv.outstandingAmount).equals(D(inv.grandTotal))) throw new DomainError(`${inv.number} has payments against it. Cancel or unlink those first.`);
+    if (inv.isReturn ? await hasSettlements(tx, VOUCHER, id) : !D(inv.outstandingAmount).equals(D(inv.grandTotal))) throw new DomainError(`${inv.number} has payments or credit notes against it. Cancel those first.`);
     const { count } = await tx.erpSalesInvoice.updateMany({ where: { id, status: 'SUBMITTED' }, data: { status: 'CANCELLED', cancelledById: p.userId, cancelledAt: new Date() } });
     if (count === 0) throw new DomainError(`Only a submitted invoice can be cancelled; ${inv.number} is ${inv.status.toLowerCase()}.`);
     await cancelPostings(tx, { companyId: p.companyId, type: VOUCHER, id, no: inv.number, postingDate: inv.postingDate, projectId: inv.projectId });
     for (const l of inv.lines) await applyBilled(tx, l, -1);
+    if (inv.isReturn && inv.returnAgainstId) await adjustOutstanding(tx, VOUCHER, inv.returnAgainstId, D(inv.grandTotal).minus(D(inv.outstandingAmount)));
     await tx.erpSalesInvoice.update({ where: { id }, data: { outstandingAmount: ZERO } });
     await audit({ actorId: p.userId, module: 'erp', action: 'erp.sales_invoice.cancelled', entityType: 'ErpSalesInvoice', entityId: id }, tx);
   });
@@ -255,4 +262,48 @@ export async function cancelSalesInvoice(p: Principal, id: string) {
 
 export async function incomeAccounts(companyId: string) {
   return prisma.erpAccount.findMany({ where: { companyId, isGroup: false, isActive: true, rootType: 'INCOME' }, select: { id: true, code: true, name: true }, orderBy: { code: 'asc' } });
+}
+
+/**
+ * Credit note (ERPNext sales return): a draft copy of the invoice's lines to trim down. On
+ * submit it reverses income and GST (Dr) against the customer (Cr Debtors, against the
+ * original invoice), which it settles first; any credit left over stays on the note to
+ * refund or use. Goods coming back are received into stock separately.
+ */
+export async function makeCreditNote(p: Principal, invoiceId: string, postingDate: Date) {
+  await manageSi(p);
+  return prisma.$transaction(async (tx) => {
+    const orig = await tx.erpSalesInvoice.findFirst({ where: { id: invoiceId, companyId: p.companyId }, include: lineInclude });
+    if (!orig || orig.status !== 'SUBMITTED' || orig.isReturn) throw new DomainError('Only a submitted invoice can have a credit note.');
+    const items = await tx.erpItem.findMany({ where: { id: { in: orig.lines.map((l) => l.itemId).filter((x): x is string => !!x) } } });
+    const byId = new Map(items.map((i) => [i.id, i]));
+    const note = await tx.erpSalesInvoice.create({
+      data: { companyId: p.companyId, number: await nextNumber(tx, p.companyId, SERIES.salesInvoice), customerId: orig.customerId, postingDate, dueDate: postingDate, poNo: orig.poNo, projectId: orig.projectId, isReturn: true, returnAgainstId: orig.id, remarks: `Credit note against ${orig.number}`, createdById: p.userId },
+    });
+    await tx.erpSalesInvoiceLine.createMany({
+      data: orig.lines.map((l, n) => ({ invoiceId: note.id, itemId: l.itemId, description: l.description, qty: l.qty, rate: l.rate, amount: l.amount, gstRate: l.gstRate, incomeAccountId: l.incomeAccountId ?? (l.itemId ? byId.get(l.itemId)?.incomeAccountId ?? null : null), sortOrder: n })),
+    });
+    await recompute(tx, note.id);
+    return note;
+  });
+}
+
+async function submitCreditNote(
+  tx: Tx,
+  p: Principal,
+  inv: Prisma.ErpSalesInvoiceGetPayload<{ include: typeof lineInclude }>,
+  incomeAccount: (l: (typeof inv.lines)[number]) => GlRow['account'],
+) {
+  const orig = inv.returnAgainstId ? await tx.erpSalesInvoice.findFirst({ where: { id: inv.returnAgainstId, companyId: p.companyId } }) : null;
+  if (!orig || orig.status !== 'SUBMITTED' || orig.customerId !== inv.customerId) throw new DomainError('The invoice this credit note is against is not submitted.');
+  const others = await tx.erpSalesInvoice.aggregate({ where: { returnAgainstId: orig.id, status: 'SUBMITTED', id: { not: inv.id } }, _sum: { grandTotal: true } });
+  if (D(others._sum.grandTotal).plus(D(inv.grandTotal)).greaterThan(D(orig.grandTotal))) throw new DomainError(`Credit notes against ${orig.number} can't add up to more than the invoice.`);
+  const gl: GlRow[] = inv.lines.map((l) => ({ account: incomeAccount(l), debit: money(l.amount), remarks: l.description }));
+  gl.push({ account: 'OUTPUT_CGST', debit: inv.cgst }, { account: 'OUTPUT_SGST', debit: inv.sgst }, { account: 'OUTPUT_IGST', debit: inv.igst });
+  gl.push({ account: 'DEBTORS', credit: inv.grandTotal, partyType: 'CUSTOMER', partyId: inv.customerId, againstType: VOUCHER, againstId: orig.id, remarks: `Credit note ${inv.number}` });
+  await postGl(tx, { companyId: p.companyId, type: VOUCHER, id: inv.id, no: inv.number, postingDate: inv.postingDate, projectId: inv.projectId }, gl);
+  const applied = D(orig.outstandingAmount).lessThan(D(inv.grandTotal)) ? D(orig.outstandingAmount) : D(inv.grandTotal);
+  await adjustOutstanding(tx, VOUCHER, orig.id, applied.negated());
+  await tx.erpSalesInvoice.update({ where: { id: inv.id }, data: { outstandingAmount: money(D(inv.grandTotal).minus(applied)) } });
+  await audit({ actorId: p.userId, module: 'erp', action: 'erp.credit_note.submitted', entityType: 'ErpSalesInvoice', entityId: inv.id, diff: { number: inv.number, against: orig.number, grandTotal: inv.grandTotal.toFixed(2) } }, tx);
 }

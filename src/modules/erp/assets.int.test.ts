@@ -5,7 +5,7 @@ import { prisma } from '@/core/db/prisma';
 import { DomainError, ForbiddenError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
 import { makeErpCompany } from './test-fixture';
-import { cancelAsset, createAsset, createCategory, depreciationDue, fixedAssetAccounts, getAsset, listAssets, moveAsset, postDepreciation, scrapAsset, submitAsset } from './services/asset.service';
+import { cancelAsset, createAsset, updateAsset, createCategory, depreciationDue, fixedAssetAccounts, getAsset, listAssets, moveAsset, postDepreciation, scrapAsset, submitAsset } from './services/asset.service';
 import { assetsOverview, cancelLog, completeRepair, createSchedule, downWorkstations, listLogs, listSchedules, logScheduleDone, reportBreakdown, startRepair } from './services/maintenance.service';
 import { createWorkstation } from './services/bom.service';
 
@@ -54,6 +54,8 @@ describe('Plan 022 phase 6: assets + maintenance', () => {
     await expect(createAsset(mm, { name: 'Hipot tester', categoryId, purchaseDate: '2026-04-05', grossValue: '120000', openingAccumulated: '5000' })).rejects.toThrow(ZodError);
     const a = await createAsset(mm, { name: 'Hipot tester', categoryId, purchaseDate: '2026-04-05', grossValue: '120000', salvageValue: '12000', location: 'Test bay' });
     expect(a.usefulLifeMonths).toBe(12);
+    await expect(submitAsset(mm, a.id)).rejects.toThrow(/purchase invoice/);
+    await updateAsset(mm, a.id, { name: 'Hipot tester', categoryId, purchaseDate: '2026-04-05', grossValue: '120000', salvageValue: '12000', location: 'Test bay', isExisting: 'on' });
     await submitAsset(mm, a.id);
     await expect(submitAsset(mm, a.id)).rejects.toThrow(DomainError);
     const { asset } = await getAsset(mm, a.id);
@@ -108,7 +110,7 @@ describe('Plan 022 phase 6: assets + maintenance', () => {
   });
 
   it('preventive maintenance: schedule, due list, log done moves the next due date', async () => {
-    const a = await createAsset(mm, { name: 'Compressor', categoryId, purchaseDate: '2026-01-10', grossValue: '45000' });
+    const a = await createAsset(mm, { name: 'Compressor', categoryId, purchaseDate: '2026-01-10', grossValue: '45000', isExisting: 'on' });
     await expect(createSchedule(mm, { assetId: a.id, task: 'Drain tank', frequency: 'MONTHLY', nextDueDate: '2026-01-31' })).rejects.toThrow(/not in use/);
     await submitAsset(mm, a.id);
     await expect(createSchedule(engineer, { assetId: a.id, task: 'Drain tank', frequency: 'MONTHLY', nextDueDate: '2026-01-31' })).rejects.toThrow(ForbiddenError);
@@ -126,7 +128,7 @@ describe('Plan 022 phase 6: assets + maintenance', () => {
   it('breakdowns: report, notify, start, complete with downtime; machine shows down', async () => {
     const ws = await createWorkstation(await fx.user('PRODUCTION_MANAGER', 'Production'), { name: `Press ${fx.run}`, hourRate: '500' });
     const mm2 = await fx.user('MAINTENANCE_MANAGER', 'Maintenance Two');
-    const a = await createAsset(mm, { name: 'Hydraulic press', categoryId, purchaseDate: '2026-02-01', grossValue: '200000', workstationId: ws.id });
+    const a = await createAsset(mm, { name: 'Hydraulic press', categoryId, purchaseDate: '2026-02-01', grossValue: '200000', workstationId: ws.id, isExisting: 'on' });
     await submitAsset(mm, a.id);
     await expect(reportBreakdown(mm, { assetId: a.id, description: '' })).rejects.toThrow(ZodError);
     const b = await reportBreakdown(mm, { assetId: a.id, description: 'Oil leak at the main cylinder' });

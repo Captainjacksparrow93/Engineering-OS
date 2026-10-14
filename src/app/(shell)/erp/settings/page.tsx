@@ -1,7 +1,8 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
-import { canManageSettings, chartOfAccounts, readSettings } from '@/modules/erp/services/settings.service';
+import { canManageSettings, readSettings } from '@/modules/erp/services/settings.service';
 import { INDIAN_STATES } from '@/modules/erp/domain/gst';
 import { updateErpSettingsAction } from '@/app/actions/erp-stock';
 import { ActionForm } from '@/components/action-form';
@@ -12,12 +13,10 @@ import { Field } from '../_components/parts';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'ERP settings' };
 
-const ROOT_LABEL = { ASSET: 'Asset', LIABILITY: 'Liability', EQUITY: 'Equity', INCOME: 'Income', EXPENSE: 'Expense' } as const;
-
 export default async function ErpSettingsPage() {
   const p = await requirePrincipal();
   if (!hasPermissionAnywhere(p, 'erp.access')) notFound();
-  const [settings, chart] = await Promise.all([readSettings(p), chartOfAccounts(p.companyId)]);
+  const settings = await readSettings(p);
   const manage = canManageSettings(p);
   return (
     <div className="space-y-lg">
@@ -49,21 +48,7 @@ export default async function ErpSettingsPage() {
         </ActionForm>
       </Card>
       <Card title="Chart of accounts">
-        <p className="mb-sm text-caption text-muted">Fiscal year April to March, in rupees. Accounts marked “Used by the system” are where stock, GST and party balances post.</p>
-        <div className="overflow-x-auto">
-          <table className="table">
-            <thead><tr><th>Account</th><th>Type</th><th /></tr></thead>
-            <tbody>
-              {chart.map((a) => (
-                <tr key={a.id}>
-                  <td style={{ paddingLeft: `${0.75 + a.depth * 1.25}rem` }} className={a.isGroup ? 'font-medium text-ink' : ''}><span className="code mr-xs">{a.code}</span>{a.name}</td>
-                  <td className="text-caption text-muted">{ROOT_LABEL[a.rootType]}{a.isGroup ? ' · group' : ''}</td>
-                  <td className="text-caption text-muted">{a.systemKey ? 'Used by the system' : ''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <p className="text-body-sm">Fiscal year April to March, in rupees. The chart lives under <Link href="/erp/accounts/chart" className="font-medium underline">Accounts → Chart of accounts</Link>.</p>
       </Card>
     </div>
   );

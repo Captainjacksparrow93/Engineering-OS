@@ -559,3 +559,74 @@ export const repairDoneSchema = z.object({
   downtimeHours: optionalDecimal('the downtime'),
 });
 export type RepairDoneInput = z.input<typeof repairDoneSchema>;
+
+// -------------------------------------------------------------------- accounts
+
+export const paymentSchema = z
+  .object({
+    paymentType: z.enum(['RECEIVE', 'PAY', 'INTERNAL_TRANSFER'], { message: 'Pick receive, pay or transfer.' }),
+    postingDate: isoDate('the payment date'),
+    partyType: z.preprocess((v) => (v === '' ? null : v), z.enum(['CUSTOMER', 'SUPPLIER']).nullable().optional()),
+    partyId: optionalId,
+    accountId: id('the bank or cash account'),
+    transferToAccountId: optionalId,
+    amount: positiveDecimal('the amount'),
+    modeOfPayment: optionalText(40),
+    referenceNo: optionalText(80),
+    referenceDate: optionalDate,
+    projectId: optionalId,
+    remarks: optionalText(1000),
+  })
+  .superRefine((p, ctx) => {
+    if (p.paymentType === 'INTERNAL_TRANSFER') {
+      if (!p.transferToAccountId) ctx.addIssue({ code: 'custom', path: ['transferToAccountId'], message: 'Pick the account the money goes to.' });
+      if (p.transferToAccountId && p.transferToAccountId === p.accountId) ctx.addIssue({ code: 'custom', path: ['transferToAccountId'], message: 'Pick two different accounts.' });
+    } else if (!p.partyType || !p.partyId) {
+      ctx.addIssue({ code: 'custom', path: ['partyId'], message: 'Pick the customer or supplier.' });
+    }
+  });
+export type PaymentInput = z.input<typeof paymentSchema>;
+
+export const allocationSchema = z.object({
+  invoiceId: id('an invoice'),
+  amount: positiveDecimal('the amount'),
+});
+export type AllocationInput = z.input<typeof allocationSchema>;
+
+export const journalSchema = z.object({
+  entryType: z.enum(['JOURNAL', 'OPENING']).default('JOURNAL'),
+  postingDate: isoDate('the posting date'),
+  referenceNo: optionalText(80),
+  referenceDate: optionalDate,
+  remarks: optionalText(1000),
+});
+export type JournalInput = z.input<typeof journalSchema>;
+
+export const journalLineSchema = z
+  .object({
+    accountId: id('an account'),
+    partyType: z.preprocess((v) => (v === '' ? null : v), z.enum(['CUSTOMER', 'SUPPLIER']).nullable().optional()),
+    partyId: optionalId,
+    projectId: optionalId,
+    debit: optionalDecimal('the debit'),
+    credit: optionalDecimal('the credit'),
+    againstInvoiceNo: optionalText(40).transform((s) => (s ? s.toUpperCase() : null)),
+    remarks: optionalText(500),
+  })
+  .superRefine((l, ctx) => {
+    const dr = l.debit && !l.debit.isZero();
+    const cr = l.credit && !l.credit.isZero();
+    if (dr === cr) ctx.addIssue({ code: 'custom', path: ['debit'], message: 'Enter a debit or a credit (one, not both).' });
+    if (l.partyId && !l.partyType) ctx.addIssue({ code: 'custom', path: ['partyType'], message: 'Pick customer or supplier.' });
+  });
+export type JournalLineInput = z.input<typeof journalLineSchema>;
+
+export const ACCOUNT_TYPES = ['BANK', 'CASH', 'FIXED_ASSET', 'TAX', 'STOCK'] as const;
+export const accountSchema = z.object({
+  parentId: id('the group it sits under'),
+  code: requiredText('an account code', 12).refine((s) => /^[0-9A-Za-z-]+$/.test(s), 'Use letters, digits and dashes in the code.'),
+  name: requiredText('the account name', 120),
+  accountType: z.preprocess((v) => (v === '' ? null : v), z.enum(ACCOUNT_TYPES).nullable().optional()),
+  isGroup: checkbox,
+});
+export type AccountInput = z.input<typeof accountSchema>;

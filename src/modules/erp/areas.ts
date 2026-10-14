@@ -16,5 +16,5 @@ export const ERP_AREAS: AreaCard[] = [
   { area: 'manufacturing', name: 'Manufacturing', href: '/erp/manufacturing', live: true, description: 'BOMs, work orders, job cards and production planning.' },
   { area: 'quality', name: 'Quality', href: '/erp/quality', live: true, description: 'Inspections, non-conformances and controlled documents.' },
   { area: 'assets', name: 'Assets and maintenance', href: '/erp/assets', live: true, description: 'Asset register, depreciation, preventive maintenance and breakdowns.' },
-  { area: 'accounts', name: 'Accounts', href: '/erp/accounts', live: false, description: 'Ledgers, invoices, payments, journals, bank reconciliation and financial reports.' },
+  { area: 'accounts', name: 'Accounts', href: '/erp/accounts', live: true, description: 'Ledgers, invoices, payments, journals, bank reconciliation and financial reports.' },
 ];

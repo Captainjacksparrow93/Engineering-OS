@@ -9,7 +9,9 @@ import { expenseLineSchema, lineEditSchema, purchaseInvoiceSchema, type ExpenseL
 import { manageArea, readArea } from './access';
 import { activeParty } from './party.service';
 import { cancelPostings, postGl, type GlRow, type Voucher } from './posting';
+import { adjustOutstanding, hasSettlements } from './outstanding';
 import { nextNumber, SERIES } from './series';
+import { systemAccountId } from './setup';
 
 /**
  * Purchase Invoice (ERPNext). The supplier's bill:
@@ -230,6 +232,7 @@ export async function submitPurchaseInvoice(p: Principal, id: string) {
     const { count } = await tx.erpPurchaseInvoice.updateMany({ where: { id, status: 'DRAFT' }, data: { status: 'SUBMITTED', submittedById: p.userId, submittedAt: new Date() } });
     if (count === 0) throw new DomainError(`${inv.number} was already submitted or cancelled.`);
     if (inv.lines.length === 0) throw new DomainError('Add at least one line before submitting.');
+    if (inv.isReturn) return submitDebitNote(tx, p, inv);
     if (inv.billNo) {
       const dup = await tx.erpPurchaseInvoice.findFirst({ where: { companyId: p.companyId, supplierId: inv.supplierId, billNo: inv.billNo, status: 'SUBMITTED', id: { not: id } }, select: { number: true } });
       if (dup) throw new DomainError(`Supplier bill ${inv.billNo} is already entered as ${dup.number}.`);
@@ -274,11 +277,12 @@ export async function cancelPurchaseInvoice(p: Principal, id: string) {
   return prisma.$transaction(async (tx) => {
     const inv = await tx.erpPurchaseInvoice.findFirst({ where: { id, companyId: p.companyId }, include: lineInclude });
     if (!inv) throw new NotFoundError('Purchase invoice not found.');
-    if (!D(inv.outstandingAmount).equals(D(inv.grandTotal))) throw new DomainError(`${inv.number} has payments against it. Cancel or unlink those first.`);
+    if (inv.isReturn ? await hasSettlements(tx, VOUCHER, id) : !D(inv.outstandingAmount).equals(D(inv.grandTotal))) throw new DomainError(`${inv.number} has payments or debit notes against it. Cancel those first.`);
     const { count } = await tx.erpPurchaseInvoice.updateMany({ where: { id, status: 'SUBMITTED' }, data: { status: 'CANCELLED', cancelledById: p.userId, cancelledAt: new Date() } });
     if (count === 0) throw new DomainError(`Only a submitted invoice can be cancelled; ${inv.number} is ${inv.status.toLowerCase()}.`);
     await cancelPostings(tx, { companyId: p.companyId, type: VOUCHER, id, no: inv.number, postingDate: inv.postingDate, projectId: inv.projectId });
     for (const l of inv.lines) await applyBilled(tx, l, -1);
+    if (inv.isReturn && inv.returnAgainstId) await adjustOutstanding(tx, VOUCHER, inv.returnAgainstId, D(inv.grandTotal).minus(D(inv.outstandingAmount)));
     await tx.erpPurchaseInvoice.update({ where: { id }, data: { outstandingAmount: ZERO } });
     await audit({ actorId: p.userId, module: 'erp', action: 'erp.purchase_invoice.cancelled', entityType: 'ErpPurchaseInvoice', entityId: id }, tx);
   });
@@ -289,3 +293,54 @@ export async function expenseAccounts(companyId: string) {
   return prisma.erpAccount.findMany({ where: { companyId, isGroup: false, isActive: true, rootType: { in: ['EXPENSE', 'ASSET'] }, OR: [{ rootType: 'EXPENSE' }, { accountType: 'FIXED_ASSET' }] }, select: { id: true, code: true, name: true }, orderBy: { code: 'asc' } });
 }
 
+
+/**
+ * Debit note (ERPNext purchase return): a draft copy of the bill's lines to trim down. On
+ * submit it reverses the bill: Dr Creditors (against the original bill, which it settles
+ * first), Cr each line's expense account — Stock Adjustment for stock lines, whose goods go
+ * back out of stock separately — and Cr Input GST. Credit left over stays on the note.
+ */
+export async function makeDebitNote(p: Principal, invoiceId: string, postingDate: Date) {
+  await manageArea(p, 'buying').catch(() => manageArea(p, 'accounts'));
+  return prisma.$transaction(async (tx) => {
+    const orig = await tx.erpPurchaseInvoice.findFirst({ where: { id: invoiceId, companyId: p.companyId }, include: lineInclude });
+    if (!orig || orig.status !== 'SUBMITTED' || orig.isReturn) throw new DomainError('Only a submitted purchase invoice can have a debit note.');
+    const items = await tx.erpItem.findMany({ where: { id: { in: orig.lines.map((l) => l.itemId).filter((x): x is string => !!x) } } });
+    const byId = new Map(items.map((i) => [i.id, i]));
+    const [stockAdj, purchaseExp] = await Promise.all([systemAccountId(p.companyId, 'STOCK_ADJUSTMENT', tx), systemAccountId(p.companyId, 'PURCHASE_EXPENSES', tx)]);
+    const note = await tx.erpPurchaseInvoice.create({
+      data: { companyId: p.companyId, number: await nextNumber(tx, p.companyId, SERIES.purchaseInvoice), supplierId: orig.supplierId, postingDate, dueDate: postingDate, billNo: null, projectId: orig.projectId, isReturn: true, returnAgainstId: orig.id, remarks: `Debit note against ${orig.number}${orig.billNo ? ` (bill ${orig.billNo})` : ''}`, createdById: p.userId },
+    });
+    await tx.erpPurchaseInvoiceLine.createMany({
+      data: orig.lines.map((l, n) => ({
+        invoiceId: note.id,
+        itemId: l.itemId,
+        description: l.description,
+        qty: l.qty,
+        rate: l.rate,
+        amount: l.amount,
+        gstRate: l.gstRate,
+        expenseAccountId: l.receiptLineId ? stockAdj : l.expenseAccountId ?? (l.itemId ? byId.get(l.itemId)?.expenseAccountId ?? null : null) ?? purchaseExp,
+        sortOrder: n,
+      })),
+    });
+    await recompute(tx, note.id);
+    return note;
+  });
+}
+
+async function submitDebitNote(tx: Tx, p: Principal, inv: Prisma.ErpPurchaseInvoiceGetPayload<{ include: typeof lineInclude }>) {
+  const orig = inv.returnAgainstId ? await tx.erpPurchaseInvoice.findFirst({ where: { id: inv.returnAgainstId, companyId: p.companyId } }) : null;
+  if (!orig || orig.status !== 'SUBMITTED' || orig.supplierId !== inv.supplierId) throw new DomainError('The bill this debit note is against is not submitted.');
+  const others = await tx.erpPurchaseInvoice.aggregate({ where: { returnAgainstId: orig.id, status: 'SUBMITTED', id: { not: inv.id } }, _sum: { grandTotal: true } });
+  if (D(others._sum.grandTotal).plus(D(inv.grandTotal)).greaterThan(D(orig.grandTotal))) throw new DomainError(`Debit notes against ${orig.number} can't add up to more than the bill.`);
+  const fallback = await systemAccountId(p.companyId, 'PURCHASE_EXPENSES', tx);
+  const gl: GlRow[] = inv.lines.map((l) => ({ account: { id: l.expenseAccountId ?? fallback }, credit: money(l.amount), remarks: l.description }));
+  gl.push({ account: 'INPUT_CGST', credit: inv.cgst }, { account: 'INPUT_SGST', credit: inv.sgst }, { account: 'INPUT_IGST', credit: inv.igst });
+  gl.push({ account: 'CREDITORS', debit: inv.grandTotal, partyType: 'SUPPLIER', partyId: inv.supplierId, againstType: VOUCHER, againstId: orig.id, remarks: `Debit note ${inv.number}` });
+  await postGl(tx, { companyId: p.companyId, type: VOUCHER, id: inv.id, no: inv.number, postingDate: inv.postingDate, projectId: inv.projectId }, gl);
+  const applied = D(orig.outstandingAmount).lessThan(D(inv.grandTotal)) ? D(orig.outstandingAmount) : D(inv.grandTotal);
+  await adjustOutstanding(tx, VOUCHER, orig.id, applied.negated());
+  await tx.erpPurchaseInvoice.update({ where: { id: inv.id }, data: { outstandingAmount: money(D(inv.grandTotal).minus(applied)) } });
+  await audit({ actorId: p.userId, module: 'erp', action: 'erp.debit_note.submitted', entityType: 'ErpPurchaseInvoice', entityId: inv.id, diff: { number: inv.number, against: orig.number, grandTotal: inv.grandTotal.toFixed(2) } }, tx);
+}

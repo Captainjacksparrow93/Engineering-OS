@@ -93,6 +93,11 @@ const Icons = {
       <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
     </svg>
   ),
+  Accounts: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h12M6 8h12M6 13l8.5 8M6 13h3c6.67 0 6.67-10 0-10" />
+    </svg>
+  ),
   Modules: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <rect width="7" height="7" x="3" y="3" rx="1" />
@@ -176,6 +181,7 @@ const ERP_NAV: NavItem[] = [
   { label: 'Manufacturing', href: '/erp/manufacturing', show: erpArea('manufacturing'), icon: Icons.Commissioning },
   { label: 'Quality', href: '/erp/quality', show: erpArea('quality'), icon: Icons.Quality },
   { label: 'Assets', href: '/erp/assets', show: erpArea('assets'), icon: Icons.Maintenance },
+  { label: 'Accounts', href: '/erp/accounts', show: erpArea('accounts'), icon: Icons.Accounts },
 ];
 
 const SALES_NAV: NavItem[] = [

@@ -3024,3 +3024,147 @@ model ErpMaintenanceLog {
   @@index([assetId])
   @@map("erp_maintenance_logs")
 }
+
+// ---------------------------------------------------------------- ERP accounts (plan 022 phase 7)
+
+enum ErpPaymentType {
+  RECEIVE
+  PAY
+  INTERNAL_TRANSFER
+}
+
+/// Payment Entry (ERPNext): money in from a customer, out to a supplier, or between our own
+/// bank and cash accounts. Allocations settle invoices; anything left is an advance that can
+/// be reconciled against a later invoice.
+model ErpPayment {
+  id                  String         @id @default(cuid())
+  companyId           String
+  number              String
+  status              ErpDocStatus   @default(DRAFT)
+  paymentType         ErpPaymentType
+  postingDate         DateTime       @db.Date
+  partyType           ErpPartyType?
+  partyId             String?
+  /// Our bank or cash account (the one money leaves for a transfer).
+  accountId           String
+  /// Internal transfers: the bank or cash account money goes to.
+  transferToAccountId String?
+  amount              Decimal        @db.Decimal(18, 2)
+  unallocatedAmount   Decimal        @default(0) @db.Decimal(18, 2)
+  modeOfPayment       String?
+  referenceNo         String?
+  referenceDate       DateTime?      @db.Date
+  /// Bank reconciliation: the day it shows on the bank statement.
+  clearanceDate       DateTime?      @db.Date
+  projectId           String?
+  remarks             String?
+  createdById         String
+  submittedById       String?
+  submittedAt         DateTime?
+  cancelledById       String?
+  cancelledAt         DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  allocations ErpPaymentAllocation[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([companyId, partyType, partyId])
+  @@index([accountId, postingDate])
+  @@map("erp_payments")
+}
+
+/// The part of a payment that settles one invoice. Rows added after submit (reconciling an
+/// advance) post their own re-pointing voucher.
+model ErpPaymentAllocation {
+  id               String   @id @default(cuid())
+  paymentId        String
+  invoiceType      String
+  invoiceId        String
+  amount           Decimal  @db.Decimal(18, 2)
+  isReconciliation Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  payment ErpPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([invoiceType, invoiceId])
+  @@map("erp_payment_allocations")
+}
+
+enum ErpJournalType {
+  JOURNAL
+  OPENING
+}
+
+/// Journal Entry (ERPNext): any balanced set of debits and credits. Party lines on Debtors or
+/// Creditors may settle an invoice.
+model ErpJournalEntry {
+  id            String         @id @default(cuid())
+  companyId     String
+  number        String
+  status        ErpDocStatus   @default(DRAFT)
+  entryType     ErpJournalType @default(JOURNAL)
+  postingDate   DateTime       @db.Date
+  referenceNo   String?
+  referenceDate DateTime?      @db.Date
+  clearanceDate DateTime?      @db.Date
+  remarks       String?
+  totalDebit    Decimal        @default(0) @db.Decimal(18, 2)
+  totalCredit   Decimal        @default(0) @db.Decimal(18, 2)
+  createdById   String
+  submittedById String?
+  submittedAt   DateTime?
+  cancelledById String?
+  cancelledAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  lines ErpJournalLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@map("erp_journal_entries")
+}
+
+model ErpJournalLine {
+  id          String        @id @default(cuid())
+  entryId     String
+  accountId   String
+  partyType   ErpPartyType?
+  partyId     String?
+  projectId   String?
+  debit       Decimal       @default(0) @db.Decimal(18, 2)
+  credit      Decimal       @default(0) @db.Decimal(18, 2)
+  againstType String?
+  againstId   String?
+  remarks     String?
+  sortOrder   Int           @default(0)
+
+  entry ErpJournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([entryId, sortOrder])
+  @@index([againstType, againstId])
+  @@map("erp_journal_lines")
+}
+
+/// Period Closing Voucher (ERPNext): moves a fiscal year's profit or loss into Retained
+/// Earnings and closes the books up to the year end.
+model ErpPeriodClosing {
+  id            String       @id @default(cuid())
+  companyId     String
+  fiscalYear    String
+  yearStart     DateTime     @db.Date
+  yearEnd       DateTime     @db.Date
+  netProfit     Decimal      @db.Decimal(18, 2)
+  status        ErpDocStatus @default(SUBMITTED)
+  remarks       String?
+  createdById   String
+  cancelledById String?
+  cancelledAt   DateTime?
+  createdAt     DateTime     @default(now())
+
+  @@index([companyId, status, yearEnd])
+  @@map("erp_period_closings")
+}

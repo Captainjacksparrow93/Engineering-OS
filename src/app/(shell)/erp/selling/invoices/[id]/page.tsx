@@ -17,6 +17,7 @@ import { SubmitButton } from '@/components/form';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { DocButton } from '../../../_components/doc-button';
 import { GlTable } from '../../../_components/gl-table';
+import { InvoiceSettlement } from '../../../_components/settlement';
 import { LineEdit } from '../../../_components/line-edit';
 import { TotalsBlock } from '../../../_components/totals';
 import { DocStatus, DocTrail, Field, isoDay, Money, orNotFound, Qty, showDate } from '../../../_components/parts';
@@ -101,6 +102,7 @@ export default async function SalesInvoicePage({ params }: { params: Promise<{ i
           </ActionForm>
         </Card>
       ) : null}
+      <InvoiceSettlement p={p} type="Sales Invoice" inv={inv} partyId={inv.customerId} returnsArea="selling" />
       <GlTable rows={gl} />
       <DocTrail created={{ by: names.get(inv.createdById), at: inv.createdAt }} submitted={{ by: names.get(inv.submittedById ?? ''), at: inv.submittedAt }} cancelled={{ by: names.get(inv.cancelledById ?? ''), at: inv.cancelledAt }} />
     </div>

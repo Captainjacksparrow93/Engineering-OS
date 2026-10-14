@@ -223,6 +223,7 @@ export async function submitAsset(p: Principal, id: string) {
   await manageArea(p, 'assets');
   return prisma.$transaction(async (tx) => {
     const asset = await lockAsset(tx, p, id);
+    if (!asset.purchaseInvoiceId && !asset.isExisting) throw new DomainError('Link the purchase invoice that bought it, or mark it as an existing asset (in the opening balances).');
     const moved = await tx.erpAsset.updateMany({ where: { id, status: 'DRAFT' }, data: { status: 'SUBMITTED', submittedAt: new Date() } });
     if (moved.count === 0) throw new DomainError('This asset is already submitted.');
     const rows = straightLineSchedule(asset);
