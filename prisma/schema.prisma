@@ -1684,33 +1684,37 @@ model ErpWarehouse {
 }
 
 model ErpItem {
-  id                 String   @id @default(cuid())
-  companyId          String
-  code               String
-  name               String
-  description        String?
-  itemGroup          String   @default("General")
-  uom                String   @default("Nos")
-  make               String?
-  makerPartNo        String?
-  hsnCode            String?
-  gstRate            Decimal  @default(18) @db.Decimal(5, 2)
-  isStockItem        Boolean  @default(true)
-  isPurchaseItem     Boolean  @default(true)
-  isSalesItem        Boolean  @default(true)
+  id                       String   @id @default(cuid())
+  companyId                String
+  code                     String
+  name                     String
+  description              String?
+  itemGroup                String   @default("General")
+  uom                      String   @default("Nos")
+  make                     String?
+  makerPartNo              String?
+  hsnCode                  String?
+  gstRate                  Decimal  @default(18) @db.Decimal(5, 2)
+  isStockItem              Boolean  @default(true)
+  isPurchaseItem           Boolean  @default(true)
+  isSalesItem              Boolean  @default(true)
   /// Selling rate used to prefill sales documents.
-  standardRate       Decimal? @db.Decimal(14, 2)
-  lastPurchaseRate   Decimal? @db.Decimal(14, 2)
-  reorderLevel       Decimal? @db.Decimal(14, 3)
-  reorderQty         Decimal? @db.Decimal(14, 3)
-  leadTimeDays       Int?
-  defaultWarehouseId String?
+  standardRate             Decimal? @db.Decimal(14, 2)
+  lastPurchaseRate         Decimal? @db.Decimal(14, 2)
+  reorderLevel             Decimal? @db.Decimal(14, 3)
+  reorderQty               Decimal? @db.Decimal(14, 3)
+  leadTimeDays             Int?
+  defaultWarehouseId       String?
   /// For non-stock items: where purchases and sales post.
-  expenseAccountId   String?
-  incomeAccountId    String?
-  isActive           Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  expenseAccountId         String?
+  incomeAccountId          String?
+  /// Quality (phase 5): an accepted inspection is needed before the receipt / delivery submits.
+  inspectionBeforePurchase Boolean  @default(false)
+  inspectionBeforeDelivery Boolean  @default(false)
+  qualityTemplateId        String?
+  isActive                 Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   bins ErpBin[]
 
@@ -2609,4 +2613,238 @@ model ErpProductionPlanItem {
 
   @@index([planId, sortOrder])
   @@map("erp_production_plan_items")
+}
+
+// ---------------------------------------------------------------- ERP quality (plan 022 phase 5)
+
+model ErpQualityTemplate {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  parameters ErpQualityParameter[]
+
+  @@unique([companyId, name])
+  @@map("erp_quality_templates")
+}
+
+enum ErpQualityParamKind {
+  NUMERIC
+  TEXT
+  CHECK
+}
+
+model ErpQualityParameter {
+  id              String              @id @default(cuid())
+  templateId      String
+  name            String
+  kind            ErpQualityParamKind @default(CHECK)
+  minValue        Decimal?            @db.Decimal(14, 4)
+  maxValue        Decimal?            @db.Decimal(14, 4)
+  /// TEXT: the value that passes (case-insensitive).
+  acceptanceValue String?
+  sortOrder       Int                 @default(0)
+
+  template ErpQualityTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, sortOrder])
+  @@map("erp_quality_parameters")
+}
+
+enum ErpInspectionType {
+  INCOMING
+  IN_PROCESS
+  OUTGOING
+}
+
+enum ErpInspectionResult {
+  ACCEPTED
+  REJECTED
+}
+
+model ErpQualityInspection {
+  id              String               @id @default(cuid())
+  companyId       String
+  number          String
+  type            ErpInspectionType
+  itemId          String
+  /// "Purchase Receipt", "Delivery Note" or "Work Order".
+  referenceType   String?
+  referenceId     String?
+  referenceLineId String?
+  templateId      String?
+  sampleSize      Decimal              @default(1) @db.Decimal(14, 3)
+  inspectionDate  DateTime             @db.Date
+  status          ErpDocStatus         @default(DRAFT)
+  result          ErpInspectionResult?
+  remarks         String?
+  createdById     String
+  submittedById   String?
+  submittedAt     DateTime?
+  cancelledById   String?
+  cancelledAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  readings ErpQualityReading[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([referenceType, referenceId])
+  @@index([referenceLineId])
+  @@map("erp_quality_inspections")
+}
+
+model ErpQualityReading {
+  id              String              @id @default(cuid())
+  inspectionId    String
+  parameter       String
+  kind            ErpQualityParamKind
+  minValue        Decimal?            @db.Decimal(14, 4)
+  maxValue        Decimal?            @db.Decimal(14, 4)
+  acceptanceValue String?
+  value           String?
+  ok              Boolean?
+  sortOrder       Int                 @default(0)
+
+  inspection ErpQualityInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId, sortOrder])
+  @@map("erp_quality_readings")
+}
+
+enum ErpNcSeverity {
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+enum ErpNcSource {
+  INCOMING
+  IN_PROCESS
+  FINAL
+  CUSTOMER_COMPLAINT
+  INTERNAL_AUDIT
+  SUPPLIER
+}
+
+enum ErpNcStatus {
+  OPEN
+  INVESTIGATING
+  ACTION_TAKEN
+  CLOSED
+}
+
+/// Non-conformance with root cause and corrective / preventive action (CAPA).
+model ErpNonConformance {
+  id               String        @id @default(cuid())
+  companyId        String
+  number           String
+  title            String
+  description      String
+  source           ErpNcSource
+  severity         ErpNcSeverity @default(MINOR)
+  status           ErpNcStatus   @default(OPEN)
+  itemId           String?
+  supplierId       String?
+  customerId       String?
+  projectId        String?
+  inspectionId     String?
+  ownerId          String
+  dueDate          DateTime?     @db.Date
+  rootCause        String?
+  correction       String?
+  correctiveAction String?
+  preventiveAction String?
+  closingNote      String?
+  createdById      String
+  closedById       String?
+  closedAt         DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([ownerId, status])
+  @@index([companyId, projectId])
+  @@map("erp_non_conformances")
+}
+
+enum ErpQualityDocCategory {
+  DRAWING
+  PROCEDURE
+  WORK_INSTRUCTION
+  TEST_REPORT
+  FORM
+  MANUAL
+  OTHER
+}
+
+/// A controlled document (drawing, procedure, test report…) with revisions.
+model ErpQualityDocument {
+  id                    String                @id @default(cuid())
+  companyId             String
+  code                  String
+  title                 String
+  category              ErpQualityDocCategory
+  projectId             String?
+  itemId                String?
+  /// Drawings for a client: each revision needs the customer's approval too.
+  needsCustomerApproval Boolean               @default(false)
+  isActive              Boolean               @default(true)
+  createdById           String
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  revisions ErpQualityDocumentRevision[]
+
+  @@unique([companyId, code])
+  @@index([companyId, category])
+  @@index([companyId, projectId])
+  @@map("erp_quality_documents")
+}
+
+enum ErpRevisionStatus {
+  DRAFT
+  PENDING_APPROVAL
+  RELEASED
+  REJECTED
+  SUPERSEDED
+}
+
+enum ErpCustomerApproval {
+  NOT_NEEDED
+  PENDING
+  APPROVED
+  APPROVED_WITH_COMMENTS
+  REJECTED
+}
+
+model ErpQualityDocumentRevision {
+  id                String              @id @default(cuid())
+  documentId        String
+  revision          Int
+  changeNote        String
+  status            ErpRevisionStatus   @default(DRAFT)
+  fileName          String
+  mimeType          String
+  sizeBytes         Int
+  content           Bytes
+  authorId          String
+  approverId        String?
+  approvedAt        DateTime?
+  approvalNote      String?
+  customerApproval  ErpCustomerApproval @default(NOT_NEEDED)
+  customerRef       String?
+  customerNote      String?
+  customerDecidedAt DateTime?
+  createdAt         DateTime            @default(now())
+
+  document ErpQualityDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, revision])
+  @@index([documentId, status])
+  @@map("erp_quality_document_revisions")
 }

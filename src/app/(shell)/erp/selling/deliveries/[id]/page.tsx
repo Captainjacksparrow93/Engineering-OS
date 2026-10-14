@@ -62,7 +62,7 @@ export default async function DeliveryPage({ params }: { params: Promise<{ id: s
                 const order = l.orderLineId ? orders.get(l.orderLineId) : null;
                 return (
                   <tr key={l.id}>
-                    <td><span className="code mr-xs">{item?.code}</span>{item?.name}</td>
+                    <td><span className="code mr-xs">{item?.code}</span>{item?.name}{item?.inspectionBeforeDelivery ? (l.qualityInspectionId ? <Link href={`/erp/quality/inspections/${l.qualityInspectionId}`} className="ml-xs text-caption hover:underline">Inspected</Link> : draft ? <Link href={`/erp/quality/inspections?item=${encodeURIComponent(item.code)}&referenceType=Delivery%20Note&referenceId=${id}&referenceLineId=${l.id}`} className="ml-xs text-caption text-accent hover:underline">Inspect</Link> : null) : null}</td>
                     <td>{order ? <Link href={`/erp/selling/orders/${order.id}`} className="code hover:underline">{order.number}</Link> : '—'}</td>
                     <td>{warehouses.get(l.warehouseId)}</td>
                     <td className="text-right">{draft && manage ? <LineEdit action={updateDeliveryLineAction} docId={id} lineId={l.id} qty={l.qty.toString()} /> : <Qty value={l.qty} uom={item?.uom} />}</td>

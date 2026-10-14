@@ -7,6 +7,7 @@ import { D, formatQty, money, sum, ZERO } from '../domain/money';
 import { deliveryNoteSchema, lineEditSchema, type DeliveryNoteInput, type LineEditInput, type Raw } from '../validation';
 import { manageArea, readArea } from './access';
 import { cancelPostings, postGl, postStock, type Voucher } from './posting';
+import { assertInspected } from './quality.service';
 import { applyDelivered } from './sales-order.service';
 import { nextNumber, SERIES } from './series';
 
@@ -32,7 +33,7 @@ export async function getDeliveryNote(p: Principal, id: string) {
   const dn = await prisma.erpDeliveryNote.findFirst({ where: { id, companyId: p.companyId }, include: lineInclude });
   if (!dn) throw new NotFoundError('Delivery note not found.');
   const [items, customer, warehouses, orderLines, gl] = await Promise.all([
-    prisma.erpItem.findMany({ where: { id: { in: dn.lines.map((l) => l.itemId) } }, select: { id: true, code: true, name: true, uom: true } }),
+    prisma.erpItem.findMany({ where: { id: { in: dn.lines.map((l) => l.itemId) } }, select: { id: true, code: true, name: true, uom: true, inspectionBeforeDelivery: true } }),
     prisma.erpParty.findUnique({ where: { id: dn.customerId } }),
     prisma.erpWarehouse.findMany({ where: { companyId: p.companyId }, select: { id: true, name: true } }),
     prisma.erpSalesOrderLine.findMany({ where: { id: { in: dn.lines.map((l) => l.orderLineId).filter((x): x is string => !!x) } }, include: { order: { select: { id: true, number: true } } } }),
@@ -117,13 +118,6 @@ export async function deleteDeliveryNote(p: Principal, id: string) {
   });
 }
 
-/** Outgoing inspection check (phase 5 registers it). */
-export type OutgoingCheck = (tx: Tx, dn: { id: string; companyId: string; lines: Array<{ id: string; itemId: string; qualityInspectionId: string | null }> }) => Promise<void>;
-let outgoingCheck: OutgoingCheck | null = null;
-export function registerOutgoingCheck(fn: OutgoingCheck) {
-  outgoingCheck = fn;
-}
-
 export async function submitDeliveryNote(p: Principal, id: string) {
   await manageArea(p, 'selling').catch(() => manageArea(p, 'stock'));
   return prisma.$transaction(async (tx) => {
@@ -132,7 +126,7 @@ export async function submitDeliveryNote(p: Principal, id: string) {
     const { count } = await tx.erpDeliveryNote.updateMany({ where: { id, status: 'DRAFT' }, data: { status: 'SUBMITTED', submittedById: p.userId, submittedAt: new Date() } });
     if (count === 0) throw new DomainError(`${dn.number} was already submitted or cancelled.`);
     if (dn.lines.length === 0) throw new DomainError('Add at least one item before submitting.');
-    if (outgoingCheck) await outgoingCheck(tx, dn);
+    await assertInspected(tx, 'delivery', dn.lines);
     const items = await tx.erpItem.findMany({ where: { id: { in: dn.lines.map((l) => l.itemId) } }, select: { id: true, code: true } });
     const code = new Map(items.map((i) => [i.id, i.code]));
     for (const l of dn.lines) {

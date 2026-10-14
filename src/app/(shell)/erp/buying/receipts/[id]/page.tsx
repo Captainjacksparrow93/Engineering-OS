@@ -66,7 +66,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
                   const order = l.orderLineId ? orders.get(l.orderLineId) : null;
                   return (
                     <tr key={l.id}>
-                      <td><span className="code mr-xs">{item?.code}</span>{item?.name}</td>
+                      <td><span className="code mr-xs">{item?.code}</span>{item?.name}{item?.inspectionBeforePurchase ? (l.qualityInspectionId ? <Link href={`/erp/quality/inspections/${l.qualityInspectionId}`} className="ml-xs text-caption hover:underline">Inspected</Link> : draft ? <Link href={`/erp/quality/inspections?item=${encodeURIComponent(item.code)}&referenceType=Purchase%20Receipt&referenceId=${id}&referenceLineId=${l.id}`} className="ml-xs text-caption text-accent hover:underline">Inspect</Link> : null) : null}</td>
                       <td>{order ? <Link href={`/erp/buying/orders/${order.id}`} className="code hover:underline">{order.number}</Link> : '—'}</td>
                       <td>{warehouses.get(l.warehouseId)}</td>
                       {draft && manage ? <td><LineEdit action={updatePurchaseReceiptLineAction} docId={id} lineId={l.id} qty={l.qty.toString()} rejectedQty={l.rejectedQty.toString()} rate={l.orderLineId ? undefined : l.rate.toString()} /></td> : <><td className="text-right"><Qty value={l.qty} uom={item?.uom} /></td><td className="text-right">{D(l.rejectedQty).isZero() ? '—' : <Qty value={l.rejectedQty} />}</td><td className="text-right"><Money value={l.rate} /></td></>}

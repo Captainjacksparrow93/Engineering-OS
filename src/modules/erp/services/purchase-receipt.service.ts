@@ -10,6 +10,7 @@ import { assertWarehouse, itemByCode } from './item.service';
 import { activeParty } from './party.service';
 import { cancelPostings, postGl, postStock, type Voucher } from './posting';
 import { applyReceived } from './purchase-order.service';
+import { assertInspected } from './quality.service';
 import { nextNumber, SERIES } from './series';
 import { systemWarehouseId } from './setup';
 
@@ -45,7 +46,7 @@ export async function getPurchaseReceipt(p: Principal, id: string) {
   const pr = await prisma.erpPurchaseReceipt.findFirst({ where: { id, companyId: p.companyId }, include: lineInclude });
   if (!pr) throw new NotFoundError('Purchase receipt not found.');
   const [items, supplier, warehouses, orderLines, gl] = await Promise.all([
-    prisma.erpItem.findMany({ where: { id: { in: pr.lines.map((l) => l.itemId) } }, select: { id: true, code: true, name: true, uom: true } }),
+    prisma.erpItem.findMany({ where: { id: { in: pr.lines.map((l) => l.itemId) } }, select: { id: true, code: true, name: true, uom: true, inspectionBeforePurchase: true } }),
     prisma.erpParty.findUnique({ where: { id: pr.supplierId } }),
     prisma.erpWarehouse.findMany({ where: { companyId: p.companyId }, select: { id: true, name: true } }),
     prisma.erpPurchaseOrderLine.findMany({ where: { id: { in: pr.lines.map((l) => l.orderLineId).filter((x): x is string => !!x) } }, include: { order: { select: { id: true, number: true } } } }),
@@ -156,13 +157,6 @@ export async function updatePurchaseReceipt(p: Principal, id: string, input: Raw
   });
 }
 
-/** Lines that need an accepted quality inspection before the receipt can be submitted (phase 5 fills this in). */
-export type InspectionCheck = (tx: Tx, receipt: { id: string; companyId: string; lines: Array<{ id: string; itemId: string; qualityInspectionId: string | null }> }) => Promise<void>;
-let inspectionCheck: InspectionCheck | null = null;
-export function registerInspectionCheck(fn: InspectionCheck) {
-  inspectionCheck = fn;
-}
-
 export async function submitPurchaseReceipt(p: Principal, id: string) {
   await manageArea(p, 'stock').catch(() => manageArea(p, 'buying'));
   return prisma.$transaction(async (tx) => {
@@ -171,7 +165,7 @@ export async function submitPurchaseReceipt(p: Principal, id: string) {
     const { count } = await tx.erpPurchaseReceipt.updateMany({ where: { id, status: 'DRAFT' }, data: { status: 'SUBMITTED', submittedById: p.userId, submittedAt: new Date() } });
     if (count === 0) throw new DomainError(`${pr.number} was already submitted or cancelled.`);
     if (pr.lines.length === 0) throw new DomainError('Add at least one item before submitting.');
-    if (inspectionCheck) await inspectionCheck(tx, pr);
+    await assertInspected(tx, 'purchase', pr.lines.filter((l) => D(l.qty).greaterThan(0)));
 
     const items = await tx.erpItem.findMany({ where: { id: { in: pr.lines.map((l) => l.itemId) } } });
     const byId = new Map(items.map((i) => [i.id, i]));

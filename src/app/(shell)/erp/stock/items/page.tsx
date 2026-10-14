@@ -9,6 +9,7 @@ import { SubmitButton } from '@/components/form';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { Money, Qty } from '../../_components/parts';
 import { StockTabs } from '../tabs';
+import { templateOptions } from '@/modules/erp/services/quality.service';
 import { ItemFields } from './item-form';
 
 export const dynamic = 'force-dynamic';
@@ -18,10 +19,11 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
   const p = await requirePrincipal();
   if (!canRead(p, 'stock')) notFound();
   const sp = await searchParams;
-  const [items, groups, warehouses] = await Promise.all([
+  const [items, groups, warehouses, templates] = await Promise.all([
     listItems(p, { q: sp.q, group: sp.group, includeInactive: sp.inactive === '1' }),
     itemGroups(p.companyId),
     warehouseOptions(p.companyId),
+    templateOptions(p.companyId),
   ]);
   const manage = canManage(p, 'stock');
 
@@ -69,7 +71,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
       {manage ? (
         <Card title="Add an item">
           <ActionForm action={createItemAction} className="space-y-base">
-            <ItemFields groups={groups} warehouses={warehouses} />
+            <ItemFields groups={groups} warehouses={warehouses} templates={templates} />
             <SubmitButton variant="primary" pendingLabel="Adding…">Add item</SubmitButton>
           </ActionForm>
         </Card>

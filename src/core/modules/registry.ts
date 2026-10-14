@@ -92,16 +92,12 @@ export const MODULES: ModuleDefinition[] = [
   {
     key: 'qms',
     name: 'Quality & Documents',
-    description: 'Drawing approvals, test reports, ISO documents and revision control.',
+    description: 'Inspections, non-conformances with corrective actions, and revision-controlled documents.',
     icon: '📋',
-    route: '/qms',
-    status: 'COMING_SOON',
-    plannedFor: 'Phase 4',
-    scope: [
-      'Drawing revisions attached to the engineering task that produced them',
-      'Customer approval cycles that gate downstream production tasks',
-      'Routine test reports generated per panel serial number',
-    ],
+    route: '/erp/quality',
+    status: 'LIVE',
+    scope: [],
+    requires: 'erp.quality.read',
     sortOrder: 60,
   },
   {

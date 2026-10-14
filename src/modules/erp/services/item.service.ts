@@ -78,6 +78,13 @@ export async function itemByCode(companyId: string, code: string, tx: Tx = prism
   return item;
 }
 
+async function assertTemplate(companyId: string, templateId: string | null | undefined, tx: Tx) {
+  if (!templateId) return null;
+  const t = await tx.erpQualityTemplate.findFirst({ where: { id: templateId, companyId }, select: { id: true } });
+  if (!t) throw new DomainError('That inspection template was not found.');
+  return t.id;
+}
+
 async function assertWarehouse(companyId: string, warehouseId: string | null | undefined, tx: Tx = prisma) {
   if (!warehouseId) return null;
   const wh = await tx.erpWarehouse.findFirst({ where: { id: warehouseId, companyId }, select: { id: true, isActive: true, name: true } });
@@ -109,6 +116,7 @@ export async function createItem(p: Principal, input: Raw<ItemInput>) {
         ...data,
         gstRate: data.gstRate ?? settings.defaultGstRate,
         defaultWarehouseId: await assertWarehouse(p.companyId, data.defaultWarehouseId, tx),
+        qualityTemplateId: await assertTemplate(p.companyId, data.qualityTemplateId, tx),
       },
     });
     await syncSalesCatalogue(tx, p.companyId, item);
@@ -130,7 +138,7 @@ export async function updateItem(p: Principal, itemId: string, input: Raw<ItemIn
     }
     const item = await tx.erpItem.update({
       where: { id: itemId },
-      data: { ...data, gstRate: data.gstRate ?? before.gstRate, defaultWarehouseId: await assertWarehouse(p.companyId, data.defaultWarehouseId, tx) },
+      data: { ...data, gstRate: data.gstRate ?? before.gstRate, defaultWarehouseId: await assertWarehouse(p.companyId, data.defaultWarehouseId, tx), qualityTemplateId: await assertTemplate(p.companyId, data.qualityTemplateId, tx) },
     });
     await syncSalesCatalogue(tx, p.companyId, item);
     await audit({ actorId: p.userId, module: 'erp', action: 'erp.item.updated', entityType: 'ErpItem', entityId: item.id, diff: { code: item.code } }, tx);

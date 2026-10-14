@@ -10,6 +10,7 @@ import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { DocButton } from '../../../_components/doc-button';
 import { Money, Qty, showDate } from '../../../_components/parts';
 import { StockTabs } from '../../tabs';
+import { templateOptions } from '@/modules/erp/services/quality.service';
 import { ItemFields } from '../item-form';
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,7 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
     throw e;
   });
   const { item, ledger } = data;
-  const [groups, warehouses] = await Promise.all([itemGroups(p.companyId), warehouseOptions(p.companyId)]);
+  const [groups, warehouses, templates] = await Promise.all([itemGroups(p.companyId), warehouseOptions(p.companyId), templateOptions(p.companyId)]);
   const whName = new Map(item.bins.map((b) => [b.warehouseId, b.warehouse.name]));
   const manage = canManage(p, 'stock');
 
@@ -88,7 +89,7 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
         <Card title="Details">
           <ActionForm action={updateItemAction} className="space-y-base">
             <input type="hidden" name="itemId" value={item.id} />
-            <ItemFields item={item} groups={groups} warehouses={warehouses} />
+            <ItemFields item={item} groups={groups} warehouses={warehouses} templates={templates} />
             <SubmitButton pendingLabel="Saving…">Save item</SubmitButton>
           </ActionForm>
         </Card>

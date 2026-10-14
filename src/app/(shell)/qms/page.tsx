@@ -1,5 +1,6 @@
-import { ComingSoon } from '@/components/coming-soon';
+import { redirect } from 'next/navigation';
 
+/** Quality lives in ERP Quality (plan 022). Old links land there. */
 export default function Page() {
-  return <ComingSoon moduleKey="qms" />;
+  redirect('/erp/quality');
 }

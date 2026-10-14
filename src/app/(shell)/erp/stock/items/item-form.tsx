@@ -2,7 +2,7 @@ import type { ErpItem } from '@prisma/client';
 import { Field } from '../../_components/parts';
 
 /** Fields shared by the new-item and edit-item forms. */
-export function ItemFields({ item, groups, warehouses }: { item?: ErpItem; groups: string[]; warehouses: Array<{ id: string; name: string }> }) {
+export function ItemFields({ item, groups, warehouses, templates }: { item?: ErpItem; groups: string[]; warehouses: Array<{ id: string; name: string }>; templates: Array<{ id: string; name: string }> }) {
   const check = (name: keyof ErpItem, label: string, fallback: boolean) => (
     <label className="flex items-center gap-xs text-body-sm">
       <input type="checkbox" name={name} defaultChecked={item ? Boolean(item[name]) : fallback} /> {label}
@@ -30,6 +30,13 @@ export function ItemFields({ item, groups, warehouses }: { item?: ErpItem; group
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
         </div>
+        <div>
+          <label className="label" htmlFor="qualityTemplateId">Inspection template</label>
+          <select id="qualityTemplateId" name="qualityTemplateId" defaultValue={item?.qualityTemplateId ?? ''} className="select w-full">
+            <option value="">None</option>
+            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
       </div>
       <div>
         <label className="label" htmlFor="description">Description</label>
@@ -39,6 +46,8 @@ export function ItemFields({ item, groups, warehouses }: { item?: ErpItem; group
         {check('isStockItem', 'Keep stock of this item', true)}
         {check('isPurchaseItem', 'Bought from suppliers', true)}
         {check('isSalesItem', 'Sold to customers', false)}
+        {check('inspectionBeforePurchase', 'Inspect before accepting a receipt', false)}
+        {check('inspectionBeforeDelivery', 'Inspect before delivery', false)}
       </div>
       <datalist id="item-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist>
     </div>

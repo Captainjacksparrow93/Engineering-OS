@@ -91,6 +91,9 @@ export const itemSchema = z.object({
     .nullable()
     .transform((v) => (v === null || v === undefined || String(v).trim() === '' ? null : Math.max(0, Math.round(Number(v)) || 0))),
   defaultWarehouseId: optionalId,
+  inspectionBeforePurchase: checkbox,
+  inspectionBeforeDelivery: checkbox,
+  qualityTemplateId: optionalId,
 });
 export type ItemInput = z.input<typeof itemSchema>;
 
@@ -401,3 +404,68 @@ export const planItemSchema = z.object({
   plannedStart: optionalDate,
 });
 export type PlanItemInput = z.input<typeof planItemSchema>;
+
+// -------------------------------------------------------------------- quality
+
+export const qualityTemplateSchema = z.object({ name: requiredText('the template name', 80) });
+
+export const qualityParameterSchema = z
+  .object({
+    name: requiredText('the parameter', 120),
+    kind: z.enum(['NUMERIC', 'TEXT', 'CHECK'], { message: 'Pick the kind of reading.' }),
+    minValue: optionalDecimal('the minimum'),
+    maxValue: optionalDecimal('the maximum'),
+    acceptanceValue: optionalText(120),
+  })
+  .refine((v) => !v.minValue || !v.maxValue || v.minValue.lessThanOrEqualTo(v.maxValue), { message: 'The minimum is above the maximum.', path: ['maxValue'] });
+export type QualityParameterInput = z.input<typeof qualityParameterSchema>;
+
+export const inspectionSchema = z.object({
+  type: z.enum(['INCOMING', 'IN_PROCESS', 'OUTGOING'], { message: 'Pick the inspection type.' }),
+  itemCode: requiredText('the item', 60).transform((s) => s.toUpperCase()),
+  inspectionDate: isoDate('the inspection date'),
+  sampleSize: optionalDecimal('the sample size'),
+  referenceType: z.preprocess((v) => (v === '' ? null : v), z.enum(['Purchase Receipt', 'Delivery Note', 'Work Order']).optional().nullable()),
+  referenceId: optionalId,
+  referenceLineId: optionalId,
+  remarks: optionalText(500),
+});
+export type InspectionInput = z.input<typeof inspectionSchema>;
+
+export const readingSchema = z.object({ parameter: requiredText('the parameter', 120), value: optionalText(120) });
+
+export const NC_SOURCES = ['INCOMING', 'IN_PROCESS', 'FINAL', 'CUSTOMER_COMPLAINT', 'INTERNAL_AUDIT', 'SUPPLIER'] as const;
+export const nonConformanceSchema = z.object({
+  title: requiredText('a short title', 160),
+  description: requiredText('what went wrong', 4000),
+  source: z.enum(NC_SOURCES, { message: 'Pick where it was found.' }),
+  severity: z.enum(['MINOR', 'MAJOR', 'CRITICAL'], { message: 'Pick the severity.' }),
+  itemCode: optionalText(60).transform((s) => (s ? s.toUpperCase() : null)),
+  supplierId: optionalId,
+  customerId: optionalId,
+  projectId: optionalId,
+  ownerId: optionalId,
+  dueDate: optionalDate,
+});
+export type NonConformanceInput = z.input<typeof nonConformanceSchema>;
+
+export const capaSchema = z.object({
+  rootCause: optionalText(4000),
+  correction: optionalText(4000),
+  correctiveAction: optionalText(4000),
+  preventiveAction: optionalText(4000),
+  ownerId: optionalId,
+  dueDate: optionalDate,
+});
+export type CapaInput = z.input<typeof capaSchema>;
+
+export const DOC_CATEGORIES = ['DRAWING', 'PROCEDURE', 'WORK_INSTRUCTION', 'TEST_REPORT', 'FORM', 'MANUAL', 'OTHER'] as const;
+export const qualityDocumentSchema = z.object({
+  code: requiredText('a document code', 40).transform((s) => s.toUpperCase()),
+  title: requiredText('the title', 200),
+  category: z.enum(DOC_CATEGORIES, { message: 'Pick the document type.' }),
+  projectId: optionalId,
+  itemCode: optionalText(60).transform((s) => (s ? s.toUpperCase() : null)),
+  needsCustomerApproval: checkbox,
+});
+export type QualityDocumentInput = z.input<typeof qualityDocumentSchema>;
