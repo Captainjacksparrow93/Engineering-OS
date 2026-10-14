@@ -6,8 +6,10 @@ import { ERP_AREAS } from '@/modules/erp/areas';
 import { canRead } from '@/modules/erp/services/access';
 import { canManageSettings } from '@/modules/erp/services/settings.service';
 import { ensureErpSetup } from '@/modules/erp/services/setup';
-import { prisma } from '@/core/db/prisma';
-import { PageHeader, Stat } from '@/components/ui';
+import { erpHomeKpis, monthlyTrend } from '@/modules/erp/services/analytics.service';
+import { formatMoney } from '@/modules/erp/domain/money';
+import { Card, PageHeader, Stat } from '@/components/ui';
+import { MonthBars } from './_components/charts';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'ERP' };
@@ -18,13 +20,11 @@ export default async function ErpHomePage() {
   if (!hasPermissionAnywhere(p, 'erp.access')) notFound();
   await ensureErpSetup(p.companyId);
   const areas = ERP_AREAS.filter((a) => canRead(p, a.area));
-  const stock = canRead(p, 'stock');
-  const [drafts, itemCount] = stock
-    ? await Promise.all([
-        prisma.erpStockEntry.count({ where: { companyId: p.companyId, status: 'DRAFT' } }),
-        prisma.erpItem.count({ where: { companyId: p.companyId, isActive: true } }),
-      ])
-    : [0, 0];
+  const [kpis, sales, purchases] = await Promise.all([
+    erpHomeKpis(p),
+    canRead(p, 'selling') ? monthlyTrend(p, 'sales') : null,
+    canRead(p, 'buying') ? monthlyTrend(p, 'purchases') : null,
+  ]);
 
   return (
     <div className="space-y-lg">
@@ -34,10 +34,20 @@ export default async function ErpHomePage() {
         actions={canManageSettings(p) ? <Link href="/erp/settings" className="btn btn-secondary">ERP settings</Link> : null}
       />
 
-      {stock ? (
-        <div className="grid gap-base sm:grid-cols-3">
-          <Stat label="Active items" value={itemCount} />
-          <Stat label="Draft stock entries" value={drafts} hint={drafts ? 'Waiting to be submitted' : undefined} />
+      {kpis.length ? (
+        <div className="grid gap-base sm:grid-cols-2 lg:grid-cols-4">
+          {kpis.map((k) => (
+            <Link key={k.label} href={k.href} className="block">
+              <Stat label={k.label} value={k.money ? formatMoney(k.value) : k.value.toString()} tone={k.warn ? 'warning' : 'default'} />
+            </Link>
+          ))}
+        </div>
+      ) : null}
+
+      {sales || purchases ? (
+        <div className="grid gap-lg lg:grid-cols-2">
+          {sales ? <Card title="Sales by month (net of GST)"><MonthBars points={sales} label="Sales" /></Card> : null}
+          {purchases ? <Card title="Purchases by month (net of GST)"><MonthBars points={purchases} label="Purchases" /></Card> : null}
         </div>
       ) : null}
 

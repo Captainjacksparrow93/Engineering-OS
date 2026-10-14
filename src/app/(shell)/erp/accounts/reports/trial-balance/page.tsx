@@ -6,6 +6,7 @@ import { Card, PageHeader } from '@/components/ui';
 import { Money } from '../../../_components/parts';
 import { AccountsTabs, RangeForm, rangeOf } from '../../tabs';
 import { TreeTable } from '../tree-table';
+import { CsvLink } from '../../../_components/csv-link';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Trial balance' };
@@ -17,7 +18,7 @@ export default async function TrialBalancePage({ searchParams }: { searchParams:
   const tb = await trialBalance(p, { from: r.fromDate, to: r.toDate });
   return (
     <div className="space-y-lg">
-      <PageHeader title="Trial balance" breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Reports', href: '/erp/accounts/reports' }, { label: 'Trial balance' }]} />
+      <PageHeader actions={<CsvLink report="trial-balance" params={{ from: r.from, to: r.to }} />} title="Trial balance" breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Reports', href: '/erp/accounts/reports' }, { label: 'Trial balance' }]} />
       <AccountsTabs current="/erp/accounts/reports" />
       <RangeForm from={r.from} to={r.to} />
       <Card>

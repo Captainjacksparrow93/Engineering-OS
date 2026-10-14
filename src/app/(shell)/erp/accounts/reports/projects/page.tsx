@@ -6,6 +6,7 @@ import { projectProfitability } from '@/modules/erp/services/reports.service';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { Money } from '../../../_components/parts';
 import { AccountsTabs, RangeForm, rangeOf } from '../../tabs';
+import { CsvLink } from '../../../_components/csv-link';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Project profitability' };
@@ -17,7 +18,7 @@ export default async function ProjectsReportPage({ searchParams }: { searchParam
   const rows = await projectProfitability(p, { from: r.fromDate, to: r.toDate });
   return (
     <div className="space-y-lg">
-      <PageHeader title="Project profitability" subtitle="Income and costs posted with the PM project: invoices, bills, material issued and journals." breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Reports', href: '/erp/accounts/reports' }, { label: 'Project profitability' }]} />
+      <PageHeader actions={<CsvLink report="projects" params={{ from: r.from, to: r.to }} />} title="Project profitability" subtitle="Income and costs posted with the PM project: invoices, bills, material issued and journals." breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Reports', href: '/erp/accounts/reports' }, { label: 'Project profitability' }]} />
       <AccountsTabs current="/erp/accounts/reports" />
       <RangeForm from={r.from} to={r.to} />
       <Card>

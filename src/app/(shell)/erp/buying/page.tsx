@@ -6,6 +6,8 @@ import { listMaterialRequests, MR_PURPOSE_LABEL } from '@/modules/erp/services/m
 import { listPurchaseOrders } from '@/modules/erp/services/purchase-order.service';
 import { listPurchaseInvoices } from '@/modules/erp/services/purchase-invoice.service';
 import { formatMoney, sum } from '@/modules/erp/domain/money';
+import { topParties } from '@/modules/erp/services/analytics.service';
+import { BarList } from '../_components/charts';
 import { Card, EmptyState, PageHeader, Stat } from '@/components/ui';
 import { DocStatus, Money, showDate } from '../_components/parts';
 import { BuyingTabs } from './tabs';
@@ -17,7 +19,7 @@ export default async function BuyingPage() {
   const p = await requirePrincipal();
   if (!canRead(p, 'buying')) notFound();
   const today = new Date();
-  const [requests, orders, invoices] = await Promise.all([listMaterialRequests(p, { open: true }), listPurchaseOrders(p, { status: 'OPEN' }), listPurchaseInvoices(p, { status: 'UNPAID', today })]);
+  const [requests, orders, invoices, top] = await Promise.all([listMaterialRequests(p, { open: true }), listPurchaseOrders(p, { status: 'OPEN' }), listPurchaseInvoices(p, { status: 'UNPAID', today }), topParties(p, 'SUPPLIER')]);
   const toReceive = orders.filter((o) => o.state.received < 100);
   const pendingRequests = requests.filter((r) => r.purpose === 'PURCHASE' && r.state.key !== 'COMPLETED');
   const overdue = invoices.filter((i) => i.state.key === 'OVERDUE');
@@ -51,6 +53,9 @@ export default async function BuyingPage() {
           </table>
         )}
       </Card>
+      <div className="grid gap-lg lg:grid-cols-2">
+        <Card title="Top suppliers this year"><BarList rows={top} empty="No invoices yet this year." /></Card>
+      </div>
     </div>
   );
 }

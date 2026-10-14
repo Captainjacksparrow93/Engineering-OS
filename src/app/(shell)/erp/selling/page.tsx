@@ -5,6 +5,8 @@ import { canRead } from '@/modules/erp/services/access';
 import { listSalesOrders } from '@/modules/erp/services/sales-order.service';
 import { listSalesInvoices } from '@/modules/erp/services/sales-invoice.service';
 import { formatMoney, sum } from '@/modules/erp/domain/money';
+import { topItemsSold, topParties } from '@/modules/erp/services/analytics.service';
+import { BarList } from '../_components/charts';
 import { Card, EmptyState, PageHeader, Stat } from '@/components/ui';
 import { DocStatus, Money, showDate } from '../_components/parts';
 import { SellingTabs } from './tabs';
@@ -16,7 +18,7 @@ export default async function SellingPage() {
   const p = await requirePrincipal();
   if (!canRead(p, 'selling')) notFound();
   const today = new Date();
-  const [open, invoices] = await Promise.all([listSalesOrders(p, { status: 'OPEN' }), listSalesInvoices(p, { status: 'UNPAID', today })]);
+  const [open, invoices, top, items] = await Promise.all([listSalesOrders(p, { status: 'OPEN' }), listSalesInvoices(p, { status: 'UNPAID', today }), topParties(p, 'CUSTOMER'), topItemsSold(p)]);
   const waiting = open.filter((o) => !o.projectId);
   const toDeliver = open.filter((o) => o.state.delivered < 100);
   const overdue = invoices.filter((i) => i.state.key === 'OVERDUE');
@@ -50,6 +52,10 @@ export default async function SellingPage() {
           </table>
         )}
       </Card>
+      <div className="grid gap-lg lg:grid-cols-2">
+        <Card title="Top customers this year"><BarList rows={top} empty="No invoices yet this year." /></Card>
+        <Card title="Top items sold this year"><BarList rows={items} empty="No item sales yet this year." /></Card>
+      </div>
     </div>
   );
 }

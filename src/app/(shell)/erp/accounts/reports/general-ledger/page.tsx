@@ -9,6 +9,7 @@ import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { Money, ProjectSelect, showDate } from '../../../_components/parts';
 import { PartySelect } from '../../payments/party-select';
 import { AccountsTabs, RangeForm, rangeOf } from '../../tabs';
+import { CsvLink } from '../../../_components/csv-link';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'General ledger' };
@@ -37,7 +38,7 @@ export default async function GeneralLedgerPage({ searchParams }: { searchParams
     : null;
   return (
     <div className="space-y-lg">
-      <PageHeader title="General ledger" breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Reports', href: '/erp/accounts/reports' }, { label: 'General ledger' }]} />
+      <PageHeader actions={<CsvLink report="general-ledger" params={{ from: r.from, to: r.to, account: sp.account, party: sp.party, projectId: sp.projectId, voucher: sp.voucher }} />} title="General ledger" breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Reports', href: '/erp/accounts/reports' }, { label: 'General ledger' }]} />
       <AccountsTabs current="/erp/accounts/reports" />
       <RangeForm from={r.from} to={r.to}>
         <div>

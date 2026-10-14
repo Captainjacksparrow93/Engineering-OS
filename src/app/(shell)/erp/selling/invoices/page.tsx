@@ -10,6 +10,7 @@ import { SubmitButton } from '@/components/form';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { DocStatus, Field, Money, showDate, todayIso } from '../../_components/parts';
 import { SellingTabs } from '../tabs';
+import { CsvLink } from '../../_components/csv-link';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Sales invoices' };
@@ -21,7 +22,7 @@ export default async function SalesInvoicesPage({ searchParams }: { searchParams
   const [rows, customers] = await Promise.all([listSalesInvoices(p, { status: sp.status, today: new Date() }), partyOptions(p.companyId, 'CUSTOMER')]);
   return (
     <div className="space-y-lg">
-      <PageHeader title="Sales invoices" breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Selling', href: '/erp/selling' }, { label: 'Sales invoices' }]} />
+      <PageHeader actions={<CsvLink report="sales-invoices" />} title="Sales invoices" breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Selling', href: '/erp/selling' }, { label: 'Sales invoices' }]} />
       <SellingTabs current="/erp/selling/invoices" />
       {canManage(p, 'selling') || canManage(p, 'accounts') ? (
         <Card title="Invoice for a service">

@@ -1,6 +1,6 @@
 # 022 — Native ERP: every ERPNext module, built into Engineering OS
 
-**Status:** IN PROGRESS   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
+**Status:** DONE   <!-- TODO → IN PROGRESS → DONE → REVIEWED -->
 **Author:** Claude · **Implementer:** Claude (user decision 2026-10-13, phase by phase) · **Branch:** `ERPNEXT`
 **Supersedes:** 012 part B, 016 (ERPNext release), 021. Plans 013–015 and 017 are retired with the ERPNext code they built.
 
@@ -73,11 +73,11 @@ Out of scope (now): Tally/Zoho, GST e-invoicing / e-way bills (no GSTIN), multi-
 - Tests: `npm run typecheck && npm test && npm run build` and `npm run test:int` against a fresh DB built like CI (`prisma migrate deploy`, `db:seed`). Pass/fail counts per phase go under Implementation notes.
 
 ## Acceptance criteria (whole plan)
-- [ ] Phases 1–8 each DONE with the full suite green.
-- [ ] No ERPNext code, container, env var or SSO path remains.
-- [ ] Every submitted voucher's GL balances; the trial balance totals match; stock value in the GL equals the stock ledger value.
-- [ ] Won deal → SO → project → MR → PO → receipt → work order → QI → delivery → invoice → payment works end to end in an integration test.
-- [ ] The Production, QMS and Maintenance tiles are live.
+- [x] Phases 1–8 each DONE with the full suite green.
+- [x] No ERPNext code, container, env var or SSO path remains (only "ERPNext X" benchmark comments; `AGENTS.md` ERP section rewritten for native ERP).
+- [x] Every submitted voucher's GL balances; the trial balance totals match; stock value in the GL equals the stock ledger value (asserted in `e2e-flow.int.test.ts`; GL balance asserted in every area test).
+- [x] Won deal → SO → project → MR → PO → receipt → work order → QI → delivery → invoice → payment works end to end in an integration test (`e2e-flow.int.test.ts`).
+- [x] The Production, QMS and Maintenance tiles are live.
 
 ## Implementation notes (implementer)
 
@@ -166,5 +166,20 @@ Out of scope (now): Tally/Zoho, GST e-invoicing / e-way bills (no GSTIN), multi-
 - **Tests:** `accounts.int.test.ts` (9: receive + cancel, payment validation/party rules, supplier advance + reconcile + cancel, oldest-first allocation + internal transfer, credit note/debit note settle + cap + cancel, journal rules + settle + cancel, bank reconciliation, chart add/rename/switch off, close/lock/re-open) and `reports.int.test.ts` (9: deny, trial balance balances, P&L with returns and closing, balance sheet balances, party GL, ageing with advances, GST intra/inter-state, project profitability, overview).
 - **Full suite** (fresh DB): typecheck clean · unit 227/227 · integration 185/185 · build OK. Browser (Director): bill → Make payment → submit (Creditors Dr / Bank Cr); bank charges journal → submit; every accounts page and report loads with no page errors; balance sheet ties.
 - **Not in scope / later:** TDS deductions on a payment (use a journal), opening-invoice tool (opening receivables go in as journal lines without an invoice), GSTR return formats, multi-currency.
+
+### Phase 8: dashboards, PM materials, backfill, exports (DONE 2026-10-14)
+- **Migration** `20261014044936_erp_imported_orders`: `erp_sales_orders.isImported` (boolean, default false; additive).
+- **ERP home:** key figures for each area the person can read (sales and purchases this fiscal year, orders to deliver/receive, stock value, items to reorder, work orders running, open non-conformances, machines down, maintenance overdue, receivable, payable), each linking to its list; 12-month sales and purchase bars (plain CSS, no chart library). Selling shows top customers and top items sold; Buying shows top suppliers.
+- **PM project Materials panel** (read-only, below the project's tasks): the project's sales orders and work orders, and per item requested → ordered → received → issued (issued = stock leaving a store for the project on a stock entry). Quantities show to anyone who can see the project; money only to people who can read stock/buying (material values) or selling/accounts (order value, billed, to collect). Accounts readers get a "Project ledger" link.
+- **Backfill (plan 015 rule, native):** `prisma/scripts/erp-backfill-orders.ts` — dry run by default; `--apply --actor=<email>` creates, for each work-order project without an order, a submitted sales order marked **Imported** (customer linked to the PM client, one line per panel type or per panel when dates differ, zero value, WO and client PO carried, closed if the project is finished), ties each panel task to its order line (so later order edits sync safely), and links the project. Re-running skips linked projects; a WO already on another order is skipped and reported. Run by hand after a backup, never from `entrypoint.sh`. Rehearsed on the dev DB: 1 created, re-run 0.
+- **CSV exports** (`/api/erp/export/[report]`, "Download CSV" on the screens): items, stock balance, sales and purchase invoices, payments, general ledger, trial balance, receivables, payables, project profitability, assets. Each export calls the same service as its screen (same access check); text that a spreadsheet would run as a formula is neutralised.
+- **Wording:** the sidebar's ERP entry is "Accounting" (Sales already has "Accounts" for customer accounts).
+- **Full suite** (fresh DB: empty, `migrate deploy`, `db:seed`): typecheck clean · unit 230/230 · integration 190/190 (29 files) · build OK. Browser (Director): ERP home figures and charts, the project's Materials panel after a stock issue to it and the backfilled order, trial balance CSV download, Selling/Buying top lists; no page errors.
+- **Tests:** `phase8.int.test.ts` (4: project materials with money hidden from a project member; home figures by permission + trend + top customers; CSV access rules; backfill dry run / apply / re-run / sync stays quiet), `e2e-flow.int.test.ts` (1: the whole chain with balanced books and GL stock = stock ledger = bins), `domain/csv.test.ts` (3).
+
+### Whole-plan summary
+- Commits on `ERPNEXT`: plan → phases 1–8 (one commit each). Every area is live; ERPNext is gone.
+- **Decision to confirm with the user:** the ERP setting **"Work-order projects start from a sales order"** (`projectsFromSalesOrders`) defaults **off**, so PM keeps creating projects as today until the backfill has run and the team is ready; switching it on enforces the plan 014 rule.
+- **Release (not done, user's call):** `ERPNEXT` must merge into `main` to deploy. Before that: back up production, rehearse the 10 new `erp_*` migrations (all additive) on a production copy, push, smoke-test, then run the backfill dry run and `--apply` with the user's approval.
 
 ## Review (Claude)

@@ -54,7 +54,7 @@ export default async function SalesOrderPage({ params }: { params: Promise<{ id:
         title={so.number}
         subtitle={
           <span className="inline-flex flex-wrap items-center gap-xs">
-            <DocStatus status={state.key} label={state.label} /> {customer?.name} · {showDate(so.orderDate)}
+            <DocStatus status={state.key} label={state.label} />{so.isImported ? <span className="badge badge-outline" title="Backfilled from a project that existed before ERP">Imported</span> : null} {customer?.name} · {showDate(so.orderDate)}
             {so.woNumber ? ` · WO ${so.woNumber}` : ''}{so.poNo ? ` · PO ${so.poNo}` : ''}
             {so.status === 'SUBMITTED' ? ` · ${state.delivered}% delivered · ${state.billed}% billed` : ''}
           </span>

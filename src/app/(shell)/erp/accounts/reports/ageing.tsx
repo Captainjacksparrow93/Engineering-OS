@@ -6,6 +6,7 @@ import { ageing, AGEING_BUCKETS } from '@/modules/erp/services/reports.service';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { Money } from '../../_components/parts';
 import { AccountsTabs } from '../tabs';
+import { CsvLink } from '../../_components/csv-link';
 
 /** Receivable or payable ageing by party, as of today. */
 export async function AgeingReport({ kind }: { kind: 'RECEIVABLE' | 'PAYABLE' }) {
@@ -17,7 +18,7 @@ export async function AgeingReport({ kind }: { kind: 'RECEIVABLE' | 'PAYABLE' })
   const partyType = kind === 'RECEIVABLE' ? 'CUSTOMER' : 'SUPPLIER';
   return (
     <div className="space-y-lg">
-      <PageHeader title={title} subtitle="Open invoices by days past their due date, as of today. Credit is unused advances and credit/debit notes." breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Reports', href: '/erp/accounts/reports' }, { label: title }]} />
+      <PageHeader actions={<CsvLink report={`${kind === 'RECEIVABLE' ? 'receivables' : 'payables'}`} />} title={title} subtitle="Open invoices by days past their due date, as of today. Credit is unused advances and credit/debit notes." breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Reports', href: '/erp/accounts/reports' }, { label: title }]} />
       <AccountsTabs current="/erp/accounts/reports" />
       <Card>
         {a.rows.length === 0 ? <EmptyState title="Nothing outstanding" /> : (

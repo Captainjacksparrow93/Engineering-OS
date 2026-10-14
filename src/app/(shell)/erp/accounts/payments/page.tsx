@@ -11,6 +11,7 @@ import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { DocStatus, Money, showDate } from '../../_components/parts';
 import { AccountsTabs } from '../tabs';
 import { PaymentFields } from './payment-fields';
+import { CsvLink } from '../../_components/csv-link';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Payments' };
@@ -24,7 +25,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   const [customers, suppliers, banks] = manage ? await Promise.all([partyOptions(p.companyId, 'CUSTOMER'), partyOptions(p.companyId, 'SUPPLIER'), paymentAccounts(p.companyId)]) : [[], [], []];
   return (
     <div className="space-y-lg">
-      <PageHeader title="Payments" subtitle="Money in from customers, out to suppliers, and between our own accounts." breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Accounts', href: '/erp/accounts' }, { label: 'Payments' }]} />
+      <PageHeader actions={<CsvLink report="payments" params={{ status: sp.status }} />} title="Payments" subtitle="Money in from customers, out to suppliers, and between our own accounts." breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Accounts', href: '/erp/accounts' }, { label: 'Payments' }]} />
       <AccountsTabs current="/erp/accounts/payments" />
       <form method="get" className="flex flex-wrap gap-sm">
         <select name="type" defaultValue={sp.type ?? ''} className="select" aria-label="Type"><option value="">All types</option>{Object.entries(PAYMENT_TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>

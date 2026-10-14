@@ -904,7 +904,7 @@ model CommissioningLog {
 // SALES :: deals, quotes, catalogue and pricing (plan 018)
 //
 // Sales owns its data. It never holds a foreign key into pm_* tables; a won deal
-// records the ERPNext sales order name and WO number as plain text.
+// records its ERP sales order number and WO number as plain text.
 // =====================================================================================
 
 /// One row per company. Missing row = defaults in `sales/domain/settings.ts`.
@@ -2224,6 +2224,8 @@ model ErpSalesOrder {
   projectId     String?
   /// Sales deal that was won into this order.
   dealId        String?
+  /// Backfilled from a PM project that existed before ERP (plan 022 phase 8).
+  isImported    Boolean      @default(false)
   quotationRef  String?
   terms         String?
   remarks       String?

@@ -10,6 +10,7 @@ import { SubmitButton } from '@/components/form';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { DocStatus, Field, Money, showDate, todayIso } from '../../_components/parts';
 import { BuyingTabs } from '../tabs';
+import { CsvLink } from '../../_components/csv-link';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Purchase invoices' };
@@ -21,7 +22,7 @@ export default async function PurchaseInvoicesPage({ searchParams }: { searchPar
   const [rows, suppliers] = await Promise.all([listPurchaseInvoices(p, { status: sp.status, today: new Date() }), partyOptions(p.companyId, 'SUPPLIER')]);
   return (
     <div className="space-y-lg">
-      <PageHeader title="Purchase invoices" subtitle="Suppliers' bills. Bill stock from its receipt; bill services and charges directly." breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Buying', href: '/erp/buying' }, { label: 'Purchase invoices' }]} />
+      <PageHeader actions={<CsvLink report="purchase-invoices" />} title="Purchase invoices" subtitle="Suppliers' bills. Bill stock from its receipt; bill services and charges directly." breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Buying', href: '/erp/buying' }, { label: 'Purchase invoices' }]} />
       <BuyingTabs current="/erp/buying/invoices" />
       {canManage(p, 'buying') || canManage(p, 'accounts') ? (
         <Card title="Bill for a service or charge">

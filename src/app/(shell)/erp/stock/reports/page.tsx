@@ -8,6 +8,7 @@ import { formatMoney } from '@/modules/erp/domain/money';
 import { EmptyState, PageHeader } from '@/components/ui';
 import { AreaTabs, ItemDatalist, Money, Qty, showDate, todayIso } from '../../_components/parts';
 import { StockTabs } from '../tabs';
+import { CsvLink } from '../../_components/csv-link';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Stock reports' };
@@ -23,7 +24,7 @@ export default async function StockReportsPage({ searchParams }: { searchParams:
 
   return (
     <div className="space-y-lg">
-      <PageHeader title="Stock reports" breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Stock', href: '/erp/stock' }, { label: 'Reports' }]} />
+      <PageHeader actions={<CsvLink report="stock-balance" />} title="Stock reports" breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Stock', href: '/erp/stock' }, { label: 'Reports' }]} />
       <StockTabs current="/erp/stock/reports" />
       <AreaTabs
         current={`/erp/stock/reports?view=${view}`}

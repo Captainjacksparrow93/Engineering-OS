@@ -12,6 +12,7 @@ import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { DocStatus, Money, showDate } from '../../_components/parts';
 import { AssetTabs } from '../tabs';
 import { AssetFields } from './asset-form';
+import { CsvLink } from '../../_components/csv-link';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Assets' };
@@ -25,7 +26,7 @@ export default async function AssetRegisterPage({ searchParams }: { searchParams
   const [staff, workstations, suppliers] = manage ? await Promise.all([staffOptions(p.companyId), workstationOptions(p.companyId), partyOptions(p.companyId, 'SUPPLIER')]) : [[], [], []];
   return (
     <div className="space-y-lg">
-      <PageHeader title="Assets" subtitle="Plant, tools, test equipment, vehicles and computers, with their depreciation." breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Assets', href: '/erp/assets' }, { label: 'Register' }]} />
+      <PageHeader actions={<CsvLink report="assets" params={{ status: sp.status }} />} title="Assets" subtitle="Plant, tools, test equipment, vehicles and computers, with their depreciation." breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Assets', href: '/erp/assets' }, { label: 'Register' }]} />
       <AssetTabs current="/erp/assets/register" />
       <form method="get" className="flex flex-wrap gap-sm">
         <input name="q" defaultValue={sp.q ?? ''} placeholder="Name, number, serial or location" className="input w-64" aria-label="Search" />

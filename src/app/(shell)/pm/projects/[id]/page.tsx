@@ -19,6 +19,7 @@ import { HoldProjectButton } from './hold-project-button';
 import { ProjectDangerActions } from './project-danger-actions';
 import { EditProjectDetailsButton } from './edit-project-details-button';
 import { OrderAlertBanner } from './order-alert-banner';
+import { MaterialsPanel } from './materials-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -419,6 +420,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           />
         </div>
       </div>
+
+      <MaterialsPanel principal={principal} projectId={project.id} />
 
       {permissions.canCreateTask ? (
         <AddTaskForm

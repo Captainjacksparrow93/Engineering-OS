@@ -181,7 +181,7 @@ const ERP_NAV: NavItem[] = [
   { label: 'Manufacturing', href: '/erp/manufacturing', show: erpArea('manufacturing'), icon: Icons.Commissioning },
   { label: 'Quality', href: '/erp/quality', show: erpArea('quality'), icon: Icons.Quality },
   { label: 'Assets', href: '/erp/assets', show: erpArea('assets'), icon: Icons.Maintenance },
-  { label: 'Accounts', href: '/erp/accounts', show: erpArea('accounts'), icon: Icons.Accounts },
+  { label: 'Accounting', href: '/erp/accounts', show: erpArea('accounts'), icon: Icons.Accounts },
 ];
 
 const SALES_NAV: NavItem[] = [

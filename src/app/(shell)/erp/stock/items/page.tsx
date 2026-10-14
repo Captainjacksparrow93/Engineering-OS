@@ -11,6 +11,7 @@ import { Money, Qty } from '../../_components/parts';
 import { StockTabs } from '../tabs';
 import { templateOptions } from '@/modules/erp/services/quality.service';
 import { ItemFields } from './item-form';
+import { CsvLink } from '../../_components/csv-link';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Items' };
@@ -29,7 +30,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-lg">
-      <PageHeader title="Items" subtitle="The company's item master. Sales quotes and every ERP document use these codes." breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Stock', href: '/erp/stock' }, { label: 'Items' }]} />
+      <PageHeader actions={<CsvLink report="items" />} title="Items" subtitle="The company's item master. Sales quotes and every ERP document use these codes." breadcrumb={[{ label: 'ERP', href: '/erp' }, { label: 'Stock', href: '/erp/stock' }, { label: 'Items' }]} />
       <StockTabs current="/erp/stock/items" />
 
       <form method="get" className="flex flex-wrap items-end gap-sm">
