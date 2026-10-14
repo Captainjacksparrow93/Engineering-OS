@@ -6,16 +6,18 @@ import { startOfDay } from '@/core/utils/dates';
 import { createPanelTasks } from '@/modules/project-management/services/automation-project.service';
 import { renameClientCascade } from '@/modules/project-management/services/client.service';
 import { recomputeTaskDerivedState } from '@/modules/project-management/services/task.service';
-import { erpGet, erpList, isErpEnabled } from './client';
+import { D } from './domain/money';
 
 /**
  * Plan 015: when a sales order changes after its project exists, PM follows safely.
  * PO, dates, WO and client name follow ERP; added panels are appended to the PM;
  * removals, cancellations and clashes only raise an "Order changed" alert. Nothing is deleted.
- * Pull only (no webhook): the project page syncs its order, the projects list syncs all.
+ * Pull only: the project page syncs its order, the projects list syncs all. Plan 022: the
+ * order is our own ERP sales order; any change to it bumps its updatedAt, which is compared
+ * with the project's stored erpOrderModified.
  */
 
-interface ErpOrderItem {
+interface OrderLine {
   name: string;
   idx: number;
   item_code: string;
@@ -23,28 +25,43 @@ interface ErpOrderItem {
   delivery_date?: string;
 }
 
-interface ErpOrder {
+interface Order {
   name: string;
   docstatus: number;
   status?: string;
   modified: string;
-  customer: string;
+  customerId: string;
   po_no?: string | null;
   custom_wo_number?: string | null;
   delivery_date?: string | null;
-  items?: ErpOrderItem[];
+  items: OrderLine[];
 }
 
-interface ErpCustomer {
-  name: string;
-  customer_name?: string;
-  custom_acs_reference?: string | null;
+/** Our sales order in the shape the plan 015 rules were written against. */
+async function loadOrder(companyId: string, number: string): Promise<Order | null> {
+  const so = await prisma.erpSalesOrder.findUnique({ where: { companyId_number: { companyId, number } }, include: { lines: { orderBy: { sortOrder: 'asc' } } } });
+  if (!so) return null;
+  const templates = new Set((await prisma.checklistTemplate.findMany({ where: { isActive: true }, select: { code: true } })).map((t) => t.code));
+  const items = await prisma.erpItem.findMany({ where: { id: { in: so.lines.map((l) => l.itemId) } }, select: { id: true, code: true } });
+  const code = new Map(items.map((i) => [i.id, i.code]));
+  return {
+    name: so.number,
+    docstatus: so.status === 'DRAFT' ? 0 : so.status === 'SUBMITTED' ? 1 : 2,
+    status: so.isClosed ? 'Closed' : undefined,
+    modified: so.updatedAt.toISOString(),
+    customerId: so.customerId,
+    po_no: so.poNo,
+    custom_wo_number: so.woNumber,
+    delivery_date: day(so.deliveryDate),
+    // Only panel lines matter to PM; freight, services and spares stay commercial.
+    items: so.lines
+      .filter((l) => templates.has(code.get(l.itemId) ?? ''))
+      .map((l, i) => ({ name: l.id, idx: i, item_code: code.get(l.itemId)!, qty: D(l.qty).toNumber(), delivery_date: day(l.deliveryDate) ?? undefined })),
+  };
 }
 
-const LIST_THROTTLE_MS = 5 * 60_000;
-const DOWN_BACKOFF_MS = 60_000;
+const LIST_THROTTLE_MS = 60_000;
 const lastListSync = new Map<string, number>();
-let erpDownUntil = 0;
 
 const day = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
 const asDate = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -52,69 +69,54 @@ const kept = (titles: string[]) => `${titles.join(', ')} ${titles.length === 1 ?
 const PANEL_TITLE = /^([A-Za-z0-9]+)\s+Panel\s+(\d+)$/i;
 const DONE = new Set(['COMPLETED', 'CLOSED', 'CANCELLED']);
 
-/** Syncs linked orders changed in ERPNext since we last read them. Throws when ERPNext fails. */
-export async function syncOrderChanges(
-  companyId: string,
-  { projectId }: { projectId?: string } = {},
-): Promise<{ synced: number }> {
-  if (!isErpEnabled()) return { synced: 0 };
+/** Syncs linked orders changed since the project last read them. */
+export async function syncOrderChanges(companyId: string, { projectId }: { projectId?: string } = {}): Promise<{ synced: number }> {
   const linked = await prisma.project.findMany({
     where: { companyId, erpSalesOrder: { not: null }, ...(projectId ? { id: projectId } : {}) },
     select: { id: true, erpSalesOrder: true, erpOrderModified: true },
   });
   if (linked.length === 0) return { synced: 0 };
-
-  // The oldest stored timestamp, so no project misses a change; each is then compared to its own.
-  const since = linked.map((p) => p.erpOrderModified || '2000-01-01 00:00:00').sort()[0]!;
-  const changed = await erpList<{ name: string; modified: string }>('Sales Order', {
-    filters: [
-      ['Sales Order', 'modified', '>', since],
-      projectId
-        ? ['Sales Order', 'name', '=', linked[0]!.erpSalesOrder]
-        : ['Sales Order', 'custom_project_link', 'is', 'set'],
-    ],
-    fields: ['name', 'modified'],
-    limit: 0,
-  });
-
-  const byOrder = new Map(linked.map((p) => [p.erpSalesOrder!, p]));
+  const orders = await prisma.erpSalesOrder.findMany({ where: { companyId, number: { in: linked.map((p) => p.erpSalesOrder!) } }, select: { number: true, updatedAt: true } });
+  const modified = new Map(orders.map((o) => [o.number, o.updatedAt.toISOString()]));
   let synced = 0;
-  for (const row of changed) {
-    const project = byOrder.get(row.name);
-    if (!project || !(row.modified > (project.erpOrderModified ?? ''))) continue;
-    await applyOrder(project.id, row.name);
+  for (const project of linked) {
+    const m = modified.get(project.erpSalesOrder!);
+    if (!m || !(m > (project.erpOrderModified ?? ''))) continue;
+    await applyOrder(companyId, project.id, project.erpSalesOrder!);
     synced++;
   }
   return { synced };
 }
 
-/** Project page: sync this project's order. Never throws; backs off for a minute when ERP is down. */
+/** Project page: sync this project's order. Never throws. */
 export async function syncProjectOrderSafely(companyId: string, projectId: string): Promise<void> {
-  if (!isErpEnabled() || Date.now() < erpDownUntil) return;
   try {
     await syncOrderChanges(companyId, { projectId });
   } catch (err) {
-    erpDownUntil = Date.now() + DOWN_BACKOFF_MS;
     console.error('[erp] order sync failed', { projectId, error: err instanceof Error ? err.message : String(err) });
   }
 }
 
-/** Projects list: sync every linked order, at most once per 5 minutes per server process. Never throws. */
+/** Projects list: sync every linked order, at most once a minute per server process. Never throws. */
 export async function syncAllOrdersSafely(companyId: string): Promise<void> {
-  if (!isErpEnabled() || Date.now() < erpDownUntil) return;
   const last = lastListSync.get(companyId) ?? 0;
   if (Date.now() - last < LIST_THROTTLE_MS) return;
   lastListSync.set(companyId, Date.now());
   try {
     await syncOrderChanges(companyId);
   } catch (err) {
-    erpDownUntil = Date.now() + DOWN_BACKOFF_MS;
     console.error('[erp] order sync failed', { error: err instanceof Error ? err.message : String(err) });
   }
 }
 
-async function applyOrder(projectId: string, orderName: string): Promise<void> {
-  const order = await erpGet<ErpOrder>('Sales Order', orderName);
+/** Tests only: forget the list throttle. */
+export function resetSyncThrottle() {
+  lastListSync.clear();
+}
+
+async function applyOrder(companyId: string, projectId: string, orderName: string): Promise<void> {
+  const order = await loadOrder(companyId, orderName);
+  if (!order) return;
   const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId }, include: { client: true } });
   const allTasks = await prisma.task.findMany({ where: { projectId }, select: { id: true, code: true, title: true, type: true, plannedEnd: true, erpOrderItem: true } });
   const phases = allTasks.filter((t) => t.type === 'PHASE');
@@ -154,21 +156,18 @@ async function applyOrder(projectId: string, orderName: string): Promise<void> {
       else set('workOrderNo', project.workOrderNo, wo);
     }
 
-    // Customer: same customer (same ACS reference) renamed → rename our client; another customer → alert.
+    // Customer: the same customer renamed → rename our client; another customer → alert.
     const client = project.client;
-    if (client && order.customer) {
-      const customer = await erpGet<ErpCustomer>('Customer', order.customer);
-      const sameCustomer =
-        order.customer === client.erpCustomer || customer.custom_acs_reference?.trim() === client.refNumber;
-      if (!sameCustomer) {
-        alerts.push(`Order moved to customer "${order.customer}" in ERP. Client not changed here.`);
+    if (client) {
+      const customer = await prisma.erpParty.findUnique({ where: { id: order.customerId } });
+      const sameCustomer = !!customer && (customer.clientId === client.id || customer.code === client.erpCustomer);
+      if (!customer || !sameCustomer) {
+        alerts.push(`Order moved to customer "${customer?.name ?? 'unknown'}" in ERP. Client not changed here.`);
       } else {
-        if (order.customer !== client.erpCustomer) relinkCustomer = order.customer;
-        const newName = (customer.customer_name ?? '').trim();
+        if (customer.code !== client.erpCustomer) relinkCustomer = customer.code;
+        const newName = customer.name.trim();
         if (newName && newName !== client.name) {
-          const clash = await prisma.client.findFirst({
-            where: { companyId: project.companyId, name: newName, id: { not: client.id } },
-          });
+          const clash = await prisma.client.findFirst({ where: { companyId: project.companyId, name: newName, id: { not: client.id } } });
           if (clash) alerts.push(`Customer renamed to "${newName}" in ERP, but another client already has that name. Client not renamed here.`);
           else rename = { clientId: client.id, from: client.name, to: newName };
         }

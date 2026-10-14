@@ -6,8 +6,6 @@ import type { Principal } from '@/core/rbac/types';
 import { audit } from '@/core/audit/audit';
 import { hashPassword, passwordIssues } from '@/core/auth/password';
 import type { ScopeType } from '@prisma/client';
-import { buildPass } from '@/modules/erp/sso';
-import { config } from '@/core/config';
 
 /**
  * Administration: people, role grants and the audit trail.
@@ -154,63 +152,6 @@ export async function setUserStatus(principal: Principal, userId: string, status
     );
     return updated;
   });
-
-  // Best-effort ERP user disable on SUSPENDED or EXITED
-  if (status !== 'ACTIVE') {
-    let erpnextUrl: string | undefined;
-    let ssoSecret: string | undefined;
-    try {
-      const cfg = config();
-      erpnextUrl = cfg.ERPNEXT_URL;
-      ssoSecret = cfg.ERP_SSO_SECRET;
-    } catch {
-      erpnextUrl = process.env.ERPNEXT_URL;
-      ssoSecret = process.env.ERP_SSO_SECRET;
-    }
-    erpnextUrl = erpnextUrl || process.env.ERPNEXT_URL;
-    ssoSecret = ssoSecret || process.env.ERP_SSO_SECRET;
-
-    if (erpnextUrl && ssoSecret) {
-      try {
-        const pass = buildPass({ email: user.email, name: user.fullName }, 'disable', ssoSecret);
-        const res = await fetch(`${erpnextUrl.replace(/\/+$/, '')}/api/method/acs_erp.sso.disable_user`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `pass=${encodeURIComponent(pass)}`,
-          signal: AbortSignal.timeout(5000),
-        });
-        if (!res.ok) {
-          const text = await res.text().catch(() => '');
-          await audit({
-            actorId: principal.userId,
-            module: 'admin',
-            action: 'erp.user_disable_failed',
-            entityType: 'User',
-            entityId: userId,
-            diff: { status: res.status, statusText: res.statusText, body: text.slice(0, 500) },
-          });
-        } else {
-          await audit({
-            actorId: principal.userId,
-            module: 'admin',
-            action: 'erp.user_disabled',
-            entityType: 'User',
-            entityId: userId,
-            diff: { email: user.email, status: res.status },
-          });
-        }
-      } catch (err) {
-        await audit({
-          actorId: principal.userId,
-          module: 'admin',
-          action: 'erp.user_disable_failed',
-          entityType: 'User',
-          entityId: userId,
-          diff: { error: err instanceof Error ? err.message : String(err) },
-        });
-      }
-    }
-  }
 
   return user;
 }

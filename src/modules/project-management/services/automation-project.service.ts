@@ -21,8 +21,8 @@ import {
   type WorkloadPerson,
 } from '../domain/availability';
 import { generateWithGemini } from '@/core/ai/vertex';
-import { isErpEnabled } from '@/modules/erp/client';
 import {
+  projectsNeedSalesOrder,
   getOrderForProject,
   resolveClientForCustomer,
   writeProjectToOrder,
@@ -51,7 +51,7 @@ export interface CreateAutomationProjectInput {
   name?: string;
   workOrderNo?: string | null;
   code?: string;
-  /** ERPNext sales order name. When set, client, WO, PO, panels and dates come from the order, not from the input. */
+  /** ERP sales order number. When set, client, WO, PO, panels and dates come from the order, not from the input. */
   salesOrder?: string;
   clientId?: string;
   clientName?: string;
@@ -321,11 +321,11 @@ export async function createAutomationProject(principal: Principal, input: Creat
   }
   const isServiceCall = !salesOrderName && (input.kind === 'SERVICE_CALL' || !input.workOrderNo);
   const kind = isServiceCall ? 'SERVICE_CALL' : 'WORK_ORDER';
-  if (!salesOrderName && input.kind !== 'SERVICE_CALL' && (input.kind === 'WORK_ORDER' || input.workOrderNo) && isErpEnabled()) {
+  if (!salesOrderName && input.kind !== 'SERVICE_CALL' && (input.kind === 'WORK_ORDER' || input.workOrderNo) && (await projectsNeedSalesOrder(principal.companyId))) {
     throw new DomainError('Pick a sales order first.');
   }
 
-  // The server trusts ERPNext, not the browser: an order's client, WO, PO, panels and dates replace the input's.
+  // The server trusts the ERP order, not the browser: an order's client, WO, PO, panels and dates replace the input's.
   const order: ProjectOrderInput | null = salesOrderName ? await getOrderForProject(principal, salesOrderName) : null;
   const fixDates = order ? ' Change the dates on the sales order in ERP.' : '';
   const scopes = order ? order.scopes : input.scopes ?? [];
@@ -371,7 +371,7 @@ export async function createAutomationProject(principal: Principal, input: Creat
     );
   }
 
-  // Determine and validate client (an order's client is resolved from ERPNext once every check has passed)
+  // Determine and validate client (an order's client is resolved from the ERP customer once every check has passed)
   let clientId = '';
   let clientName = '';
   let clientRef = '';

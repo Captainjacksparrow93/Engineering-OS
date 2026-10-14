@@ -139,7 +139,7 @@ export const createAutomationProjectSchema = z
       .transform((v) => v.trim().toUpperCase().replace(/[\s_]+/g, '-'))
       .pipe(z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,19}$/, 'Project code must be 3-20 characters: letters, digits or dashes (e.g. ACS-0042-0001)'))
       .optional(),
-    // ERPNext sales order: the server reads client, WO, PO, panels and dates from it.
+    // ERP sales order: the server reads client, WO, PO, panels and dates from it.
     salesOrder: z.string().trim().min(1).max(140).optional(),
     clientId: z.string().min(1, 'Client is required').optional(),
     clientName: z.string().trim().min(2, 'Client name is required').max(160).optional(),

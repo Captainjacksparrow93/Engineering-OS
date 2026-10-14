@@ -73,6 +73,7 @@ export function AutomationProjectWizard({
   existingProjectCodes = [],
   erpEnabled = false,
   erpOrderUrlBase = null,
+  orderRequired = true,
 }: {
   managers: Manager[];
   teamsByPM: Record<string, string[]>;
@@ -83,8 +84,10 @@ export function AutomationProjectWizard({
   existingProjectCodes?: ExistingProjectCodeOption[];
   /** ERP on: a work order starts from a sales order (step 0) and its order fields are locked. */
   erpEnabled?: boolean;
-  /** `<ERPNEXT_PUBLIC_URL>/app/sales-order/`, for the "From sales order" link. */
+  /** Where the "From sales order" link opens the order (by number). */
   erpOrderUrlBase?: string | null;
+  /** Off (ERP setting): a work order may also start without a sales order. */
+  orderRequired?: boolean;
 }) {
   const [currentStep, setCurrentStep] = useState<0 | 1 | 2 | 3>(erpEnabled ? 0 : 1);
   const [salesOrder, setSalesOrder] = useState<ProjectOrderInput | null>(null);
@@ -818,7 +821,17 @@ export function AutomationProjectWizard({
         </div>
       ) : null}
 
-      {currentStep === 0 ? <SalesOrderStep onPick={applyOrder} onServiceCall={startServiceCall} /> : null}
+      {currentStep === 0 ? (
+        <SalesOrderStep
+          onPick={applyOrder}
+          onServiceCall={startServiceCall}
+          onSkip={orderRequired ? undefined : () => {
+            setSalesOrder(null);
+            setIsServiceCall(false);
+            setCurrentStep(1);
+          }}
+        />
+      ) : null}
 
       {currentStep > 0 && salesOrder ? (
         <div className="rounded-md border border-hairline bg-surface-strong/20 p-3 flex flex-wrap items-center justify-between gap-2 text-caption text-muted">
@@ -846,7 +859,7 @@ export function AutomationProjectWizard({
 
       {currentStep > 0 && erpEnabled && !salesOrder ? (
         <div className="rounded-md border border-hairline bg-surface-strong/20 p-3 flex flex-wrap items-center justify-between gap-2 text-caption text-muted">
-          <span>Service call: no sales order needed.</span>
+          <span>{isServiceCall ? 'Service call: no sales order needed.' : 'No sales order: client, WO and panels are entered here.'}</span>
           <button
             type="button"
             onClick={() => {

@@ -51,7 +51,7 @@ Real employees of ACS Engitech use it every day at the VPS (`72.62.248.38`, `/ro
 - `ux-writing` for UI text and `impeccable` for UI/visual changes (see Coding Standards).
 
 ## Two-Agent Workflow (you = implementer)
-- Claude (Claude Desktop) writes plans in `plans/NNN-*.md`. You (Antigravity or another implementer AI) implement them. HRMS is plan 020 (Claude implements it; don't touch it). Gate & Visitors (people only) is plan 019. **ERP is active** (plans 012 onward), under the rules in "ERP work" below.
+- Claude (Claude Desktop) writes plans in `plans/NNN-*.md`. You (Antigravity or another implementer AI) implement them. HRMS is plan 020 (Claude implements it; don't touch it). Gate & Visitors (people only) is plan 019. **ERP is native** (plan 022, Claude implements), under the rules in "ERP work" below.
 - Never touch `plans/done/` (verified plans). Do not write or restructure plans. You may only tick checkboxes, change **Status**, and fill "Implementation notes".
 - Pick plans in order from `plans/INDEX.md`. Update the Status there as well as in the plan file.
 - Set Status to IN PROGRESS when starting, DONE when finished. Follow the plan; if it's wrong, stop and note why in "Implementation notes" instead of improvising.
@@ -67,19 +67,17 @@ Real employees of ACS Engitech use it every day at the VPS (`72.62.248.38`, `/ro
   - Setup: `npm install`, then `docker compose -f docker-compose.local.yml up -d` for Postgres, then `npx prisma migrate dev`.
   - Start: `npm run dev`
   - Tests: `npm run typecheck && npm test && npm run build`, plus `npm run test:int`
-- Other Docker use ONLY when the user explicitly says so, or when an ERP plan step tells you to run the local ERPNext stack.
+- Other Docker use ONLY when the user explicitly says so.
 
-## ERP work (branch `erp`)
-ERPNext (v16.37.0) runs as a **separate** set of containers next to Engineering OS, never inside `engos_app`. People use ERPNext's own screens (restyled by our custom Frappe app `acs_erp`) and reach them from our app with one-click sign-in. Our app talks to ERPNext over its REST API. The full decisions are in `CLAUDE.md` ("ERP").
-- **Branch:** every ERP commit goes on `erp` (`git checkout erp` before you start). Never merge `erp` into `main`, never merge `main` into `erp`, and never push; the user and Claude do that. A merge to `main` deploys to production.
-- **Local ERPNext only:** run ERPNext on this PC with the official `frappe_docker` (pinned tag, `ERPNEXT_VERSION=v16.37.0`) in a folder **outside the repo**: `C:\Users\Dhruv-Home\erpnext-local`. Bind its port to `127.0.0.1` only. Don't use `pwd.yml` (evaluation only) unless the plan says so.
-- **Never touch the VPS** (no SSH, nothing on `72.62.248.38`). VPS steps in ERP plans belong to Claude.
-- **Secrets:** generate ERPNext passwords and API keys yourself. Keep them only in `C:\Users\Dhruv-Home\erpnext-local\.env`, never in the repo, plan notes, commits or chat. In notes, write the `.env` **key names**, never values.
-- **Follow the official docs** for `frappe_docker` and the Frappe REST API (current versions). If a plan step doesn't match what ERPNext actually does, stop and write what you found in Implementation notes instead of improvising.
-- **Test the code that's actually running:** every rebuild of the `acs-erpnext` image gets a **new tag** (`…-acs2`, `-acs3`, …). Recreate the ERPNext containers on it and run `bench --site frontend migrate` before you verify anything, and write the running tag in the notes.
-- **Frappe permissions gotcha:** adding **any** Custom DocPerm to a DocType makes Frappe ignore that DocType's standard permissions for every role. Don't add Custom DocPerms in fixtures; use standard roles.
-- **Verify in a real browser,** signed in through our SSO as each affected role, not only with scripts.
-- **Don't stop the live-app pieces** you share the PC with: leave `engos_local_db` / `engos_local_app` running, and never run `docker compose down -v`, `docker system prune` or `docker volume rm`.
+## ERP work (native, branch `ERPNEXT`, plan 022)
+ERP is built **inside Engineering OS** (user decision 2026-10-13): our own screens under `/erp`, our own `erp_*` tables, one login and one permission model. ERPNext is only the functional benchmark; there is no ERPNext container, REST client or SSO. The decisions are in `CLAUDE.md` ("Native ERP").
+- **Branch:** ERP commits go on `ERPNEXT`. Never merge it into `main` and never push; the user does that. A merge to `main` deploys to production.
+- **The posting engine is the only writer** of the stock ledger, bins and general ledger (`src/modules/erp/services/posting.ts`). Documents go Draft → Submitted → Cancelled; cancelling reverses postings, never deletes them. Every voucher's GL must balance.
+- **Money and quantities use `Prisma.Decimal`** through `src/modules/erp/domain/money.ts`, never JS numbers.
+- **Permissions:** `erp.<area>.read` / `erp.<area>.manage` per area (stock, buying, selling, manufacturing, quality, assets, accounts) plus `erp.settings.manage`; new keys go in a hand-written SQL migration like `20261013183600_erp_permissions`.
+- **Tests:** each area has an `*.int.test.ts` built on `src/modules/erp/test-fixture.ts` (a throwaway company), and `e2e-flow.int.test.ts` runs deal → order → project → buy → make → deliver → invoice → pay with the books checked.
+- **Backfill:** `prisma/scripts/erp-backfill-orders.ts` (dry run by default) is run by hand after a backup, never from `entrypoint.sh`.
+- **Never touch the VPS** (no SSH, nothing on `72.62.248.38`).
 
 <!-- BEGIN:nextjs-agent-rules -->
 

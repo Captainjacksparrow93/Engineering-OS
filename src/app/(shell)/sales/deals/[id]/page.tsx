@@ -82,7 +82,7 @@ export default async function DealPage({ params }: { params: Promise<{ id: strin
           <p className="text-body-sm text-ink">
             {deal.stage === 'WON' ? 'Won' : 'Lost'} on {shortDate(deal.closedAt)}.
             {deal.stage === 'LOST' && deal.lostReason ? ` Reason: ${deal.lostReason}` : ''}
-            {deal.erpSalesOrder ? <> ERPNext sales order <span className="code-chip">{deal.erpSalesOrder}</span></> : null}
+            {deal.erpSalesOrder ? <> Sales order <Link href={`/erp/selling/orders/number/${encodeURIComponent(deal.erpSalesOrder)}`} className="code-chip hover:underline">{deal.erpSalesOrder}</Link></> : null}
             {deal.woNumber ? <> · WO <span className="code-chip">{deal.woNumber}</span></> : null}
           </p>
         </Card>
@@ -256,11 +256,8 @@ export default async function DealPage({ params }: { params: Promise<{ id: strin
               <ActionForm action={closeDealAction} className="space-y-sm">
                 <input type="hidden" name="dealId" value={deal.id} />
                 <input type="hidden" name="outcome" value="WON" />
-                <p className="text-caption text-muted">Won: the approved quote is accepted and its prices teach the pricing advice.</p>
-                <div className="grid grid-cols-2 gap-sm">
-                  <input name="erpSalesOrder" placeholder="ERPNext sales order" className="input w-full" aria-label="ERPNext sales order" />
-                  <input name="woNumber" placeholder="WO number" className="input w-full" aria-label="WO number" />
-                </div>
+                <p className="text-caption text-muted">Won: the approved quote is accepted, its prices teach the pricing advice, and a draft sales order is made from it in ERP for the Sales Head or a Director to check and submit.</p>
+                <input name="woNumber" placeholder="WO number (digits, optional)" className="input w-full" aria-label="WO number" />
                 <SubmitButton size="sm" variant="ink" confirm="Mark this deal won?">Mark won</SubmitButton>
               </ActionForm>
               <ActionForm action={closeDealAction} className="mt-base space-y-sm border-t border-hairline pt-base">

@@ -84,7 +84,7 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
                 <input name="makerPartNo" defaultValue={item.makerPartNo ?? ''} placeholder="Maker part no." className="input w-full" aria-label="Maker part number" />
                 <input name="category" defaultValue={item.category ?? ''} placeholder="Category" className="input w-full" aria-label="Category" />
                 <input name="uom" defaultValue={item.uom} className="input w-full" aria-label="Unit" />
-                <input name="erpItemCode" defaultValue={item.erpItemCode ?? ''} placeholder="ERPNext item code" className="input w-full" aria-label="ERPNext item code" />
+                <input name="erpItemCode" defaultValue={item.erpItemCode ?? ''} placeholder="ERP item code" className="input w-full" aria-label="ERP item code" />
                 <SubmitButton size="sm">Save</SubmitButton>
               </ActionForm>
             </Card>

@@ -82,6 +82,22 @@ const Icons = {
       <polyline points="12 6 12 12 16 14" />
     </svg>
   ),
+  Quality: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  ),
+  Maintenance: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </svg>
+  ),
+  Accounts: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h12M6 8h12M6 13l8.5 8M6 13h3c6.67 0 6.67-10 0-10" />
+    </svg>
+  ),
   Modules: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <rect width="7" height="7" x="3" y="3" rx="1" />
@@ -151,9 +167,21 @@ const WORKSPACE_NAV: NavItem[] = [
 const MANAGEMENT_NAV: NavItem[] = [
   { label: 'Projects', href: '/pm/projects', requires: 'pm.project.read', icon: Icons.Projects },
   { label: 'Clients', href: '/pm/clients', requires: 'pm.project.read', icon: Icons.Projects },
-  { label: 'ERP', href: '/erp', requires: 'erp.access', icon: Icons.ERP },
   { label: 'Site Commissioning', href: '/pm/commissioning', requires: 'pm.commissioning.read', icon: Icons.Commissioning },
   { label: 'Team load', href: '/pm/resources', requires: 'pm.resource.read', icon: Icons.Resources },
+];
+
+// ERP areas show to anyone who can read them (plan 022); manage implies read.
+const erpArea = (area: string) => (p: Principal) => hasPermissionAnywhere(p, `erp.${area}.read` as PermissionKey) || hasPermissionAnywhere(p, `erp.${area}.manage` as PermissionKey);
+const ERP_NAV: NavItem[] = [
+  { label: 'ERP home', href: '/erp', requires: 'erp.access', icon: Icons.ERP },
+  { label: 'Stock', href: '/erp/stock', show: erpArea('stock'), icon: Icons.Catalog },
+  { label: 'Selling', href: '/erp/selling', show: erpArea('selling'), icon: Icons.Sales },
+  { label: 'Buying', href: '/erp/buying', show: erpArea('buying'), icon: Icons.Deals },
+  { label: 'Manufacturing', href: '/erp/manufacturing', show: erpArea('manufacturing'), icon: Icons.Commissioning },
+  { label: 'Quality', href: '/erp/quality', show: erpArea('quality'), icon: Icons.Quality },
+  { label: 'Assets', href: '/erp/assets', show: erpArea('assets'), icon: Icons.Maintenance },
+  { label: 'Accounting', href: '/erp/accounts', show: erpArea('accounts'), icon: Icons.Accounts },
 ];
 
 const SALES_NAV: NavItem[] = [
@@ -216,6 +244,7 @@ export function Sidebar({
   };
   const workspaceItems = WORKSPACE_NAV.filter(visible);
   const managementItems = MANAGEMENT_NAV.filter(visible);
+  const erpItems = ERP_NAV.filter(visible);
   const salesItems = SALES_NAV.filter(visible);
   const gateItems = GATE_NAV.filter(visible);
   const hrItems = HR_NAV.filter(visible);
@@ -312,6 +341,19 @@ export function Sidebar({
                 icon={item.icon}
                 collapsed={isCollapsed}
               />
+            ))}
+          </div>
+        )}
+
+        {erpItems.length > 0 && (
+          <div key="erp-section">
+            {!isCollapsed ? (
+              <p className="mt-lg px-sm pb-xs text-caption-uppercase uppercase text-muted-soft">ERP</p>
+            ) : (
+              <div className="my-2 border-t border-hairline-soft" />
+            )}
+            {erpItems.map((item) => (
+              <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} collapsed={isCollapsed} />
             ))}
           </div>
         )}

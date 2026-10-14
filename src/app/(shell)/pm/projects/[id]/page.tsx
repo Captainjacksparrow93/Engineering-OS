@@ -1,4 +1,3 @@
-import { config } from '@/core/config';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePrincipal } from '@/core/auth/session';
@@ -20,6 +19,7 @@ import { HoldProjectButton } from './hold-project-button';
 import { ProjectDangerActions } from './project-danger-actions';
 import { EditProjectDetailsButton } from './edit-project-details-button';
 import { OrderAlertBanner } from './order-alert-banner';
+import { MaterialsPanel } from './materials-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,8 +115,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       };
     });
 
-  const erpPublicUrl = config().ERPNEXT_PUBLIC_URL?.replace(/\/+$/, '');
-  const erpOrderUrlBase = erpPublicUrl ? `${erpPublicUrl}/app/sales-order/` : null;
+  // Plan 022: the order is our own ERP sales order.
+  const erpOrderUrlBase = '/erp/selling/orders/number/';
 
   let clientHref: string | null = null;
   if (project.clientId) {
@@ -420,6 +420,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           />
         </div>
       </div>
+
+      <MaterialsPanel principal={principal} projectId={project.id} />
 
       {permissions.canCreateTask ? (
         <AddTaskForm

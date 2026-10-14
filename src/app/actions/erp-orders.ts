@@ -2,7 +2,6 @@
 
 import { requirePrincipal } from '@/core/auth/session';
 import { isClientSafeError } from '@/core/rbac/errors';
-import { ERP_UNAVAILABLE_MESSAGE } from '@/modules/erp/client';
 import {
   getOrderForProject,
   listWaitingOrders,
@@ -15,7 +14,7 @@ type Result<T> = { success: true; data: T } | { success: false; error: string };
 function failure(error: unknown, what: string): { success: false; error: string } {
   if (error instanceof Error && isClientSafeError(error)) return { success: false, error: error.message };
   console.error(`[erp] ${what} failed`, error instanceof Error ? error.message : String(error));
-  return { success: false, error: ERP_UNAVAILABLE_MESSAGE };
+  return { success: false, error: 'Something went wrong reading sales orders. Try again.' };
 }
 
 /** Confirmed sales orders that have no project yet (New project, step 0). */

@@ -1,11 +1,19 @@
 import { prisma } from '@/core/db/prisma';
 import { config } from '@/core/config';
+import { audit } from '@/core/audit/audit';
 import { hasPermissionAnywhere } from '@/core/rbac/engine';
 import { DomainError, ForbiddenError, NotFoundError } from '@/core/rbac/errors';
 import type { Principal } from '@/core/rbac/types';
-import { audit } from '@/core/audit/audit';
 import { nextClientRef } from '@/modules/project-management/services/client.service';
-import { erpGet, erpList, erpUpdate } from './client';
+import { D } from './domain/money';
+import { ensurePanelItems } from './services/selling-bridge';
+
+/**
+ * Plan 014 on native ERP: New project starts from a submitted sales order with no project.
+ * The order's panel lines (item code = an active checklist template) become the project's
+ * panels; its customer becomes (or links to) the PM client with the next ACS-XXXX reference.
+ * Same exports as the ERPNext version, so PM's callers are unchanged.
+ */
 
 export interface WaitingOrder {
   orderName: string;
@@ -21,441 +29,189 @@ export interface ProjectOrderInput {
   erpOrderModified: string;
   client: {
     name: string;
+    /** The ERP customer code (pm_clients.erpCustomer). */
     erpCustomer: string;
     customAcsReference: string | null;
   };
   workOrderNo: string;
   clientPoNumber: string | null;
   targetEndDate: string;
-  scopes: Array<{
-    templateCode: string;
-    quantity: number;
-  }>;
+  scopes: Array<{ templateCode: string; quantity: number }>;
   panelDeliveryDates: Record<string, string>;
   panelOrderItems: Record<string, string>;
 }
 
-interface ErpSalesOrderRow {
-  name: string;
-  customer: string;
-  custom_wo_number?: string;
-  po_no?: string;
-  delivery_date?: string;
-  custom_project_code?: string;
-  status?: string;
-  modified?: string;
+const day = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
+
+/** Is the "every work order starts from a sales order" rule on for this company? */
+export async function projectsNeedSalesOrder(companyId: string): Promise<boolean> {
+  const s = await prisma.erpSettings.findUnique({ where: { companyId }, select: { projectsFromSalesOrders: true } });
+  return s?.projectsFromSalesOrders ?? false;
 }
 
-interface ErpSalesOrderItem {
-  name: string;
-  item_code: string;
-  qty: number;
-  delivery_date?: string;
-}
-
-interface ErpSalesOrderDoc extends ErpSalesOrderRow {
-  docstatus: number;
-  items?: ErpSalesOrderItem[];
-}
-
-interface ErpCustomerDoc {
-  name: string;
-  custom_acs_reference?: string;
-}
-
-/** Our project page, as written onto the ERPNext order (`custom_project_link`). */
+/** Our project page, for links from ERP documents. */
 export function projectLink(projectId: string): string {
   return `${config().APP_URL.replace(/\/+$/, '')}/pm/projects/${projectId}`;
 }
 
-/** Writes our project code and a link to the project onto the ERPNext sales order. Throws on failure. */
-export async function writeProjectToOrder(orderName: string, project: { id: string; code: string }) {
-  await erpUpdate('Sales Order', orderName, {
-    custom_project_code: project.code,
-    custom_project_link: projectLink(project.id),
-  });
+/** Records the project on the sales order. */
+export async function writeProjectToOrder(orderName: string, project: { id: string; code: string; companyId?: string }) {
+  await prisma.erpSalesOrder.updateMany({ where: { number: orderName, ...(project.companyId ? { companyId: project.companyId } : {}) }, data: { projectId: project.id } });
 }
 
-/**
- * List submitted ERPNext sales orders waiting to become an Engineering OS project.
- * Needs `pm.project.create`.
- */
+function assertCanCreate(principal: Principal) {
+  if (!hasPermissionAnywhere(principal, 'pm.project.create')) throw new ForbiddenError('Missing permission: pm.project.create');
+}
+
+async function templateCodes() {
+  return new Set((await prisma.checklistTemplate.findMany({ where: { isActive: true }, select: { code: true } })).map((t) => t.code));
+}
+
+/** Submitted, open sales orders with no project yet. Needs `pm.project.create`. */
 export async function listWaitingOrders(principal: Principal): Promise<WaitingOrder[]> {
-  if (!hasPermissionAnywhere(principal, 'pm.project.create')) {
-    throw new ForbiddenError('Missing permission: pm.project.create');
-  }
-
-  const orders = await erpList<ErpSalesOrderRow>('Sales Order', {
-    filters: [
-      ['Sales Order', 'docstatus', '=', 1],
-      ['Sales Order', 'custom_project_code', 'is', 'not set'],
-      ['Sales Order', 'status', 'not in', ['Closed', 'Completed', 'Cancelled', 'On Hold']],
-    ],
-    fields: [
-      'name',
-      'customer',
-      'custom_wo_number',
-      'po_no',
-      'delivery_date',
-      'custom_project_code',
-      'status',
-      'modified',
-    ],
-    limit: 0,
-    orderBy: 'modified desc',
+  assertCanCreate(principal);
+  const orders = await prisma.erpSalesOrder.findMany({
+    where: { companyId: principal.companyId, status: 'SUBMITTED', isClosed: false, isOnHold: false, projectId: null },
+    orderBy: { updatedAt: 'desc' },
+    include: { lines: { orderBy: { sortOrder: 'asc' } } },
   });
+  if (orders.length === 0) return [];
 
-  const openUnlinked = orders.filter((o) => {
-    const status = (o.status || '').toLowerCase();
-    if (
-      status === 'closed' ||
-      status === 'completed' ||
-      status === 'cancelled' ||
-      status === 'on hold'
-    ) {
-      return false;
-    }
-    if (o.custom_project_code && o.custom_project_code.trim() !== '') return false;
-    return true;
-  });
+  // Repair: an order whose project exists but was never written back.
+  const linked = await prisma.project.findMany({ where: { companyId: principal.companyId, erpSalesOrder: { in: orders.map((o) => o.number) } }, select: { id: true, code: true, erpSalesOrder: true } });
+  for (const project of linked) await writeProjectToOrder(project.erpSalesOrder!, { ...project, companyId: principal.companyId });
+  const taken = new Set(linked.map((p) => p.erpSalesOrder));
 
-  if (openUnlinked.length === 0) {
-    return [];
-  }
+  const [customers, items, templates] = await Promise.all([
+    prisma.erpParty.findMany({ where: { id: { in: orders.map((o) => o.customerId) } }, select: { id: true, name: true } }),
+    prisma.erpItem.findMany({ where: { id: { in: orders.flatMap((o) => o.lines.map((l) => l.itemId)) } }, select: { id: true, code: true } }),
+    templateCodes(),
+  ]);
+  const customerName = new Map(customers.map((c) => [c.id, c.name]));
+  const itemCode = new Map(items.map((i) => [i.id, i.code]));
 
-  const candidateNames = openUnlinked.map((o) => o.name);
-  const existingProjects = await prisma.project.findMany({
-    where: {
-      companyId: principal.companyId,
-      erpSalesOrder: { in: candidateNames },
-    },
-    select: { id: true, code: true, erpSalesOrder: true },
-  });
-  const existingOrderNames = new Set(existingProjects.map((p) => p.erpSalesOrder).filter(Boolean));
-
-  // Repair: these orders already have a project but ERPNext missed the write-back. Write it again.
-  await Promise.all(
-    existingProjects.map(async (project) => {
-      try {
-        await writeProjectToOrder(project.erpSalesOrder!, project);
-      } catch (err) {
-        console.error('[erp] repair write-back to the sales order failed', {
-          salesOrder: project.erpSalesOrder,
-          projectId: project.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
+  return orders
+    .filter((o) => !taken.has(o.number))
+    .map((o) => {
+      const qty = new Map<string, number>();
+      for (const l of o.lines) {
+        const code = itemCode.get(l.itemId);
+        if (code && templates.has(code)) qty.set(code, (qty.get(code) ?? 0) + Math.round(D(l.qty).toNumber()));
       }
-    }),
-  );
-
-  const waitingCandidates = openUnlinked.filter((o) => !existingOrderNames.has(o.name));
-  if (waitingCandidates.length === 0) {
-    return [];
-  }
-
-  const detailed = await Promise.all(
-    waitingCandidates.map(async (candidate) => {
-      const fullDoc = await erpGet<ErpSalesOrderDoc>('Sales Order', candidate.name);
-      return { candidate, items: fullDoc.items ?? [] };
-    }),
-  );
-
-  return detailed.map(({ candidate, items }) => {
-    const qtyByCode = new Map<string, number>();
-    for (const item of items) {
-      if (item.item_code) {
-        const current = qtyByCode.get(item.item_code) ?? 0;
-        qtyByCode.set(item.item_code, current + Math.round(Number(item.qty) || 0));
-      }
-    }
-    const summaryParts: string[] = [];
-    for (const [code, qty] of qtyByCode.entries()) {
-      if (qty > 0) {
-        summaryParts.push(`${qty} × ${code}`);
-      }
-    }
-
-    return {
-      orderName: candidate.name,
-      customerName: candidate.customer,
-      workOrderNo: (candidate.custom_wo_number ?? '').trim(),
-      clientPoNumber: candidate.po_no?.trim() || null,
-      panelsSummary: summaryParts.join(', '),
-      deliveryDate: candidate.delivery_date || null,
-    };
-  });
+      return {
+        orderName: o.number,
+        customerName: customerName.get(o.customerId) ?? '—',
+        workOrderNo: o.woNumber ?? '',
+        clientPoNumber: o.poNo,
+        panelsSummary: [...qty.entries()].filter(([, q]) => q > 0).map(([c, q]) => `${q} × ${c}`).join(', '),
+        deliveryDate: day(o.deliveryDate) ?? (o.lines.map((l) => day(l.deliveryDate)).filter((d): d is string => !!d).sort().at(-1) ?? null),
+      };
+    });
 }
 
-/**
- * Fetch and validate an ERP sales order as our project input shape.
- * Needs `pm.project.create`.
- */
-export async function getOrderForProject(
-  principal: Principal,
-  orderName: string,
-): Promise<ProjectOrderInput> {
-  if (!hasPermissionAnywhere(principal, 'pm.project.create')) {
-    throw new ForbiddenError('Missing permission: pm.project.create');
-  }
+/** A submitted sales order as New project's input. The server reads it again on save. */
+export async function getOrderForProject(principal: Principal, orderName: string): Promise<ProjectOrderInput> {
+  assertCanCreate(principal);
+  const number = orderName.trim();
+  if (!number) throw new DomainError('Sales order name is required.');
+  const order = await prisma.erpSalesOrder.findUnique({ where: { companyId_number: { companyId: principal.companyId, number } }, include: { lines: { orderBy: { sortOrder: 'asc' } } } });
+  if (!order) throw new NotFoundError('Sales order not found.');
 
-  const trimmedOrderName = orderName.trim();
-  if (!trimmedOrderName) {
-    throw new DomainError('Sales order name is required.');
-  }
+  if (order.status === 'DRAFT') throw new DomainError('Sales order is in draft. Submit it in ERP first.');
+  if (order.status === 'CANCELLED') throw new DomainError('Sales order is cancelled.');
+  if (order.isClosed) throw new DomainError('Sales order is closed.');
+  if (order.isOnHold) throw new DomainError('Sales order is on hold.');
 
-  const order = await erpGet<ErpSalesOrderDoc>('Sales Order', trimmedOrderName);
+  const existing = await prisma.project.findFirst({ where: { companyId: principal.companyId, OR: [{ erpSalesOrder: number }, ...(order.projectId ? [{ id: order.projectId }] : [])] }, select: { code: true } });
+  if (existing) throw new DomainError(`Sales order is already linked to project ${existing.code}.`);
 
-  // 1. Refuse: draft, cancelled, closed, completed, or on hold order
-  const statusLower = (order.status || '').toLowerCase();
-  if (order.docstatus === 0 || statusLower === 'draft') {
-    throw new DomainError('Sales order is in draft. Submit it in ERP first.');
-  }
-  if (order.docstatus === 2 || statusLower === 'cancelled') {
-    throw new DomainError('Sales order is cancelled.');
-  }
-  if (statusLower === 'closed') {
-    throw new DomainError('Sales order is closed.');
-  }
-  if (statusLower === 'completed') {
-    throw new DomainError('Sales order is completed.');
-  }
-  if (statusLower === 'on hold') {
-    throw new DomainError('Sales order is on hold.');
-  }
+  const wo = (order.woNumber ?? '').trim();
+  if (!wo) throw new DomainError('Sales order is missing a Work Order number.');
+  if (!/^\d+$/.test(wo)) throw new DomainError('Work Order number must contain only digits.');
 
-  // 2. Refuse: order that already has a project
-  if (order.custom_project_code && order.custom_project_code.trim() !== '') {
-    throw new DomainError(`Sales order is already linked to project ${order.custom_project_code.trim()}.`);
-  }
+  await ensurePanelItems(principal.companyId);
+  const [templates, items, customer] = await Promise.all([
+    templateCodes(),
+    prisma.erpItem.findMany({ where: { id: { in: order.lines.map((l) => l.itemId) } }, select: { id: true, code: true } }),
+    prisma.erpParty.findUniqueOrThrow({ where: { id: order.customerId } }),
+  ]);
+  const itemCode = new Map(items.map((i) => [i.id, i.code]));
+  // Panel lines are those whose item is a checklist template; freight, services and spares stay commercial.
+  const panels = order.lines.filter((l) => templates.has(itemCode.get(l.itemId) ?? ''));
+  if (panels.length === 0) throw new DomainError('Sales order has no panel items. Panel lines use a checklist template code (PLC, SCADA, HMI…) as the item.');
 
-  const existingProject = await prisma.project.findFirst({
-    where: {
-      companyId: principal.companyId,
-      erpSalesOrder: trimmedOrderName,
-    },
-    select: { code: true },
-  });
-  if (existingProject) {
-    throw new DomainError(`Sales order is already linked to project ${existingProject.code}.`);
-  }
+  // Without an order-level date the project ends with its last panel.
+  const lineDates = panels.map((l) => day(l.deliveryDate)).filter((d): d is string => !!d).sort();
+  const targetEndDate = day(order.deliveryDate) ?? lineDates.at(-1) ?? null;
+  if (!targetEndDate) throw new DomainError('Sales order is missing a delivery date.');
 
-  // 3. Refuse: missing or non-digit WO number
-  const wo = (order.custom_wo_number ?? '').trim();
-  if (!wo) {
-    throw new DomainError('Sales order is missing a Work Order number.');
-  }
-  if (!/^\d+$/.test(wo)) {
-    throw new DomainError('Work Order number must contain only digits.');
-  }
-
-  // 4. Refuse: items check against active checklist templates
-  const items = order.items ?? [];
-  if (items.length === 0) {
-    throw new DomainError('Sales order has no panel items.');
-  }
-
-  const activeTemplates = await prisma.checklistTemplate.findMany({
-    where: { isActive: true },
-    select: { code: true },
-  });
-  const validTemplateCodes = new Set(activeTemplates.map((t) => t.code));
-
-  for (const item of items) {
-    if (!validTemplateCodes.has(item.item_code)) {
-      throw new DomainError(`Item "${item.item_code}" is not an active checklist template.`);
-    }
-    const qty = Math.round(Number(item.qty) || 0);
-    if (qty < 1) {
-      throw new DomainError(`Item "${item.item_code}" must have a quantity of at least 1.`);
-    }
-  }
-
-  // 5. Delivery date check
-  const targetEndDate = order.delivery_date?.trim() || items[0]?.delivery_date?.trim();
-  if (!targetEndDate) {
-    throw new DomainError('Sales order is missing a delivery date.');
-  }
-
-  // 6. Fetch customer to resolve custom_acs_reference
-  let customAcsReference: string | null = null;
-  if (order.customer) {
-    try {
-      const customerDoc = await erpGet<ErpCustomerDoc>('Customer', order.customer);
-      customAcsReference = customerDoc.custom_acs_reference?.trim() || null;
-    } catch (err) {
-      if (!(err instanceof NotFoundError)) throw err;
-    }
-  }
-
-  // 7. Panel scopes and per-unit delivery dates and erpOrderItem mapping
-  const codeUnitCounters = new Map<string, number>();
-  const scopesMap = new Map<string, number>();
+  const counter = new Map<string, number>();
+  const scopes = new Map<string, number>();
   const panelDeliveryDates: Record<string, string> = {};
   const panelOrderItems: Record<string, string> = {};
-
-  for (const item of items) {
-    const code = item.item_code;
-    const qty = Math.round(Number(item.qty) || 0);
-    scopesMap.set(code, (scopesMap.get(code) ?? 0) + qty);
-
+  for (const l of panels) {
+    const code = itemCode.get(l.itemId)!;
+    const qty = Math.round(D(l.qty).toNumber());
+    if (qty < 1) throw new DomainError(`Item "${code}" must have a quantity of at least 1.`);
+    scopes.set(code, (scopes.get(code) ?? 0) + qty);
     for (let u = 1; u <= qty; u++) {
-      const overallUnit = (codeUnitCounters.get(code) ?? 0) + 1;
-      codeUnitCounters.set(code, overallUnit);
-
-      const panelKey = `${code}_${overallUnit}`;
-      panelDeliveryDates[panelKey] = item.delivery_date?.trim() || targetEndDate;
-      panelOrderItems[panelKey] = `${item.name}#${u}`;
+      const unit = (counter.get(code) ?? 0) + 1;
+      counter.set(code, unit);
+      panelDeliveryDates[`${code}_${unit}`] = day(l.deliveryDate) ?? targetEndDate;
+      panelOrderItems[`${code}_${unit}`] = `${l.id}#${u}`;
     }
   }
 
-  const scopes = Array.from(scopesMap.entries()).map(([templateCode, quantity]) => ({
-    templateCode,
-    quantity,
-  }));
-
+  const client = customer.clientId ? await prisma.client.findUnique({ where: { id: customer.clientId }, select: { refNumber: true } }) : null;
   return {
-    erpSalesOrder: order.name,
-    erpOrderModified: order.modified || '',
-    client: {
-      name: order.customer,
-      erpCustomer: order.customer,
-      customAcsReference,
-    },
+    erpSalesOrder: order.number,
+    erpOrderModified: order.updatedAt.toISOString(),
+    client: { name: customer.name, erpCustomer: customer.code, customAcsReference: client?.refNumber ?? null },
     workOrderNo: wo,
-    clientPoNumber: order.po_no?.trim() || null,
+    clientPoNumber: order.poNo,
     targetEndDate,
-    scopes,
+    scopes: [...scopes.entries()].map(([templateCode, quantity]) => ({ templateCode, quantity })),
     panelDeliveryDates,
     panelOrderItems,
   };
 }
 
 /**
- * Resolve or lazily create a client from an ERPNext Customer.
- * 1. Find our client by erpCustomer.
- * 2. Otherwise, if customer's custom_acs_reference matches a client's refNumber, link that client.
- * 3. Otherwise, if an existing unlinked client of the same name exists, link that client.
- * 4. Otherwise create a client named after the customer with nextClientRef.
- * Then write custom_acs_reference back to the ERPNext customer if it's empty.
+ * The PM client for an ERP customer (lazy ACS reference, plan 014):
+ * 1. the customer's linked client; 2. a client already holding the customer code;
+ * 3. a client with the customer's ACS reference; 4. an unlinked client of the same name;
+ * 5. a new client with the next ACS-XXXX. The customer is then linked to it.
  */
-export async function resolveClientForCustomer(
-  principal: Principal,
-  customer: string | { name: string; custom_acs_reference?: string | null },
-) {
-  if (!hasPermissionAnywhere(principal, 'pm.project.create')) {
-    throw new ForbiddenError('Missing permission: pm.project.create');
-  }
+export async function resolveClientForCustomer(principal: Principal, customer: string | { name: string; custom_acs_reference?: string | null }) {
+  assertCanCreate(principal);
+  const key = (typeof customer === 'string' ? customer : customer.name).trim();
+  if (!key) throw new DomainError('Customer name is required.');
+  const party = await prisma.erpParty.findFirst({ where: { companyId: principal.companyId, kind: 'CUSTOMER', OR: [{ code: key }, { name: key }] } });
+  if (!party) throw new NotFoundError('Customer not found.');
+  const ref = (typeof customer === 'object' ? customer.custom_acs_reference?.trim() : null) || null;
+  const companyId = principal.companyId;
 
-  const customerName = typeof customer === 'string' ? customer.trim() : customer.name.trim();
-  if (!customerName) {
-    throw new DomainError('Customer name is required.');
-  }
+  let client =
+    (party.clientId ? await prisma.client.findFirst({ where: { id: party.clientId, companyId } }) : null) ??
+    (await prisma.client.findFirst({ where: { companyId, erpCustomer: party.code } })) ??
+    (ref ? await prisma.client.findFirst({ where: { companyId, refNumber: ref } }) : null) ??
+    (await prisma.client.findFirst({ where: { companyId, name: party.name, erpCustomer: null } }));
 
-  let customAcsRef: string | null = null;
-  let displayName = customerName;
-
-  if (typeof customer === 'object' && customer.custom_acs_reference !== undefined) {
-    customAcsRef = customer.custom_acs_reference?.trim() || null;
-  } else {
+  if (!client) {
     try {
-      const customerDoc = await erpGet<ErpCustomerDoc>('Customer', customerName);
-      customAcsRef = customerDoc.custom_acs_reference?.trim() || null;
-      if (customerDoc.name && customerDoc.name !== customerName) {
-        // if customerDoc has specific name
-      }
+      const refNumber = await nextClientRef(companyId);
+      client = await prisma.client.create({ data: { companyId, name: party.name, refNumber, erpCustomer: party.code, isActive: true } });
+      await audit({ actorId: principal.userId, module: 'pm', action: 'client.created', entityType: 'Client', entityId: client.id, diff: { name: party.name, refNumber, erpCustomer: party.code } });
     } catch (err) {
-      if (!(err instanceof NotFoundError)) throw err;
-    }
-  }
-
-  // 1. Find our client by erpCustomer
-  let client = await prisma.client.findFirst({
-    where: { companyId: principal.companyId, erpCustomer: customerName },
-  });
-
-  // 2. Otherwise, if customer's custom_acs_reference matches a client's refNumber, link that client
-  if (!client && customAcsRef) {
-    const byRef = await prisma.client.findFirst({
-      where: { companyId: principal.companyId, refNumber: customAcsRef },
-    });
-    if (byRef) {
-      client = await prisma.client.update({
-        where: { id: byRef.id },
-        data: { erpCustomer: customerName },
-      });
-    }
-  }
-
-  // 3. Name clash with an existing unlinked client of the same name links that client instead of failing
-  if (!client) {
-    const byName = await prisma.client.findFirst({
-      where: { companyId: principal.companyId, name: displayName },
-    });
-    if (byName) {
-      client = await prisma.client.update({
-        where: { id: byName.id },
-        data: { erpCustomer: customerName },
-      });
-    }
-  }
-
-  // 4. Otherwise create a client named after the customer with nextClientRef
-  if (!client) {
-    const nextRef = await nextClientRef(principal.companyId);
-    try {
-      client = await prisma.client.create({
-        data: {
-          companyId: principal.companyId,
-          name: displayName,
-          refNumber: nextRef,
-          erpCustomer: customerName,
-          isActive: true,
-        },
-      });
-
-      await audit({
-        actorId: principal.userId,
-        module: 'pm',
-        action: 'client.created',
-        entityType: 'Client',
-        entityId: client.id,
-        diff: { name: displayName, refNumber: nextRef, erpCustomer: customerName },
-      });
-    } catch (err: any) {
-      // Concurrency handling: two Directors picking orders of the same new customer at the same time
-      if (err?.code === 'P2002') {
-        client = await prisma.client.findFirst({
-          where: {
-            companyId: principal.companyId,
-            OR: [{ erpCustomer: customerName }, { name: displayName }],
-          },
-        });
-        if (client && !client.erpCustomer) {
-          client = await prisma.client.update({
-            where: { id: client.id },
-            data: { erpCustomer: customerName },
-          });
-        }
-      }
+      // Two people picking orders of the same new customer at once: the unique index keeps one.
+      if ((err as { code?: string })?.code !== 'P2002') throw err;
+      client = await prisma.client.findFirst({ where: { companyId, OR: [{ erpCustomer: party.code }, { name: party.name }] } });
       if (!client) throw err;
     }
   }
-
-  // Write custom_acs_reference back to the ERPNext customer if it's empty
-  if (!customAcsRef) {
-    try {
-      await erpUpdate('Customer', customerName, {
-        custom_acs_reference: client.refNumber,
-      });
-    } catch (err) {
-      console.error('[erp] failed to write custom_acs_reference back to Customer', {
-        customer: customerName,
-        refNumber: client.refNumber,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+  if (client.erpCustomer !== party.code) {
+    client = await prisma.client.update({ where: { id: client.id }, data: { erpCustomer: party.code } }).catch(() => client!);
   }
-
+  if (party.clientId !== client.id) await prisma.erpParty.update({ where: { id: party.id }, data: { clientId: client.id } });
   return client;
 }
-

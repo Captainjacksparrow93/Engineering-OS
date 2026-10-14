@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 
 /** Section roots whose sub-pages have their own nav entries, so they light up only on an exact match. */
-const EXACT_ONLY = new Set(['/dashboard', '/sales', '/gate', '/hrms', '/hrms/leave', '/hrms/attendance']);
+const EXACT_ONLY = new Set(['/dashboard', '/sales', '/gate', '/hrms', '/hrms/leave', '/hrms/attendance', '/erp']);
 
 /** Active state is carried by ink weight and a soft canvas fill - never by orange. */
 export function NavLink({
